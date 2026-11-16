@@ -65,7 +65,8 @@ import { PhotoComponent } from '../../shared/ui/images/photo.component';
     </ion-content>
 
     <ion-footer class="ion-no-border" style="background: var(--gz-bg)">
-      <div style="padding: 4px 0 calc(8px + var(--gz-safe-bottom))">
+      <!-- The tab bar already owns the safe-area inset; only clear the floating Tracker here. -->
+      <div style="padding: 4px 0 var(--gz-tab-float)">
         <div class="gz-hs" style="padding-block: 2px">
           @for (q of suggestions(); track q) {
             <button type="button" class="gz-chip sm tint" (click)="send(q)">{{ q }}</button>
