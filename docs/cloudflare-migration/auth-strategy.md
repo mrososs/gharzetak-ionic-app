@@ -25,11 +25,13 @@ background. Only an explicit `401` (or an empty session) ends the session; offli
 `SyncService` calls `auth.expire()`: the session is dropped but **local data and the unsent outbox are kept** for the next sign-in
 (covered by the `session expiry` e2e test).
 
-### Token storage - known limitation
+### Token storage
 
-`@capacitor/preferences` is `localStorage`/`SharedPreferences`/`UserDefaults`; it is **not** hardware-backed. The token is an expiring, revocable
-session id (not a password). Moving it to Keychain/Keystore needs a secure-storage plugin (e.g. `capacitor-secure-storage`); the change is isolated to
-`core/auth/session.store.ts`. **Recommended before a public launch.**
+* **Native:** iOS Keychain / Android Keystore via `@aparajita/capacitor-secure-storage` 8.0.1 (this-device-only, iCloud Keychain sync off). A plaintext token from an
+  earlier build is migrated once and removed. If the secure store fails the session stays in memory only; there is **no plaintext fallback**. Unit-tested with mocked
+  native layers; **not yet exercised on a device** (the Android Gradle compile could not run in the review environment).
+* **Web:** Capacitor Preferences (localStorage): browsers have no secure token store. The token is an expiring, revocable session id and the API sets no cookies;
+  serve the web app with a strict CSP. See [security-review.md](security-review.md).
 
 ## Flows
 

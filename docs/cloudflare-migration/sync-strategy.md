@@ -23,13 +23,18 @@ PUT /v1/projects/:id/progress   { baseRevision, clientUpdatedAt, ...fields }
   creates the store and touches no existing data. The database is never deleted or reset).
 * `clientUpdatedAt` is only a **merge hint**. The server clamps it to `now + 5 min`, and it is never used for authorisation.
 
-### Resolution rules on a 409 (client)
+### Resolution rules on a 409 (client) - nothing is discarded silently
 
-| Situation | Action |
-|---|---|
-| `current.deleted` or `current.clientUpdatedAt >= ours` | Our entry is obsolete **or already applied** (idempotent retry). Adopt the server revision, drop the entry, schedule a pull that adopts the server state. |
-| ours is newer | Adopt the server revision and retry (up to 3 rebases). Last-write-wins between a user's *own* devices, now race-free. |
-| still conflicting after 3 rebases | Error -> normal attempt counter / backoff. |
+| Order | Situation | Action |
+|---|---|---|
+| 1 | `current.clientUpdatedAt === ours` | Our earlier attempt already landed (lost response). Adopt the revision, drop the entry. Silent, nothing lost. |
+| 2 | **Progress:** server position equals ours | Nothing to add; drop the entry. |
+| 3 | **Progress:** our position (round/count, or pattern row/pointer) is **further along** | **Rebase and retry whatever the clocks say**: stitches are never thrown away. (The 409 carries the server's position for this.) |
+| 4 | ours is newer by clock | Adopt the server revision and retry (up to 3 rebases): last-write-wins between a user's *own* devices, race-free. |
+| 5 | otherwise (server newer / entity deleted elsewhere) | The server wins, **but our data is first saved** in IndexedDB (`docs.conflicts`, newest 25: kind, entity, label, reason, exact snapshot) and the user gets a toast. A pull then adopts the server state. |
+| - | an entry exhausts its retries on a permanent 4xx | Saved to `docs.conflicts` with reason `rejected` and announced; the local entity itself always stays on the device. |
+
+Residual risks and the missing "browse/restore backups" screen are listed in [security-review.md](security-review.md#3-offline-sync-and-409-conflicts---no-silent-loss).
 
 Outbox entries are removed **only after** a 2xx/confirmed outcome (`db.dequeue` after `push`). Network failures, 5xx, 429 and 401 never consume an
 attempt; other 4xx count toward `MAX_ATTEMPTS = 5` as before.
