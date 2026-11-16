@@ -83,7 +83,9 @@ const ar = {
   forgotTitle: 'استعادة كلمة المرور', forgotSub: 'اكتبي بريدك وهنبعتلك رابط تعيين كلمة مرور جديدة.', sendReset: 'ابعتي الرابط',
   resetSent: 'لو البريد مسجّل، هيوصلك رابط خلال دقايق.', newPassword: 'كلمة مرور جديدة', setNewPassword: 'تعيين كلمة المرور',
   pwUpdated: 'تم تحديث كلمة المرور.', backToLogin: 'رجوع لتسجيل الدخول', resetLinkInvalid: 'الرابط انتهى أو مش صالح. اطلبي رابط جديد.',
-  socialSoon: 'الدخول بجوجل/أبل لسه مش مفعّل. استخدمي البريد أو كمّلي كضيفة.',
+  errGoogleFailed: 'تعذّر الدخول بحساب جوجل. حاولي تاني أو استخدمي البريد.',
+  errGoogleNotLinked: 'البريد ده مسجّل بكلمة مرور عندنا. سجّلي الدخول بالبريد وكلمة المرور.',
+  googleContinue: 'المتابعة بحساب جوجل',
   backendOff: 'الخادم مش مهيّأ في النسخة دي — تقدري تستخدمي وضع الضيفة على جهازك.',
   syncing: 'جاري المزامنة…', synced: 'متزامن', offline: 'غير متصلة — التغييرات محفوظة على الجهاز', pending: 'تغييرات في الانتظار',
   importTitle: 'نقل بيانات الضيفة لحسابك؟', importBody: 'عندك {n} مشروع على الجهاز كضيفة. تحبي ننقلهم لحسابك؟ مش هنكتب فوق أي حاجة موجودة.',
@@ -93,6 +95,17 @@ const ar = {
   deletePattern: 'حذف الباترن', tooBig: 'الصورة كبيرة جدًا (الحد 8 ميجا).', badType: 'نوع الملف مش مدعوم.',
   photoUploadPending: 'الصورة هتترفع أول ما النت يرجع.',
   account: 'الحساب', designSystem: 'نظام التصميم',
+  // Biometric app unlock
+  bioAskTitle: 'تحبي تفتحي غرزتك بالبصمة بعد كده؟', bioAskBody: 'هنطلب بصمتك قبل ما تفتح بياناتك. تقدري تلغيها من الإعدادات في أي وقت.',
+  bioEnable: 'تفعيل البصمة', bioLater: 'ليس الآن',
+  bioSettings: 'فتح التطبيق بالبصمة', bioSettingsSub: 'اطلبي البصمة كل ما تفتحي غرزتك.',
+  bioUnavailable: 'البصمة مش متاحة على الجهاز ده.', bioNotEnrolled: 'سجّلي بصمة في إعدادات الجهاز الأول.',
+  bioOnToast: 'اتفعّل فتح التطبيق بالبصمة.', bioOffToast: 'اتلغى فتح التطبيق بالبصمة.', bioEnableFailed: 'متفعّلش. جرّبي تاني.',
+  bioPromptTitle: 'افتحي غرزتك', bioPromptSub: 'أكّدي إنك إنتي بالبصمة',
+  lockTitle: 'غرزتك مقفولة', lockSub: 'افتحيها بالبصمة علشان تكمّلي.', lockUnlock: 'افتحي بالبصمة', lockOther: 'تسجيل الدخول بطريقة تانية',
+  lockFailed: 'البصمة مش مطابقة. حاولي تاني.', lockCancelled: 'اتلغى التحقق. اضغطي لفتح التطبيق.',
+  lockLockedOut: 'محاولات كتير. استني شوية وحاولي تاني.', lockChanged: 'بصمات الجهاز اتغيّرت. سجّلي الدخول تاني وفعّلي البصمة من الإعدادات.',
+  lockUnavailable: 'البصمة مش متاحة دلوقتي. سجّلي الدخول بطريقة تانية.', lockExpired: 'انتهت الجلسة. سجّلي الدخول تاني.',
 };
 
 export type Strings = { [K in keyof typeof ar]: string };
@@ -179,7 +192,9 @@ const en: Strings = {
   forgotTitle: 'Reset your password', forgotSub: 'Enter your email and we will send a link to set a new password.', sendReset: 'Send link',
   resetSent: 'If that email is registered, a link is on its way.', newPassword: 'New password', setNewPassword: 'Set password',
   pwUpdated: 'Your password was updated.', backToLogin: 'Back to sign in', resetLinkInvalid: 'This link expired or is invalid. Request a new one.',
-  socialSoon: 'Google/Apple sign-in is not enabled yet. Use email or continue as guest.',
+  errGoogleFailed: 'Google sign-in failed. Try again or use email.',
+  errGoogleNotLinked: 'This email already has a password account. Sign in with your email and password.',
+  googleContinue: 'Continue with Google',
   backendOff: 'The server is not configured in this build — you can use guest mode on this device.',
   syncing: 'Syncing…', synced: 'Synced', offline: 'Offline — changes are saved on this device', pending: 'Changes waiting',
   importTitle: 'Move guest data to your account?', importBody: 'You have {n} project(s) on this device as a guest. Move them to your account? Nothing existing will be overwritten.',
@@ -189,6 +204,17 @@ const en: Strings = {
   deletePattern: 'Delete pattern', tooBig: 'That image is too large (8 MB max).', badType: 'That file type is not supported.',
   photoUploadPending: 'The photo will upload when you are back online.',
   account: 'Account', designSystem: 'Design system',
+  // Biometric app unlock
+  bioAskTitle: 'Unlock Gharzetak with your fingerprint next time?', bioAskBody: 'We will ask for your fingerprint before opening your data. You can turn it off in Settings any time.',
+  bioEnable: 'Enable biometrics', bioLater: 'Not now',
+  bioSettings: 'Unlock the app with biometrics', bioSettingsSub: 'Ask for your fingerprint every time Gharzetak opens.',
+  bioUnavailable: 'Biometrics are not available on this device.', bioNotEnrolled: 'Add a fingerprint in your device settings first.',
+  bioOnToast: 'Biometric unlock is on.', bioOffToast: 'Biometric unlock is off.', bioEnableFailed: 'Could not turn it on. Try again.',
+  bioPromptTitle: 'Unlock Gharzetak', bioPromptSub: 'Confirm it is you',
+  lockTitle: 'Gharzetak is locked', lockSub: 'Unlock with your fingerprint to continue.', lockUnlock: 'Unlock with biometrics', lockOther: 'Sign in another way',
+  lockFailed: 'That did not match. Try again.', lockCancelled: 'Verification cancelled. Tap to unlock.',
+  lockLockedOut: 'Too many attempts. Wait a moment and try again.', lockChanged: 'Your device biometrics changed. Sign in again, then turn biometric unlock back on in Settings.',
+  lockUnavailable: 'Biometrics are unavailable right now. Sign in another way.', lockExpired: 'Your session ended. Please sign in again.',
 };
 
 export const STRINGS: Readonly<Record<'ar' | 'en', Strings>> = { ar, en };

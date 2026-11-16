@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, effect, inject, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
@@ -11,19 +11,37 @@ import { TimerService } from './core/services/timer.service';
 import { AppStore } from './core/state/app.store';
 import { GuestImportService } from './core/sync/guest-import.service';
 import { SyncService } from './core/sync/sync.service';
+import { LockScreenComponent } from './features/auth/lock-screen.component';
 import { UiFeedback } from './shared/ui/feedback/toast.service';
+
+/** A biometric-protected session locks again after the app spent this long in the background. */
+const RELOCK_AFTER_MS = 30_000;
 
 @Component({
   selector: 'app-root',
-  imports: [IonApp, IonRouterOutlet],
-  template: `<ion-app><ion-router-outlet /></ion-app>`,
+  imports: [IonApp, IonRouterOutlet, LockScreenComponent],
+  template: `
+    <ion-app>
+      <!-- While locked (or covered in the task switcher) the content is inert: not focusable, not readable by assistive tech. -->
+      <ion-router-outlet [attr.inert]="shield() ? '' : null" [attr.aria-hidden]="shield() ? 'true' : null" />
+      @if (auth.locked()) {
+        <gz-lock-screen />
+      } @else if (cover()) {
+        <gz-lock-screen [cover]="true" />
+      }
+    </ion-app>
+  `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App implements OnInit {
   private readonly platform = inject(Platform);
   private readonly router = inject(Router);
   private readonly nav = inject(NavController);
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
+  /** Privacy splash while a biometric-protected app is in the background (task switcher). */
+  protected readonly cover = signal(false);
+  protected readonly shield = computed(() => this.auth.locked() || this.cover());
+  private backgroundedAt: number | null = null;
   private readonly store = inject(AppStore);
   private readonly sync = inject(SyncService);
   private readonly timer = inject(TimerService);
@@ -87,12 +105,38 @@ export class App implements OnInit {
         if (path) void this.nav.navigateRoot(path, { replaceUrl: true });
       });
     }).catch(() => undefined);
-    CapApp.addListener('pause', () => void this.timer.checkpoint()).catch(() => undefined);
-    CapApp.addListener('resume', () => this.sync.schedule(0, true)).catch(() => undefined);
+    CapApp.addListener('pause', () => {
+      void this.timer.checkpoint();
+      this.onBackground();
+    }).catch(() => undefined);
+    CapApp.addListener('resume', () => {
+      this.onForeground();
+      if (!this.auth.locked()) this.sync.schedule(0, true);
+    }).catch(() => undefined);
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') void this.timer.checkpoint();
-      else this.sync.schedule(0, true);
+      if (document.visibilityState === 'hidden') {
+        void this.timer.checkpoint();
+        this.onBackground();
+      } else {
+        this.onForeground();
+        if (!this.auth.locked()) this.sync.schedule(0, true);
+      }
     });
+  }
+
+  /** Cover the screen right away (task-switcher thumbnail) and remember when we left. */
+  private onBackground(): void {
+    if (!this.auth.biometricEnabled() || !this.auth.signedIn()) return;
+    this.backgroundedAt ??= Date.now();
+    this.cover.set(true);
+  }
+
+  /** Back in the foreground: after a while away the app asks for the fingerprint again. */
+  private onForeground(): void {
+    const left = this.backgroundedAt;
+    this.backgroundedAt = null;
+    if (left !== null && Date.now() - left >= RELOCK_AFTER_MS) this.auth.lock();
+    this.cover.set(false);
   }
 
   private async offerGuestImport(): Promise<void> {

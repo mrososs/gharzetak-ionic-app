@@ -1,3 +1,10 @@
-# Copy to .dev.vars (git-ignored) for local development.
+# Copy to .dev.vars (git-ignored) for local development. NEVER put real values in this example file.
 # Generate a secret:  node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 BETTER_AUTH_SECRET=replace-with-a-random-32-byte-value
+
+# Google OAuth (Google Cloud Console -> APIs & Services -> Credentials)
+# Web application client: its id is the token AUDIENCE of the native picker; its secret stays ONLY on the Worker.
+GOOGLE_CLIENT_ID=replace-with-web-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=replace-with-web-client-secret
+# Android client (package com.gharzetak.app + signing SHA-1). Optional extra accepted audience.
+GOOGLE_ANDROID_CLIENT_ID=replace-with-android-client-id.apps.googleusercontent.com

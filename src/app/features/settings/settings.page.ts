@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { AuthService } from '../../core/auth/auth.service';
+import { BiometricAvailability, BiometricService } from '../../core/auth/biometric.service';
 import { LVL, LVL_IDS } from '../../core/data/catalog';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TimerService } from '../../core/services/timer.service';
@@ -59,6 +60,14 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
             <button type="button" class="gz-chip sm" [class.on]="store.profile().level === l" [attr.aria-pressed]="store.profile().level === l" (click)="store.updateProfile({ level: l })">{{ LVL[l][i18n.lang()] }}</button>
           }
         </div>
+        @if (auth.signedIn() && bio.supported) {
+          <span class="gz-lbl">{{ t().bioSettings }}</span>
+          <div class="gz-seg" role="group" [attr.aria-label]="t().bioSettings">
+            <button type="button" [class.on]="auth.biometricEnabled()" [attr.aria-pressed]="auth.biometricEnabled()" [disabled]="bioBusy() || !bioAvailable().available" (click)="setBiometrics(true)">{{ i18n.q('تشغيل', 'On') }}</button>
+            <button type="button" [class.on]="!auth.biometricEnabled()" [attr.aria-pressed]="!auth.biometricEnabled()" [disabled]="bioBusy()" (click)="setBiometrics(false)">{{ i18n.q('إيقاف', 'Off') }}</button>
+          </div>
+          <p class="gz-xs gz-mute" style="margin: 6px 2px 0" role="status">{{ bioHint() }}</p>
+        }
         <button type="button" class="gz-btn3 w mt-4" (click)="sheet.set('tools')"><svg gzIcon="hook" size="s" />{{ t().editTools }}</button>
         <button type="button" class="gz-btn3 w mt-2" (click)="replayIntro()"><svg gzIcon="reset" size="s" />{{ t().replayIntro }}</button>
         <button type="button" class="gz-btn3 rose w mt-2" (click)="sheet.set('erase')"><svg gzIcon="trash" size="s" />{{ t().resetDemo }}</button>
@@ -115,6 +124,35 @@ export class SettingsPage {
         return this.sync.pending() ? `${t.pending}: ${this.sync.pending()}` : t.synced;
     }
   });
+
+  protected readonly bio = inject(BiometricService);
+  protected readonly bioBusy = signal(false);
+  protected readonly bioAvailable = signal<BiometricAvailability>({ available: false });
+  protected readonly bioHint = computed(() => {
+    const t = this.t();
+    const a = this.bioAvailable();
+    if (this.auth.biometricEnabled() || a.available) return t.bioSettingsSub;
+    return a.reason === 'notEnrolled' ? t.bioNotEnrolled : t.bioUnavailable;
+  });
+
+  constructor() {
+    void this.bio.check().then((a) => this.bioAvailable.set(a));
+  }
+
+  /** On: the OS asks for a real fingerprint before anything is protected. Off: needs a fresh fingerprint too. */
+  protected async setBiometrics(on: boolean): Promise<void> {
+    if (this.bioBusy() || on === this.auth.biometricEnabled()) return;
+    this.bioBusy.set(true);
+    try {
+      const r = on ? await this.auth.enableBiometrics() : await this.auth.disableBiometrics();
+      const t = this.t();
+      if (r.ok) await this.ui.toast(on ? t.bioOnToast : t.bioOffToast);
+      else if (r.reason !== 'cancelled') await this.ui.toast(t.bioEnableFailed);
+    } finally {
+      this.bioBusy.set(false);
+      void this.bio.check().then((a) => this.bioAvailable.set(a));
+    }
+  }
 
   private nameTimer: ReturnType<typeof setTimeout> | null = null;
   protected onName(ev: Event): void {

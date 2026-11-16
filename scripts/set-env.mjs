@@ -39,10 +39,22 @@ for (const k of Object.keys(vars)) {
   }
 }
 
+// Public Google OAuth client ids (NOT secrets; the client secret lives only on the Worker). Malformed values are refused.
+const CLIENT_ID = /^[0-9]{6,}-[a-z0-9]+\.apps\.googleusercontent\.com$/;
+const googleWebClientId = get('GZ_GOOGLE_WEB_CLIENT_ID', '').trim();
+const googleIosClientId = get('GZ_GOOGLE_IOS_CLIENT_ID', '').trim();
+for (const [k, v] of [['GZ_GOOGLE_WEB_CLIENT_ID', googleWebClientId], ['GZ_GOOGLE_IOS_CLIENT_ID', googleIosClientId]]) {
+  if (v && !CLIENT_ID.test(v)) {
+    console.error(`\n[set-env] REFUSED: ${k} is not a Google OAuth client id (expected <number>-<id>.apps.googleusercontent.com).\n`);
+    process.exit(1);
+  }
+}
+
 const out = {
   apiUrl,
   authRedirectUrl: get('GZ_AUTH_REDIRECT_URL', ''),
-  oauthProviders: get('GZ_OAUTH_PROVIDERS', '').split(',').map((s) => s.trim()).filter(Boolean),
+  googleWebClientId: googleWebClientId,
+  googleIosClientId: googleIosClientId,
   aiEndpoint: get('GZ_AI_ENDPOINT', ''),
 };
 

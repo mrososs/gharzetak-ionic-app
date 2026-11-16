@@ -77,64 +77,125 @@ ion-alert.gz-alert {
 }
 ion-alert.gz-alert .alert-button { color: var(--gz-primary); font-weight: 700; text-transform: none; }
 
-/* Tab bar (custom design: raised pink tracker button in the middle) */
+/* ───────────────────────────────────────────────────────────────────────────
+   Bottom tab bar — compact, with ONE sliding organic selection shape for the regular tabs and a floating
+   pink Tracker action in the middle.
+   • Height = --gz-nav-h (content) + the safe-area inset, applied exactly once (padding-bottom). Ionic's own
+     tab-bar safe-area padding is overridden here so it is never doubled (see the content-box note below).
+   • Direction-aware: the shape is positioned with inset-inline-start, so RTL mirrors with no extra rules.
+   • --gz-tab-i (active index) / --gz-tab-n (tab count) are set by TabsLayout.
+   ─────────────────────────────────────────────────────────────────────────── */
 ion-tab-bar.gz-tabbar {
   --background: var(--gz-surface);
   --border: 1px solid var(--gz-border);
-  height: calc(var(--gz-nav-h) + var(--gz-safe-bottom));
-  padding: 6px 6px calc(10px + var(--gz-safe-bottom));
+  --gz-tab-pad: 6px;
+  --gz-blob: var(--gz-lavender-100);
+  --gz-blob-r: 8px; /* radius of the concave "shoulders" that merge the shape into the bar's top edge */
+  position: relative;
+  height: auto;
+  /* Ionic forces `box-sizing: content-box !important` on ion-tab-bar, so min-height is the CONTENT height only and
+     the safe-area inset is added by the padding: total = --gz-nav-h + safe-bottom, inset counted exactly once. */
+  min-height: var(--gz-nav-h);
+  padding: 0 var(--gz-tab-pad) var(--gz-safe-bottom);
   box-shadow: var(--gz-shadow-sheet);
-  align-items: flex-end;
-  overflow: visible;
+  align-items: stretch;
+  overflow: visible; /* the Tracker floats above the bar's top edge */
   contain: none;
 }
+
 ion-tab-bar.gz-tabbar ion-tab-button {
   --color: var(--gz-text-2);
   --color-selected: var(--gz-primary);
+  --color-focused: var(--gz-primary);
   --background: transparent;
-  --ripple-color: var(--gz-lavender);
+  --background-focused: transparent;
+  --ripple-color: transparent; /* feedback comes from the shape + press scale, not a rectangular ripple */
   --padding-start: 0;
   --padding-end: 0;
-  overflow: visible;
+  --padding-top: 0;
+  --padding-bottom: 0;
+  flex: 1 1 0;
+  min-width: 0;
   max-width: none;
+  overflow: visible;
 }
 ion-tab-bar.gz-tabbar ion-tab-button::part(native) {
   overflow: visible;
-  justify-content: flex-end;
-  padding-bottom: 2px;
+  justify-content: flex-start;
+  padding: 10px 2px 0;
+  border-radius: 18px;
+  transition: background-color 0.18s;
 }
-.gz-nv-label { font-size: 11px; font-weight: 600; line-height: 1.3; text-align: center; margin-top: 2px; }
-.gz-nvi { width: 46px; height: 28px; border-radius: 16px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
-ion-tab-button.tab-selected .gz-nvi { background: var(--gz-lavender-200); }
-ion-tab-button.gz-mid .gz-nvi {
-  width: 60px; height: 60px; border-radius: 50%; margin-top: -26px;
-  background: var(--gz-pink); color: var(--gz-text);
-  box-shadow: 0 8px 18px rgba(245, 111, 168, 0.42); border: 4px solid var(--gz-bg);
-}
-ion-tab-button.gz-mid.tab-selected .gz-nvi { background: var(--gz-primary); color: #fff; box-shadow: 0 8px 18px rgba(129, 61, 181, 0.36); }
-ion-tab-button.gz-mid .gz-ic { width: 26px; height: 26px; }
 
-/* Raised secondary tabs (Projects, Learn): same family as the tracker button, one step lower and smaller.
-   Tone at rest (lavender / mint), Primary Purple when selected, gentle lift + pop on selection. */
-ion-tab-button.gz-raise .gz-nvi {
-  width: 48px; height: 48px; border-radius: 50%; margin-top: -16px;
-  border: 3px solid var(--gz-bg);
-  box-shadow: 0 6px 14px rgba(53, 37, 62, 0.14);
-  transition: background 0.2s, color 0.2s, box-shadow 0.2s, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+/* Icon + label */
+.gz-nvi { width: 26px; height: 24px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; }
+.gz-nvi .gz-ic { width: 24px; height: 24px; }
+.gz-nv-label {
+  font-size: 11px; font-weight: 600; line-height: 1.2; text-align: center; margin-top: 3px;
+  max-width: 100%; overflow-wrap: anywhere; text-wrap: balance;
 }
-ion-tab-button.gz-raise[data-tone='lav'] .gz-nvi { background: var(--gz-lavender-200); color: var(--gz-text); }
-ion-tab-button.gz-raise[data-tone='sage'] .gz-nvi { background: var(--gz-mint-200); color: var(--gz-mint-ink); }
-ion-tab-button.gz-raise.tab-selected .gz-nvi {
-  background: var(--gz-primary); color: #fff;
-  box-shadow: var(--gz-shadow-raised);
-  transform: translateY(-3px) scale(1.06);
-}
-ion-tab-button.gz-raise .gz-ic { width: 23px; height: 23px; }
-ion-tab-button.gz-mid .gz-nvi { transition: background 0.2s, box-shadow 0.2s, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
-ion-tab-button.gz-mid.tab-selected .gz-nvi { transform: translateY(-2px) scale(1.04); }
-ion-tab-button.gz-raise:active .gz-nvi,
-ion-tab-button.gz-mid:active .gz-nvi { transform: scale(0.94); }
 ion-tab-button.tab-selected .gz-nv-label { font-weight: 700; }
+
+/* The sliding selection shape: a body that hangs from the bar's top edge, with concave shoulders that flare
+   into the edge so it reads as part of the bar. Spans exactly one slot; never wider than its own tab. */
+.gz-tab-blob {
+  position: absolute;
+  z-index: 0;
+  top: -1px; /* cover the 1px top border so the shape flows out of it */
+  bottom: calc(var(--gz-safe-bottom) + 9px); /* follows the bar's content height (grows with large text), never into the inset */
+  width: calc((100% - 2 * var(--gz-tab-pad)) / var(--gz-tab-n, 5));
+  inset-inline-start: calc(var(--gz-tab-pad) + var(--gz-tab-i, 0) * (100% - 2 * var(--gz-tab-pad)) / var(--gz-tab-n, 5));
+  pointer-events: none;
+  transition: inset-inline-start 0.32s cubic-bezier(0.34, 1.3, 0.5, 1), opacity 0.2s;
+}
+.gz-tab-blob.is-off { opacity: 0; }
+.gz-tab-blob-body {
+  position: absolute; inset: 0 var(--gz-blob-r) 0;
+  background: var(--gz-blob);
+  border-radius: 0 0 22px 22px;
+}
+.gz-tab-blob::before,
+.gz-tab-blob::after {
+  content: ''; position: absolute; top: 0;
+  width: var(--gz-blob-r); height: var(--gz-blob-r);
+}
+.gz-tab-blob::before { inset-inline-start: 0; background: radial-gradient(circle at 0 100%, transparent calc(var(--gz-blob-r) - 0.5px), var(--gz-blob) var(--gz-blob-r)); }
+.gz-tab-blob::after { inset-inline-end: 0; background: radial-gradient(circle at 100% 100%, transparent calc(var(--gz-blob-r) - 0.5px), var(--gz-blob) var(--gz-blob-r)); }
+ion-tab-bar.gz-tabbar ion-tab-button { z-index: 1; }
+ion-tab-bar.gz-tabbar ion-tab-button.gz-mid { z-index: 2; }
+
+/* Pointer / keyboard states on regular tabs. Hover only where the device really hovers (never sticky on touch);
+   touch gets the pressed state instead. */
+ion-tab-button:not(.gz-mid):active .gz-nvi { transform: scale(0.9); }
+ion-tab-button:not(.gz-mid):active::part(native) { background: var(--gz-lavender-100); }
+@media (hover: hover) {
+  ion-tab-button:not(.gz-mid):not(.tab-selected):hover::part(native) { background: var(--gz-lavender-100); }
+}
+ion-tab-button.ion-focused::part(native) { outline: 2px solid var(--gz-primary); outline-offset: -3px; }
+ion-tab-button.gz-mid.ion-focused::part(native) { outline-offset: -6px; }
+
+/* Tracker: floating pink action — lifts above the bar's top edge without adding bar height. */
+ion-tab-button.gz-mid .gz-nvi {
+  width: 50px; height: 50px; border-radius: 50%; margin-top: -26px;
+  color: var(--gz-text);
+  background: linear-gradient(150deg, #ff8fbf 0%, var(--gz-pink) 55%, #ea5a9b 100%);
+  box-shadow: 0 0 0 3px var(--gz-surface), 0 8px 18px rgba(245, 111, 168, 0.42);
+  transition: box-shadow 0.2s, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+ion-tab-button.gz-mid .gz-nvi .gz-ic { width: 26px; height: 26px; }
+/* Active Tracker keeps its own treatment (not the sliding shape): lavender halo + a small lift. */
+ion-tab-button.gz-mid.tab-selected .gz-nvi {
+  box-shadow: 0 0 0 3px var(--gz-surface), 0 0 0 6px var(--gz-lavender-200), 0 10px 20px rgba(245, 111, 168, 0.5);
+  transform: translateY(-2px);
+}
+ion-tab-button.gz-mid:active .gz-nvi { transform: scale(0.94); }
+ion-tab-button.gz-mid:active::part(native) { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gz-tab-blob,
+  .gz-nvi,
+  ion-tab-bar.gz-tabbar ion-tab-button::part(native) { transition: none; }
+}
 
 /* Refresher */
 ion-refresher-content { --color: var(--gz-primary); }
