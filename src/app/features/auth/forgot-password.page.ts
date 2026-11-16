@@ -23,6 +23,9 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
           <div class="flex h-[60px] w-[60px] items-center justify-center rounded-md bg-primary text-white"><svg gzIcon="lock" size="l" /></div>
           <p class="gz-mute gz-sm m-0">{{ t().forgotSub }}</p>
         </div>
+        @if (!auth.passwordResetAvailable) {
+          <div class="gz-note mt-3" role="status"><svg gzIcon="info" /><span>{{ t().resetOff }}</span></div>
+        } @else {
         <label class="gz-lbl" for="fp-mail">{{ t().email }}</label>
         <div class="gz-in" [class.invalid]="email.invalid && tried()">
           <svg gzIcon="mail" />
@@ -44,6 +47,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
             {{ t().sendReset }}
           }
         </button>
+        }
         <button type="button" class="gz-lnk mt-2" (click)="nav.navigateBack('/auth/login')">{{ t().backToLogin }}</button>
       </form>
     </ion-content>
@@ -53,7 +57,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
 export class ForgotPasswordPage {
   protected readonly i18n = inject(I18nService);
   protected readonly nav = inject(NavController);
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
   protected readonly t = this.i18n.t;
   protected readonly email = new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.email] });
   protected readonly tried = signal(false);

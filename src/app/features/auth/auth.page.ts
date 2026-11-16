@@ -70,7 +70,9 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
           <div class="gz-note sage mt-2" role="status"><svg gzIcon="mail" size="s" /><span>{{ msg }}</span></div>
         }
         @if (!isSign()) {
-          <button type="button" class="gz-lnk mt-1" (click)="nav.navigateForward('/auth/forgot')">{{ t().forgot }}</button>
+          @if (auth.passwordResetAvailable) {
+            <button type="button" class="gz-lnk mt-1" (click)="nav.navigateForward('/auth/forgot')">{{ t().forgot }}</button>
+          }
         }
 
         <button type="submit" class="gz-btn mt-3.5" [disabled]="busy()">

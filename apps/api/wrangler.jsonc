@@ -46,8 +46,8 @@
         {
           "binding": "DB",
           "database_name": "gharzetak-db-staging",
-          // PLACEHOLDER: `wrangler d1 create gharzetak-db-staging --env staging` prints the real id.
-          "database_id": "REPLACE_STAGING_D1_DATABASE_ID",
+          // Created with `wrangler d1 create gharzetak-db-staging` (region WEUR). The id is an identifier, not a secret.
+          "database_id": "23160160-69cf-4d4c-ad1e-38889b4eb351",
           "migrations_dir": "drizzle"
         }
       ],
@@ -56,10 +56,10 @@
       "vars": {
         "ENVIRONMENT": "staging",
         "MEDIA_PREFIX": "staging/",
-        // Public URL of the staging Worker. The workers.dev account subdomain is not registered yet.
-        "AUTH_BASE_URL": "https://gharzetak-api-staging.REPLACE_WORKERS_SUBDOMAIN.workers.dev",
-        // Web origin(s) allowed for staging builds + the Capacitor origins. Replace with the real staging web origin.
-        "APP_ORIGINS": "http://localhost:4200,capacitor://localhost,http://localhost,https://localhost,com.gharzetak.app://",
+        // Public URL of the staging Worker (account workers.dev subdomain: gharzetak).
+        "AUTH_BASE_URL": "https://gharzetak-api-staging.gharzetak.workers.dev",
+        // Only the installed app's own origins: Android Capacitor WebView (https://localhost), iOS (capacitor://localhost) and the deep-link scheme. No dev-server origin.
+        "APP_ORIGINS": "https://localhost,capacitor://localhost,com.gharzetak.app://",
         // Turn on once a mail provider exists (otherwise nobody could ever sign in).
         "REQUIRE_EMAIL_VERIFICATION": "false"
       }

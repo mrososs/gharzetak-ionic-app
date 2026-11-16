@@ -76,6 +76,10 @@ export class AuthService {
   readonly locked = signal(false);
   /** Biometric unlock is switched on for the current session (native only). */
   readonly biometricEnabled = this.store.biometric.asReadonly();
+  /** Password reset is offered only when the backend can actually deliver the email (build flag GZ_PASSWORD_RESET=1). */
+  get passwordResetAvailable(): boolean {
+    return this.backend && environment.passwordResetEnabled;
+  }
   /** Google sign-in can really run here: native Android/iOS build with the Google client id configured and a backend. */
   get googleAvailable(): boolean {
     return this.backend && this.google.available;

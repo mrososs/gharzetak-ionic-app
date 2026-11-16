@@ -56,6 +56,8 @@ const out = {
   googleWebClientId: googleWebClientId,
   googleIosClientId: googleIosClientId,
   aiEndpoint: get('GZ_AI_ENDPOINT', ''),
+  // '1' only when the Worker really delivers email (verification / reset links). Otherwise the app hides password reset instead of promising an email.
+  passwordResetEnabled: get('GZ_PASSWORD_RESET', '') === '1',
 };
 
 const target = resolve(root, 'src/environments/env.generated.ts');
