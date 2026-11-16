@@ -11,6 +11,8 @@ export class UiFeedback {
 
   async toast(message: string): Promise<void> {
     // Float above the tab bar when it is visible (design: toast sits 96px from the bottom).
+    // Wait two frames so a tab bar re-shown by the navigation that triggered this toast is rendered.
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
     const bar = typeof document !== 'undefined' ? document.querySelector<HTMLElement>('ion-tab-bar:not([hidden])') : null;
     const t = await this.toasts.create({ message, duration: 2600, position: 'bottom', cssClass: 'gz-toast', positionAnchor: bar ?? undefined });
     await t.present();

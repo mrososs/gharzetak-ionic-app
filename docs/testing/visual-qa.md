@@ -27,11 +27,33 @@ hosted artifact page); differences below are from side-by-side reading of the de
 | S23 Converter | 390×844 EN | Matches. |
 | S25 Settings | 390×844 EN | Matches; adds account + sync status line (new). |
 
+## Second pass (2026-11-16)
+
+| Screen | Size / dir | Result |
+|---|---|---|
+| S12 Project details | 390 AR, 412 EN | Matches (hero + change-cover, status chips, tracker card, pattern chips, materials, photos, notes) + delete button |
+| S16 Pattern library | 390 AR | Matches. **Fixed:** Arabic note rendered "sc hdc dc tr inc dec" reversed — Latin runs now wrapped in LTR isolates (also the converter note) |
+| S18 Add pattern | 390 AR | Matches |
+| S20 Video detail | 390 AR | Matches (photo, info, YouTube CTA, note, link field, linked project, companion counter, timestamps, notes) |
+| S22 Dictionary | 390 AR | Matches (US↔UK table, search, term cards) |
+| S24 Store | 390 AR | Matches; Pexels hero + category photos (kits/accessories keep tonal placeholders) |
+| T06 Reset sheet | 390 AR | Matches; measured — Cancel ends 26 px above the bottom (not clipped) |
+| T07 Tools sheet | 390 AR | Matches |
+| T08 Notifications sheet | 390 AR | Matches |
+| T09 Erase-data sheet | 390 AR | Matches (opened, not confirmed) |
+| Home | 412 EN | Matches |
+
+**Automated overflow sweep:** 14 routes × {360, 412 px} × {Arabic, English} = 56 checks — no page scrolls
+sideways and no element (outside intentional horizontal chip rows and sheets) extends past the viewport.
+Together with the 320 px tracker check, every main route is covered at 320/360/390/412 px.
+
+**Fixed:** toasts now wait two frames before anchoring, so a toast fired right after leaving a screen without
+the tab bar (New project) sits above the re-shown bar instead of over it.
+
 ## Known differences / not yet checked
 
-* Not visually checked yet: S12 project detail, S16, S18, S20, S22, S24, T06–T09 sheets, 360/412 px widths,
-  English on every screen. They compile and share the same component layer, but were not screenshotted.
-* Toasts are anchored above the tab bar; when a screen hides the bar (New project) the toast created during
-  the transition can briefly overlap the bar.
+* Photos are 1200 px and show the design's tonal placeholder for a moment on first load (intended fallback);
+  smaller variants would load faster on slow networks.
+* Long Latin phrases inside Arabic sentences can still wrap mid-phrase (e.g. "(…) × N" across a line break).
 * Status bar: the prototype drew none; the app uses the native status bar (cream background, dark icons).
 * On a real device the bottom safe area adds height to the tab bar (as intended).

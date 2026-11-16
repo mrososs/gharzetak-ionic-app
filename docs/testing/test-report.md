@@ -40,7 +40,7 @@ rejected, bucket not public; cascade delete.
 | Offline: API stopped → undo ×3 + tap → reload app → state kept → API restarted → server updated (ptr 24 → 13) | ✅ |
 | Session restore after reload | ✅ |
 | Arabic RTL and English LTR | ✅ on the screens listed in `visual-qa.md` |
-| 320 px width, no horizontal scroll (tracker) | ✅ · 360/412 px ⚠ not checked |
+| No horizontal scroll at 320 (tracker) and 360/412 px (14 routes × AR/EN) | ✅ |
 | Password recovery email end-to-end | ⚠ not run (Mailpit available at :55424) |
 | Logout, guest mode, guest → account import, delete project, photo upload via UI | ⚠ implemented, not exercised |
 | Android Back after login | ⚠ logic implemented (`navigateRoot` + `replaceUrl`, guard, exit at root); not tested on a device |
