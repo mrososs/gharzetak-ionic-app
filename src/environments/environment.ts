@@ -5,8 +5,10 @@ export interface AppEnvironment {
   readonly apiUrl: string;
   /** Where email links (confirm / reset password) return to. Defaults to the current origin. For native builds use the deep link scheme. */
   readonly authRedirectUrl: string;
-  /** Social providers that are actually configured on the API (none yet: see docs/cloudflare-migration/auth-strategy.md). */
-  readonly oauthProviders: readonly string[];
+  /** Google OAuth *Web* client id (public). It is the audience of the ID token minted by the native Google picker. '' = Google sign-in is off. */
+  readonly googleWebClientId: string;
+  /** Google OAuth iOS client id (public). Required for Google sign-in on iOS; '' = Google sign-in is Android-only. */
+  readonly googleIosClientId: string;
   /** API path that answers assistant questions, e.g. '/v1/assistant' ('' = demo mode). */
   readonly aiEndpoint: string;
 }

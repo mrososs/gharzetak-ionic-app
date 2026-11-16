@@ -37,7 +37,8 @@ Without `GZ_API_URL` the app still runs in **guest-only mode** (everything stays
 |---|---|
 | `GZ_API_URL` | Worker API base URL (`http://localhost:8787` locally; **https** otherwise — `set-env.mjs` refuses plain http for remote hosts) |
 | `GZ_AUTH_REDIRECT_URL` | where email links return (empty = current origin; native: `com.gharzetak.app://`) |
-| `GZ_OAUTH_PROVIDERS` | leave empty: Google/Apple are not wired yet |
+| `GZ_GOOGLE_WEB_CLIENT_ID` | public Google OAuth **Web** client id (audience of the native Google ID token). Empty = Google sign-in off. The matching client **secret** lives only in the Worker (`apps/api/.dev.vars` / `wrangler secret put GOOGLE_CLIENT_SECRET`) |
+| `GZ_GOOGLE_IOS_CLIENT_ID` | optional public iOS client id (iOS Google sign-in stays off while empty) |
 | `GZ_AI_ENDPOINT` | API path of the assistant (empty = clearly-labelled demo mode) |
 
 Worker secrets (`BETTER_AUTH_SECRET`) live in `apps/api/.dev.vars` (local) or `wrangler secret put` (deployed) — never in `.env`.

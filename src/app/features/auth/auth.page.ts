@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { IonContent, IonHeader, IonInput, IonSpinner, NavController } from '@ionic/angular';
+import { AlertController, IonContent, IonHeader, IonInput, IonSpinner, NavController } from '@ionic/angular';
 import { AuthErrorKey, AuthService } from '../../core/auth/auth.service';
+import { BiometricService } from '../../core/auth/biometric.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { AppStore } from '../../core/state/app.store';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
@@ -80,14 +81,15 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
           }
         </button>
 
-        <div class="my-4 flex items-center gap-2.5" aria-hidden="true">
-          <span class="h-px flex-1 bg-line"></span><span class="gz-xs gz-mute">{{ t().orWith }}</span><span class="h-px flex-1 bg-line"></span>
-        </div>
-        <div class="flex gap-2.5">
-          <button type="button" class="gz-btn2 flex-1" (click)="social('google')"><span class="gz-b" style="font-size: 18px; font-family: var(--gz-font-latin)">G</span>Google</button>
-          <button type="button" class="gz-btn2 flex-1" (click)="social('apple')"><svg gzIcon="apple" />Apple</button>
-        </div>
-        <button type="button" class="gz-btn3 w mt-3" (click)="guest()">{{ t().guest }}</button>
+        @if (auth.googleAvailable) {
+          <div class="my-4 flex items-center gap-2.5" aria-hidden="true">
+            <span class="h-px flex-1 bg-line"></span><span class="gz-xs gz-mute">{{ t().orWith }}</span><span class="h-px flex-1 bg-line"></span>
+          </div>
+          <button type="button" class="gz-btn2" [disabled]="busy()" (click)="google()">
+            <span class="gz-b" style="font-size: 18px; font-family: var(--gz-font-latin)" aria-hidden="true">G</span>{{ t().googleContinue }}
+          </button>
+        }
+        <button type="button" class="gz-btn3 w" [class.mt-3]="auth.googleAvailable" [class.mt-4]="!auth.googleAvailable" (click)="guest()">{{ t().guest }}</button>
         <div class="gz-note lav mt-4">
           <svg gzIcon="info" size="s" />
           <span>{{ auth.backend ? t().authNote : t().backendOff }}</span>
@@ -103,6 +105,8 @@ export class AuthPage {
   protected readonly nav = inject(NavController);
   private readonly store = inject(AppStore);
   private readonly ui = inject(UiFeedback);
+  private readonly bio = inject(BiometricService);
+  private readonly alerts = inject(AlertController);
 
   readonly mode = input<'login' | 'signup'>('login');
   protected readonly t = this.i18n.t;
@@ -167,14 +171,67 @@ export class AuthPage {
     }
   }
 
-  protected async social(provider: 'google' | 'apple'): Promise<void> {
-    if (!this.auth.oauthProviders.includes(provider)) return this.ui.toast(this.t().socialSoon);
-    const r = await this.auth.signInWithProvider(provider);
-    if (!r.ok) this.error.set(r.error ?? 'errGeneric');
+  protected async google(): Promise<void> {
+    if (this.busy()) return;
+    this.error.set(null);
+    this.info.set(null);
+    this.busy.set(true);
+    try {
+      const r = await this.auth.signInWithGoogle();
+      if (r.cancelled) return; // the user closed the account picker: nothing to report
+      if (!r.ok) return void this.error.set(r.error ?? 'errGoogleFailed');
+      if (r.isNew) await this.store.updateProfile({ displayName: this.auth.user()?.name ?? '' });
+      await this.offerBiometrics();
+      // navigateRoot clears the stack: Back can never return to the sign-in form.
+      await this.nav.navigateRoot(r.isNew ? '/setup/experience' : '/tabs/home', { replaceUrl: true });
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /** After a successful sign-in, OFFER (never force) biometric unlock, and only when the device can really do it. */
+  private async offerBiometrics(): Promise<void> {
+    const user = this.auth.user();
+    if (!user || this.auth.biometricEnabled() || wasDeclined(user.id)) return;
+    if (!(await this.bio.check()).available) return;
+    const t = this.t();
+    const a = await this.alerts.create({
+      header: t.bioAskTitle,
+      message: t.bioAskBody,
+      cssClass: 'gz-alert',
+      backdropDismiss: false,
+      buttons: [
+        { text: t.bioLater, role: 'cancel' },
+        { text: t.bioEnable, role: 'confirm' },
+      ],
+    });
+    await a.present();
+    const { role } = await a.onDidDismiss();
+    if (role !== 'confirm') return void markDeclined(user.id);
+    const r = await this.auth.enableBiometrics(); // the OS asks for a real fingerprint here
+    await this.ui.toast(r.ok ? t.bioOnToast : t.bioEnableFailed);
   }
 
   protected async guest(): Promise<void> {
     this.auth.continueAsGuest();
     await this.nav.navigateRoot('/tabs/home', { replaceUrl: true });
+  }
+}
+
+const declinedKey = (userId: string): string => `gz.bio.declined.${userId}`;
+
+function wasDeclined(userId: string): boolean {
+  try {
+    return localStorage.getItem(declinedKey(userId)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markDeclined(userId: string): void {
+  try {
+    localStorage.setItem(declinedKey(userId), '1');
+  } catch {
+    /* private mode: ask again next time */
   }
 }

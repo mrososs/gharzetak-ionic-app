@@ -45,7 +45,9 @@ background. Only an explicit `401` (or an empty session) ends the session; offli
 | No account enumeration on reset | always 200 | API |
 | Email verification | `REQUIRE_EMAIL_VERIFICATION=true` (off by default); sign-up returns no token -> app shows "check your email" | **config only - not exercised**; needs a mail provider |
 | Guards, guest mode, scope switching | unchanged (`AuthService` surface preserved) | e2e (account isolation) |
-| Google / Apple | **Not wired** (`signInWithProvider` returns `backendOff`; buttons keep their "coming soon" toast) | n/a |
+| Google sign-in | native account picker -> Google ID token -> `POST /sign-in/social` (Better Auth verifies it); see [google-biometric-auth.md](google-biometric-auth.md) | API (mock JWKS) + unit; real phone: see that doc |
+| Biometric app unlock | opt-in, native only; session kept in a biometric-bound Keystore/Keychain entry; see [google-biometric-auth.md](google-biometric-auth.md) | unit; real phone: see that doc |
+| Apple | removed from the UI (button, icon, provider code); the Apple SDK is not bundled | n/a |
 
 ### Password hashing
 

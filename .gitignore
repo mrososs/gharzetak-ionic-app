@@ -59,3 +59,6 @@ apps/api/.dev.vars
 apps/api/.dev.vars.*
 !apps/api/.dev.vars.example
 apps/api/worker-configuration.d.ts
+
+# Local OAuth credential file (never commit; secrets belong in apps/api/.dev.vars)
+/google.txt
