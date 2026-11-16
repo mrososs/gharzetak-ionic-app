@@ -10,8 +10,8 @@ import { authed, call, json, signUp } from './helpers';
  * these tests exercise Better Auth's real verification (signature, issuer, audience, expiry, nonce) and linking logic.
  * They do NOT prove that a real Google account / Android client works: that is verified on the physical phone.
  */
-const WEB = env.GOOGLE_CLIENT_ID as string;
-const ANDROID = env.GOOGLE_ANDROID_CLIENT_ID as string;
+const WEB = (env as unknown as AppEnv).GOOGLE_CLIENT_ID as string;
+const ANDROID = (env as unknown as AppEnv).GOOGLE_ANDROID_CLIENT_ID as string;
 const KID = 'test-key-1';
 const CERTS = 'https://www.googleapis.com/oauth2/v3/certs';
 
@@ -169,6 +169,6 @@ describe('Google configuration', () => {
   it('never returns the client secret in any API response', async () => {
     const res = await call('/health');
     const text = await res.text();
-    expect(text).not.toContain(env.GOOGLE_CLIENT_SECRET as string);
+    expect(text).not.toContain((env as unknown as AppEnv).GOOGLE_CLIENT_SECRET as string);
   });
 });
