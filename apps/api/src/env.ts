@@ -9,6 +9,8 @@ export interface AppEnv {
   AUTH_BASE_URL: string;
   APP_ORIGINS: string;
   REQUIRE_EMAIL_VERIFICATION: string;
+  /** Optional R2 key prefix (e.g. "staging/") so environments can share one private bucket without touching each other's objects. */
+  MEDIA_PREFIX?: string;
 }
 
 export interface AppBindings {

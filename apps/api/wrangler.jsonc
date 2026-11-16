@@ -30,5 +30,39 @@
     // http(s)://localhost (Android) and capacitor://localhost (iOS); the custom scheme is the deep link.
     "APP_ORIGINS": "http://localhost:4200,http://localhost,https://localhost,capacitor://localhost,com.gharzetak.app://",
     "REQUIRE_EMAIL_VERIFICATION": "false"
+  },
+
+  // ---------------------------------------------------------------------------------------------
+  // STAGING (for the `development` branch). NOTHING here exists remotely yet: creating the D1 database,
+  // setting the secret and deploying are approval-gated (docs/cloudflare-migration/staging-readiness.md).
+  // Deploy with `--env staging` ONLY. Wrangler does not inherit bindings/vars into an env, so they are repeated.
+  // The Worker refuses to serve while any REPLACE_* placeholder below is still present.
+  // ---------------------------------------------------------------------------------------------
+  "env": {
+    "staging": {
+      "name": "gharzetak-api-staging",
+      "observability": { "enabled": true },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "gharzetak-db-staging",
+          // PLACEHOLDER: `wrangler d1 create gharzetak-db-staging --env staging` prints the real id.
+          "database_id": "REPLACE_STAGING_D1_DATABASE_ID",
+          "migrations_dir": "drizzle"
+        }
+      ],
+      // The SAME private bucket as other environments, isolated by the key prefix below.
+      "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "gharzetak-media" }],
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "MEDIA_PREFIX": "staging/",
+        // Public URL of the staging Worker. The workers.dev account subdomain is not registered yet.
+        "AUTH_BASE_URL": "https://gharzetak-api-staging.REPLACE_WORKERS_SUBDOMAIN.workers.dev",
+        // Web origin(s) allowed for staging builds + the Capacitor origins. Replace with the real staging web origin.
+        "APP_ORIGINS": "http://localhost:4200,capacitor://localhost,http://localhost,https://localhost,com.gharzetak.app://",
+        // Turn on once a mail provider exists (otherwise nobody could ever sign in).
+        "REQUIRE_EMAIL_VERIFICATION": "false"
+      }
+    }
   }
 }
