@@ -5,7 +5,7 @@ import { AuthErrorKey, AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 
-/** Forgot password — sends a Supabase recovery email (no account enumeration). */
+/** Forgot password — sends a password-reset email (no account enumeration). */
 @Component({
   selector: 'gz-forgot-password',
   imports: [IonHeader, IonContent, IonInput, IonSpinner, ReactiveFormsModule, IconComponent],

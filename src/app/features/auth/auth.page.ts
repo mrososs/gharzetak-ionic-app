@@ -7,7 +7,7 @@ import { AppStore } from '../../core/state/app.store';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 
-/** GZ-S05 Log in · GZ-S06 Sign up — real Supabase Auth (email + password), plus guest mode. */
+/** GZ-S05 Log in · GZ-S06 Sign up — real account auth via the Worker API (email + password), plus guest mode. */
 @Component({
   selector: 'gz-auth',
   imports: [IonHeader, IonContent, IonInput, IonSpinner, ReactiveFormsModule, IconComponent],
