@@ -380,3 +380,77 @@ describe('private media through the API', () => {
     expect((await fetch(`${API}/${stored.storagePath}`)).status).not.toBe(200);
   });
 });
+
+describe('crochet avatar (profile.avatarId)', () => {
+  it('saves locally at once, syncs to D1, and is restored on a NEW device after login', async () => {
+    const d1 = device();
+    const { email } = await register(d1);
+    await d1.store.updateProfile({ displayName: 'Anna', level: 'advanced', terms: 'uk' });
+    await d1.store.setAvatar('sheep');
+    expect((await d1.db.loadDocs(d1.store.scope())).profile?.avatarId).toBe('sheep'); // durable before any network
+    await syncNow(d1);
+    expect(await outbox(d1)).toHaveLength(0);
+    expect((await serverPull(d1.session.token()!)).profile).toMatchObject({ avatarId: 'sheep', displayName: 'Anna', level: 'advanced', terms: 'uk' });
+
+    const d2 = device();
+    await signIn(d2, email);
+    d2.sync.schedule(0, true);
+    await d2.sync.run();
+    await waitFor(() => d2.store.profile().avatarId === 'sheep', 'avatar to be restored');
+    expect(d2.store.profile()).toMatchObject({ avatarId: 'sheep', displayName: 'Anna', level: 'advanced', terms: 'uk' }); // rest of the profile untouched
+    expect((await d2.db.loadDocs(d2.store.scope())).profile?.avatarId).toBe('sheep'); // persisted for the next restart
+  });
+
+  it('an offline avatar change survives locally and syncs on reconnect', async () => {
+    const d = device();
+    await register(d);
+    await d.store.setAvatar('bear');
+    await syncNow(d);
+    const token = d.session.token()!;
+
+    d.net.online.set(false);
+    await d.store.setAvatar('flower');
+    await waitFor(async () => (await outbox(d)).length > 0, 'offline profile write to be queued');
+    await d.sync.run();
+    expect(d.sync.state()).toBe('offline');
+    expect(d.store.avatar()).toBe('flower');
+    expect((await d.db.loadDocs(d.store.scope())).profile?.avatarId).toBe('flower');
+    expect((await serverPull(token)).profile?.avatarId).toBe('bear'); // nothing leaked while offline
+
+    d.net.online.set(true);
+    await d.sync.run();
+    expect(await outbox(d)).toHaveLength(0);
+    expect((await serverPull(token)).profile?.avatarId).toBe('flower');
+  });
+
+  it('guest choice and other accounts stay isolated', async () => {
+    const d = device();
+    await d.auth.init();
+    await d.store.setAvatar('cat'); // guest choice stays on the device, never queued
+    expect(await outbox(d)).toHaveLength(0);
+
+    const { id: a } = await register(d, 'avisoa');
+    expect(d.store.profile().avatarId).toBeNull(); // a brand-new account does not inherit the guest's choice
+    await d.store.setAvatar('yarn');
+    await syncNow(d);
+
+    const e = device();
+    await register(e, 'avisob');
+    expect(e.store.profile().avatarId).toBeNull();
+    expect(e.auth.user()!.id).not.toBe(a);
+  });
+
+  it('the server rejects an unknown avatar id, and a legacy client without avatarId keeps the stored choice', async () => {
+    const d = device();
+    await register(d);
+    await d.store.setAvatar('flower');
+    await syncNow(d);
+    const token = d.session.token()!;
+    const cur = (await serverPull(token)).profile!;
+    const body = { baseRevision: cur.revision, clientUpdatedAt: Date.now(), displayName: 'X', level: 'beginner', terms: 'us', locale: 'ar', interests: [], onboarded: true };
+
+    expect((await serverPut(token, '/v1/profile', { ...body, avatarId: '../../etc/passwd' })).status).toBe(400);
+    expect((await serverPut(token, '/v1/profile', body)).status).toBe(200); // legacy client: no avatarId field
+    expect((await serverPull(token)).profile).toMatchObject({ avatarId: 'flower', displayName: 'X' });
+  });
+});

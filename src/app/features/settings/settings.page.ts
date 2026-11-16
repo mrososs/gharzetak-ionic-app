@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { AuthService } from '../../core/auth/auth.service';
 import { BiometricAvailability, BiometricService } from '../../core/auth/biometric.service';
+import { AvatarId } from '../../core/data/avatars';
 import { LVL, LVL_IDS } from '../../core/data/catalog';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TimerService } from '../../core/services/timer.service';
@@ -11,11 +12,13 @@ import { ToolsSheetBody } from '../../shared/ui/dialogs/common-sheets';
 import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
+import { AvatarPickerComponent } from '../../shared/ui/avatar/avatar-picker.component';
+import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.component';
 
 /** GZ-S25 settings · GZ-T07 tools sheet · GZ-T09 erase-data sheet. */
 @Component({
   selector: 'gz-settings',
-  imports: [IonHeader, IonContent, IconComponent, SheetComponent, ToolsSheetBody],
+  imports: [IonHeader, IonContent, IconComponent, SheetComponent, ToolsSheetBody, AvatarPickerComponent, CrochetAvatarComponent],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top">
@@ -27,7 +30,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
     <ion-content class="gz-scroll">
       <div class="gz-pad">
         <div class="flex items-center gap-3.5" style="margin: 6px 0 4px">
-          <div class="gz-avatar lg">{{ initial() }}</div>
+          <button type="button" class="gz-avatar-btn" (click)="openAvatar()" [attr.aria-label]="i18n.q('شخصيتي في غرزتك', 'My Crochet Avatar')"><gz-crochet-avatar [id]="store.avatar()" [size]="64" [decorative]="true" /></button>
           <div class="min-w-0 flex-1">
             <div class="gz-hd truncate" style="font-size: 18px">{{ displayName() }}</div>
             <div class="gz-sm gz-mute truncate">{{ auth.signedIn() ? t().signedInAs + ' ' + auth.email() : t().guestAccount }}</div>
@@ -44,6 +47,15 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
 
         <label class="gz-lbl" for="se-name">{{ t().yourName }}</label>
         <div class="gz-in"><svg gzIcon="user" /><input id="se-name" type="text" maxlength="80" [value]="store.profile().displayName" (input)="onName($event)" [placeholder]="t().namePh" /></div>
+        <button type="button" class="gz-btn3 w mt-4 gz-avrow" (click)="openAvatar()">
+          <gz-crochet-avatar [id]="store.avatar()" [size]="34" [decorative]="true" />
+          <span class="flex-1 text-start">{{ i18n.q('شخصيتي في غرزتك', 'My Crochet Avatar') }}</span>
+          @if (!store.avatarChosen()) {
+            <span class="gz-badge pur">{{ i18n.q('اختاري', 'Choose') }}</span>
+          } @else {
+            <svg gzIcon="arrow" size="s" [flip]="true" />
+          }
+        </button>
         <span class="gz-lbl">{{ t().language }}</span>
         <div class="gz-seg">
           <button type="button" [class.on]="i18n.isAr()" (click)="setLang('ar')" lang="ar">العربية</button>
@@ -84,6 +96,13 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
     </ion-content>
 
     <gz-sheet [open]="sheet() === 'tools'" [label]="t().myTools" (closed)="sheet.set(null)"><gz-tools-sheet-body (done)="sheet.set(null)" /></gz-sheet>
+    <gz-sheet [open]="sheet() === 'avatar'" [label]="i18n.q('شخصيتي في غرزتك', 'My Crochet Avatar')" (closed)="sheet.set(null)">
+      <h2 class="gz-h2 gz-hd text-center">{{ i18n.q('شخصيتي في غرزتك', 'My Crochet Avatar') }}</h2>
+      <p class="gz-mute gz-sm text-center" style="margin: 4px 0 8px">{{ i18n.q('اختاري صاحبتك الصغيرة اللي هترافقك في كل مشروع كروشيه.', 'Pick the little friend who will join you in every crochet project.') }}</p>
+      <gz-avatar-picker [selected]="draftAvatar()" (picked)="draftAvatar.set($event)" />
+      <button type="button" class="gz-btn mt-4" (click)="saveAvatar()">{{ i18n.q('دي شخصيتي!', "That's my buddy!") }}<svg gzIcon="check" /></button>
+      <button type="button" class="gz-btn2 mt-2" (click)="sheet.set(null)">{{ t().cancel }}</button>
+    </gz-sheet>
     <gz-sheet [open]="sheet() === 'erase'" [label]="t().resetDemo" (closed)="sheet.set(null)">
       <div class="text-center" style="padding: 6px 0 4px">
         <div class="gz-tile t-blush mx-auto mb-2.5" style="width: 60px; height: 60px; border-radius: 20px"><svg gzIcon="trash" size="l" /></div>
@@ -108,9 +127,10 @@ export class SettingsPage {
   protected readonly t = this.i18n.t;
   protected readonly levels = LVL_IDS;
   protected readonly LVL = LVL;
-  protected readonly sheet = signal<'tools' | 'erase' | null>(null);
+  protected readonly sheet = signal<'tools' | 'erase' | 'avatar' | null>(null);
+  /** Previewed avatar inside the picker sheet; the saved profile only changes on "Save". */
+  protected readonly draftAvatar = signal<AvatarId | null>(null);
   protected readonly displayName = computed(() => this.store.profile().displayName || this.auth.email().split('@')[0] || this.i18n.q('ضيفتنا', 'Guest'));
-  protected readonly initial = computed(() => Array.from(this.displayName())[0]?.toUpperCase() ?? '؟');
   protected readonly syncLabel = computed(() => {
     const t = this.t();
     switch (this.sync.state()) {
@@ -169,6 +189,18 @@ export class SettingsPage {
   protected setTerms(terms: 'us' | 'uk'): void {
     this.store.readerTerms.set(null);
     void this.store.updateProfile({ terms });
+  }
+
+  protected openAvatar(): void {
+    this.draftAvatar.set(this.store.profile().avatarId);
+    this.sheet.set('avatar');
+  }
+
+  protected async saveAvatar(): Promise<void> {
+    const id = this.draftAvatar() ?? this.store.avatar();
+    this.sheet.set(null);
+    await this.store.setAvatar(id);
+    await this.ui.say('اتغيّرت شخصيتك', 'Your avatar is updated');
   }
 
   protected replayIntro(): void {

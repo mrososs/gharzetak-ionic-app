@@ -159,7 +159,7 @@ export class AuthPage {
         }
         await this.store.updateProfile({ displayName: name.trim() });
         // navigateRoot clears the stack: Back can never return to the sign-up form.
-        await this.nav.navigateRoot('/setup/experience', { replaceUrl: true });
+        await this.nav.navigateRoot('/setup/avatar', { replaceUrl: true });
       } else {
         const r = await this.auth.signIn(email, password);
         if (!r.ok) return void this.error.set(r.error ?? 'errGeneric');
@@ -183,7 +183,7 @@ export class AuthPage {
       if (r.isNew) await this.store.updateProfile({ displayName: this.auth.user()?.name ?? '' });
       await this.offerBiometrics();
       // navigateRoot clears the stack: Back can never return to the sign-in form.
-      await this.nav.navigateRoot(r.isNew ? '/setup/experience' : '/tabs/home', { replaceUrl: true });
+      await this.nav.navigateRoot(r.isNew ? '/setup/avatar' : '/tabs/home', { replaceUrl: true });
     } finally {
       this.busy.set(false);
     }

@@ -2,6 +2,7 @@ import { Injectable, computed, effect, inject, signal, untracked } from '@angula
 import { ApiClient, ApiError } from '../api/api.client';
 import type { Accepted, ConflictCurrent, MediaStored, PullResponse } from '../api/api.types';
 import { AuthService } from '../auth/auth.service';
+import { toAvatarId } from '../data/avatars';
 import { CategoryId, YarnId, AccessoryId, LevelId } from '../data/catalog';
 import { parsePattern } from '../domain/pattern-parser';
 import { createPatternCursor, createSimpleCounter } from '../domain/tracker-engine';
@@ -301,6 +302,8 @@ export class SyncService {
         await this.versioned(key, '/v1/profile', p.updatedAt, {
           displayName: p.displayName.slice(0, 80), level: p.level, terms: p.terms, locale: document.documentElement.lang === 'en' ? 'en' : 'ar',
           interests: [...p.interests], onboarded: p.onboarded,
+          // Omitted (never null) until a preset is chosen, so an unset device can't clear another device's choice.
+          ...(p.avatarId ? { avatarId: p.avatarId } : {}),
         }, { kind: 'profile', id: e.id, label: '' });
         return;
       }
@@ -438,6 +441,7 @@ export class SyncService {
       const next: Profile = {
         ...lp, displayName: r.profile.displayName, level: r.profile.level as LevelId, terms: r.profile.terms as 'us' | 'uk',
         interests: r.profile.interests as CategoryId[], onboarded: r.profile.onboarded, updatedAt: r.profile.clientUpdatedAt,
+        avatarId: toAvatarId(r.profile.avatarId) ?? lp.avatarId,
       };
       if (!dirty.has('tools|me') && (r.tools.length || r.profile.onboarded)) {
         Object.assign(next, {

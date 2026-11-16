@@ -24,6 +24,9 @@ export const terms = z.enum(['us', 'uk']);
 
 const str = (max: number) => z.string().max(max);
 
+/** Bundled crochet avatars. Keep in sync with src/app/core/data/avatars.ts and the profiles_avatar_id CHECK. */
+export const AVATAR_IDS = ['bunny', 'cat', 'bear', 'sheep', 'flower', 'yarn'] as const;
+
 export const profileBody = z.object({
   ...versioned,
   displayName: str(80),
@@ -32,6 +35,8 @@ export const profileBody = z.object({
   locale: z.enum(['ar', 'en']),
   interests: z.array(str(32)).max(20),
   onboarded: z.boolean(),
+  /** Optional: older clients omit it and must never clear a stored choice. Unknown ids are rejected (400). */
+  avatarId: z.enum(AVATAR_IDS).optional(),
 });
 
 export const toolsBody = z.object({

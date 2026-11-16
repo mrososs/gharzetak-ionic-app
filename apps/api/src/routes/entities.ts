@@ -36,7 +36,7 @@ entities.put('/profile', async (c) => {
   const userId = c.get('userId');
   const now = Date.now();
   const cts = clampClientTime(b.clientUpdatedAt, now);
-  const values = { displayName: b.displayName, level: b.level, terms: b.terms, locale: b.locale, interests: b.interests, onboarded: b.onboarded };
+  const values = { displayName: b.displayName, level: b.level, terms: b.terms, locale: b.locale, interests: b.interests, onboarded: b.onboarded, ...(b.avatarId ? { avatarId: b.avatarId } : {}) };
 
   if (b.baseRevision === 0) {
     const ins = await db.insert(profiles).values({ userId, ...values, clientUpdatedAt: cts, revision: 1, createdAt: now, updatedAt: now }).onConflictDoNothing().returning({ revision: profiles.revision });

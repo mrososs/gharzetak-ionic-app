@@ -102,6 +102,8 @@ export const profiles = sqliteTable(
     locale: text('locale').notNull().default('ar'),
     interests: text('interests', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
     onboarded: integer('onboarded', { mode: 'boolean' }).notNull().default(false),
+    /** Bundled preset crochet avatar id (see AVATAR_IDS in validators.ts). NULL = never chosen → clients show their default. */
+    avatarId: text('avatar_id'),
     clientUpdatedAt: integer('client_updated_at').notNull().default(0),
     revision: integer('revision').notNull().default(1),
     /** Tools (hooks/yarn/accessories) are a replace-all set with their own revision. */
@@ -115,6 +117,7 @@ export const profiles = sqliteTable(
     check('profiles_level', sql`level in ('beginner','intermediate','advanced')`),
     check('profiles_terms', sql`terms in ('us','uk')`),
     check('profiles_locale', sql`locale in ('ar','en')`),
+    check('profiles_avatar_id', sql`avatar_id is null or avatar_id in ('bunny','cat','bear','sheep','flower','yarn')`),
   ],
 );
 

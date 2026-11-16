@@ -11,6 +11,7 @@ import { projectCard } from '../../shared/project-view';
 import { NotificationsSheetBody, ToolsSheetBody } from '../../shared/ui/dialogs/common-sheets';
 import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
+import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
 
 interface QuickTile {
@@ -23,7 +24,7 @@ interface QuickTile {
 /** GZ-S10 — Home dashboard. */
 @Component({
   selector: 'gz-home',
-  imports: [IonContent, IonRefresher, IonRefresherContent, IconComponent, PhotoComponent, SheetComponent, ToolsSheetBody, NotificationsSheetBody],
+  imports: [IonContent, IonRefresher, IonRefresherContent, IconComponent, CrochetAvatarComponent, PhotoComponent, SheetComponent, ToolsSheetBody, NotificationsSheetBody],
   template: `
     <ion-content class="gz-scroll">
       @if (sync.active()) {
@@ -31,7 +32,7 @@ interface QuickTile {
       }
       <div class="gz-pad" style="padding-top: calc(16px + var(--gz-safe-top))">
         <div class="flex items-center gap-3">
-          <button type="button" class="gz-avatar" (click)="nav.navigateForward('/tabs/home/settings')" [attr.aria-label]="t().settings">{{ initial() }}</button>
+          <button type="button" class="gz-avatar-btn" (click)="nav.navigateForward('/tabs/home/settings')" [attr.aria-label]="t().settings"><gz-crochet-avatar [id]="store.avatar()" [size]="50" [decorative]="true" /></button>
           <div class="min-w-0 flex-1">
             <div class="gz-hd" style="font-size: 16px">{{ t().greet }}</div>
             <div class="gz-sm gz-mute truncate">{{ name() }} · {{ store.levelName(store.profile().level) }}</div>
@@ -138,7 +139,6 @@ export class HomePage {
   protected readonly sheet = signal<'tools' | 'notif' | null>(null);
 
   protected readonly name = computed(() => this.store.profile().displayName || (this.auth.email() ? this.auth.email().split('@')[0] : this.i18n.q('ضيفتنا', 'Guest')));
-  protected readonly initial = computed(() => Array.from(this.name())[0]?.toUpperCase() ?? '؟');
   protected readonly cur = computed(() => {
     const p = this.store.currentProject();
     return p ? projectCard(this.store, this.i18n, p) : null;
