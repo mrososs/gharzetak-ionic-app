@@ -1,5 +1,6 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AuthService } from '../auth/auth.service';
+import { AvatarId, DEFAULT_AVATAR, isAvatarId, toAvatarId } from '../data/avatars';
 import { CAT, LVL, YARN } from '../data/catalog';
 import { parsePattern } from '../domain/pattern-parser';
 import { patternStats, simpleProgress } from '../domain/tracker-engine';
@@ -42,6 +43,11 @@ export class AppStore {
   readonly readerTerms = signal<'us' | 'uk' | null>(null);
   readonly viewTerms = computed(() => this.readerTerms() ?? this.profile().terms);
 
+  /** The avatar to display: the saved choice or the default preset. */
+  readonly avatar = computed<AvatarId>(() => this.profile().avatarId ?? DEFAULT_AVATAR);
+  /** True until the user has picked a preset (drives the non-blocking "choose your avatar" invitation). */
+  readonly avatarChosen = computed(() => this.profile().avatarId !== null);
+
   readonly sortedProjects = computed(() => [...this.projects()].sort((a, b) => b.lastWorkedAt - a.lastWorkedAt));
   readonly currentProject = computed<Project | null>(() => {
     const id = this.currentProjectId();
@@ -74,7 +80,9 @@ export class AppStore {
     this.scope.set(scope);
     this.projects.set(projects.filter((p) => !p.deletedAt));
     this.patterns.set(mergeSamples(patterns.filter((p) => !p.deletedAt)));
-    this.profile.set({ ...DEFAULT_PROFILE, ...(docs.profile ?? {}) });
+    const stored = { ...DEFAULT_PROFILE, ...(docs.profile ?? {}) };
+    // Older builds have no avatarId; anything unknown is dropped rather than trusted.
+    this.profile.set({ ...stored, avatarId: toAvatarId(stored.avatarId) });
     this.favorites.set(docs.favorites ?? ['magic-ring']);
     this.tutorials.set(docs.tutorials ?? {});
     this.chat.set(docs.chat ?? []);
@@ -210,7 +218,14 @@ export class AppStore {
   /* profile, favourites, tutorials, chat, store                          */
   /* ------------------------------------------------------------------ */
 
+  /** Persists a preset avatar immediately (IndexedDB) and queues the profile for sync. Unknown ids are ignored. */
+  async setAvatar(id: AvatarId): Promise<void> {
+    if (!isAvatarId(id) || this.profile().avatarId === id) return;
+    await this.updateProfile({ avatarId: id });
+  }
+
   async updateProfile(patch: Partial<Profile>, toolsChanged = false): Promise<void> {
+    if ('avatarId' in patch && patch.avatarId != null && !isAvatarId(patch.avatarId)) patch = { ...patch, avatarId: this.profile().avatarId };
     const next = { ...this.profile(), ...patch, updatedAt: Date.now() };
     this.profile.set(next);
     await this.saveDocs({ profile: next });

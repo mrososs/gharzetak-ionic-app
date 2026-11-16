@@ -138,6 +138,49 @@ describe('projects + progress (create, resume, optimistic concurrency)', () => {
     expect((await json(u, 'PUT', '/v1/profile', { ...body, baseRevision: 1 })).status).toBe(200);
     expect((await pull(u)).profile).toMatchObject({ displayName: 'Prof', revision: 2 });
   });
+
+  describe('avatarId', () => {
+    const base = { clientUpdatedAt: Date.now(), displayName: 'Av', level: 'beginner', terms: 'us', locale: 'ar', interests: [], onboarded: true };
+
+    it('is null for accounts that never chose one (existing users stay valid)', async () => {
+      const u = await signUp('avnull');
+      expect((await pull(u)).profile).toMatchObject({ avatarId: null });
+    });
+
+    it('persists a valid preset and returns it on pull (other device)', async () => {
+      const u = await signUp('avset');
+      expect((await json(u, 'PUT', '/v1/profile', { ...base, baseRevision: 1, avatarId: 'sheep' })).status).toBe(200);
+      expect((await pull(u)).profile).toMatchObject({ avatarId: 'sheep', displayName: 'Av', onboarded: true, revision: 2 });
+    });
+
+    it('an older client that omits avatarId never clears the stored choice', async () => {
+      const u = await signUp('avkeep');
+      await json(u, 'PUT', '/v1/profile', { ...base, baseRevision: 1, avatarId: 'cat' });
+      expect((await json(u, 'PUT', '/v1/profile', { ...base, baseRevision: 2, displayName: 'Renamed' })).status).toBe(200);
+      expect((await pull(u)).profile).toMatchObject({ avatarId: 'cat', displayName: 'Renamed' });
+    });
+
+    it('changing only the avatar leaves the other profile fields intact', async () => {
+      const u = await signUp('avswap');
+      await json(u, 'PUT', '/v1/profile', { ...base, baseRevision: 1, level: 'advanced', terms: 'uk', interests: ['gifts'], avatarId: 'bunny' });
+      await json(u, 'PUT', '/v1/profile', { ...base, baseRevision: 2, level: 'advanced', terms: 'uk', interests: ['gifts'], avatarId: 'flower' });
+      expect((await pull(u)).profile).toMatchObject({ avatarId: 'flower', level: 'advanced', terms: 'uk', interests: ['gifts'] });
+    });
+
+    it.each(['../../x.png', 'https://evil.example/a.png', 'unicorn', '', 'BUNNY', null])('rejects unvalidated avatar id %j', async (bad) => {
+      const u = await signUp('avbad' + String(bad).length);
+      const r = await json(u, 'PUT', '/v1/profile', { ...base, baseRevision: 1, avatarId: bad });
+      expect(r.status).toBe(400);
+      expect((await pull(u)).profile).toMatchObject({ avatarId: null, revision: 1 });
+    });
+
+    it('accounts are isolated: one user\'s avatar never shows on another', async () => {
+      const a = await signUp('avisoa');
+      const b = await signUp('avisob');
+      await json(a, 'PUT', '/v1/profile', { ...base, baseRevision: 1, avatarId: 'bear' });
+      expect((await pull(b)).profile).toMatchObject({ avatarId: null });
+    });
+  });
 });
 
 describe('patterns', () => {

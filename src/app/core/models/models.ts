@@ -1,3 +1,4 @@
+import type { AvatarId } from '../data/avatars';
 import type { AccessoryId, CategoryId, LevelId, YarnId } from '../data/catalog';
 import type { TermSystem } from '../domain/terminology';
 import type { PatternCursor, SimpleCounter } from '../domain/tracker-engine';
@@ -82,6 +83,8 @@ export interface Profile {
   readonly yarns: readonly YarnId[];
   readonly accessories: readonly AccessoryId[];
   readonly onboarded: boolean;
+  /** Chosen crochet avatar preset; null = never chosen (UI falls back to DEFAULT_AVATAR). Absent in profiles saved by older builds. */
+  readonly avatarId: AvatarId | null;
   readonly updatedAt: number;
 }
 
@@ -118,5 +121,6 @@ export const DEFAULT_PROFILE: Profile = {
   yarns: ['cotton'],
   accessories: ['markers', 'needle', 'scissors'],
   onboarded: false,
+  avatarId: null,
   updatedAt: 0,
 };

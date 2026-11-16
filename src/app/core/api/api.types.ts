@@ -39,6 +39,8 @@ export interface PullProfile {
   locale: string;
   interests: string[];
   onboarded: boolean;
+  /** null / absent for accounts that never chose one. Treat as untrusted: validate with toAvatarId(). */
+  avatarId?: string | null;
   revision: number;
   toolsRevision: number;
   clientUpdatedAt: number;
