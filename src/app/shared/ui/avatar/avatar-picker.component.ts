@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { AVATARS, AVATAR_IDS, AvatarId, DEFAULT_AVATAR } from '../../../core/data/avatars';
 import { I18nService } from '../../../core/i18n/i18n.service';
@@ -15,14 +16,14 @@ import { CrochetAvatarComponent } from './crochet-avatar.component';
     <div class="pv" aria-live="polite">
       <div class="halo" [style.background]="tint()"></div>
       @for (a of [shown()]; track a) {
-        <gz-crochet-avatar class="big" [id]="a" [size]="148" [decorative]="true" />
+        <gz-crochet-avatar class="big" [id]="a" [size]="tight() ? 112 : 148" [decorative]="true" />
       }
       <div class="nm gz-hd">{{ AV[shown()][i18n.lang()] }}</div>
     </div>
     <div class="grid" role="radiogroup" [attr.aria-label]="i18n.q('الشخصيات', 'Avatars')">
       @for (id of ids; track id) {
         <button type="button" class="cell" role="radio" [class.on]="selected() === id" [attr.aria-checked]="selected() === id" [attr.aria-label]="AV[id][i18n.lang()]" (click)="picked.emit(id)">
-          <gz-crochet-avatar [id]="id" [size]="76" [decorative]="true" />
+          <gz-crochet-avatar [id]="id" [size]="tight() ? 60 : 76" [decorative]="true" />
           @if (selected() === id) {
             <span class="ck"><svg gzIcon="check" size="s" /></span>
           }
@@ -32,6 +33,9 @@ import { CrochetAvatarComponent } from './crochet-avatar.component';
   `,
   styles: `
     :host { display: block; }
+    :host(.compact) .halo { width: 136px; height: 136px; }
+    :host(.compact) .nm { margin-top: 4px; font-size: 16px; min-height: 24px; }
+    :host(.compact) .grid { gap: 8px 8px; margin-top: 6px; }
     .pv { position: relative; display: flex; flex-direction: column; align-items: center; padding: 6px 0 4px; }
     .halo { position: absolute; top: 4px; width: 176px; height: 176px; border-radius: 50%; opacity: 0.55; filter: blur(14px); transition: background 0.3s; }
     .big { position: relative; filter: drop-shadow(0 10px 18px rgba(129, 61, 181, 0.22)); animation: avPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
@@ -52,9 +56,14 @@ import { CrochetAvatarComponent } from './crochet-avatar.component';
     @keyframes avPop { from { transform: scale(0.82); opacity: 0.4; } to { transform: scale(1); opacity: 1; } }
     @media (prefers-reduced-motion: reduce) { .big, .ck { animation: none; } .cell { transition: none; } }
   `,
+  host: { '[class.compact]': 'tight()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AvatarPickerComponent {
+  /** Smaller preview + cells (bottom sheets). Also applied automatically on short viewports so the actions below stay above the system bar. */
+  readonly compact = input(false);
+  private readonly viewportH = inject(DOCUMENT).defaultView?.innerHeight ?? 1000;
+  protected readonly tight = computed(() => this.compact() || this.viewportH < 900);
   protected readonly i18n = inject(I18nService);
   /** Currently selected preset, or null when nothing was chosen yet (the preview then shows the default). */
   readonly selected = input<AvatarId | null>(null);

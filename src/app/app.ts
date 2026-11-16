@@ -6,6 +6,7 @@ import { Keyboard, KeyboardResize } from '@capacitor/keyboard';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { AlertController, IonApp, IonRouterOutlet, NavController, Platform } from '@ionic/angular';
 import { AuthService } from './core/auth/auth.service';
+import { ONBOARDING_SLIDES, SETUP_STEPS, previousStep } from './core/data/flows';
 import { I18nService } from './core/i18n/i18n.service';
 import { TimerService } from './core/services/timer.service';
 import { AppStore } from './core/state/app.store';
@@ -95,6 +96,12 @@ export class App implements OnInit {
     // exit instead of ever returning to login/onboarding.
     this.platform.backButton.subscribeWithPriority(-1, () => {
       const url = this.router.url;
+      // Slides / setup steps share one routed page, so Ionic has no history to pop: step back explicitly.
+      const prevSlide = previousStep(url, '/onboarding', ONBOARDING_SLIDES);
+      if (prevSlide) return void this.nav.navigateBack(['/onboarding', prevSlide], { queryParamsHandling: 'preserve' });
+      const prevSetup = previousStep(url, '/setup', SETUP_STEPS);
+      if (prevSetup) return void this.nav.navigateBack(['/setup', prevSetup]);
+      if (prevSetup === null) return void this.nav.navigateRoot('/tabs/home', { replaceUrl: true }); // first setup step = same as its header Back
       if (url.startsWith('/tabs/home') && !url.startsWith('/tabs/home/')) void CapApp.exitApp();
       else if (url.startsWith('/onboarding') || url.startsWith('/auth/login')) void CapApp.exitApp();
       else if (url.startsWith('/tabs/')) void this.nav.navigateRoot('/tabs/home', { animated: false });

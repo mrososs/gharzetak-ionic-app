@@ -99,9 +99,11 @@ import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.co
     <gz-sheet [open]="sheet() === 'avatar'" [label]="i18n.q('شخصيتي في غرزتك', 'My Crochet Avatar')" (closed)="sheet.set(null)">
       <h2 class="gz-h2 gz-hd text-center">{{ i18n.q('شخصيتي في غرزتك', 'My Crochet Avatar') }}</h2>
       <p class="gz-mute gz-sm text-center" style="margin: 4px 0 8px">{{ i18n.q('اختاري صاحبتك الصغيرة اللي هترافقك في كل مشروع كروشيه.', 'Pick the little friend who will join you in every crochet project.') }}</p>
-      <gz-avatar-picker [selected]="draftAvatar()" (picked)="draftAvatar.set($event)" />
-      <button type="button" class="gz-btn mt-4" (click)="saveAvatar()">{{ i18n.q('دي شخصيتي!', "That's my buddy!") }}<svg gzIcon="check" /></button>
-      <button type="button" class="gz-btn2 mt-2" (click)="sheet.set(null)">{{ t().cancel }}</button>
+      <gz-avatar-picker [compact]="true" [selected]="draftAvatar()" (picked)="draftAvatar.set($event)" />
+      <div class="gz-sheet-foot">
+        <button type="button" class="gz-btn" (click)="saveAvatar()">{{ i18n.q('دي شخصيتي!', "That's my buddy!") }}<svg gzIcon="check" /></button>
+        <button type="button" class="gz-btn2 mt-2" (click)="sheet.set(null)">{{ t().cancel }}</button>
+      </div>
     </gz-sheet>
     <gz-sheet [open]="sheet() === 'erase'" [label]="t().resetDemo" (closed)="sheet.set(null)">
       <div class="text-center" style="padding: 6px 0 4px">
