@@ -3,6 +3,7 @@ import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { AvatarId } from '../../core/data/avatars';
 import { CAT, CAT_IDS, CategoryId, HOOKS, LVL, LVL_IDS, LevelId, YARN, YARN_IDS, YarnId } from '../../core/data/catalog';
 import { photo } from '../../core/data/photos';
+import { SETUP_STEPS } from '../../core/data/flows';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { AppStore } from '../../core/state/app.store';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
@@ -10,7 +11,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
 import { AvatarPickerComponent } from '../../shared/ui/avatar/avatar-picker.component';
 
-const STEPS = ['avatar', 'experience', 'interests', 'tools'] as const;
+const STEPS = SETUP_STEPS;
 const LAST = STEPS.length - 1;
 const toggle = <T,>(arr: readonly T[], x: T): T[] => (arr.includes(x) ? arr.filter((y) => y !== x) : [...arr, x]);
 
@@ -118,6 +119,7 @@ const toggle = <T,>(arr: readonly T[], x: T): T[] => (arr.includes(x) ? arr.filt
         } @else {
           <button type="button" class="gz-btn" (click)="next()">{{ step() < last ? i18n.q('متابعة', 'Continue') : i18n.q('ابدئي الآن', 'Finish') }}<svg gzIcon="arrow" [flip]="true" /></button>
         }
+        <div aria-hidden="true" style="height: var(--gz-safe-bottom)"></div>
       </div>
     </ion-content>
   `,

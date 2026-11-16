@@ -2,11 +2,12 @@ import { ChangeDetectionStrategy, Component, afterNextRender, computed, inject, 
 import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { AssistantService } from '../../core/ai/assistant.service';
 import { AuthService } from '../../core/auth/auth.service';
+import { ONBOARDING_SLIDES } from '../../core/data/flows';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { BrandMarkComponent } from '../../shared/ui/brand/brand-mark.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 
-const SLIDES = ['welcome', 'learn', 'track', 'assistant'] as const;
+const SLIDES = ONBOARDING_SLIDES;
 type SlideKey = (typeof SLIDES)[number];
 
 /** Original crochet artwork (transparent WebP, trimmed + optimised — see public/assets/onboarding). */
@@ -44,6 +45,7 @@ const ART: Record<SlideKey, string> = {
     </ion-header>
 
     <ion-content class="gz-scroll ob-content">
+      @for (s of [slideName()]; track s) {
       <div class="scene">
         <!-- decoration: behind everything interactive -->
         <div class="bg" aria-hidden="true">
@@ -91,6 +93,7 @@ const ART: Record<SlideKey, string> = {
           </div>
         </section>
       </div>
+      }
     </ion-content>
   `,
   styles: `

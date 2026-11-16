@@ -242,6 +242,8 @@ html[dir='ltr'] .gz-msg { line-height: 1.5; }
 
 /* ---------- sheets (ion-modal, sheet presentation) ---------- */
 .gz-sheet-body { padding: 10px var(--gz-screen-pad) calc(26px + var(--gz-safe-bottom)); background: var(--gz-bg); }
+/* Sheet actions stay reachable when the sheet scrolls, and clear the system navigation bar. */
+.gz-sheet-foot { position: sticky; bottom: calc(-26px - var(--gz-safe-bottom)); margin: 12px calc(-1 * var(--gz-screen-pad)) calc(-26px - var(--gz-safe-bottom)); padding: 10px var(--gz-screen-pad) calc(22px + var(--gz-safe-bottom)); background: linear-gradient(to bottom, rgba(255, 249, 245, 0), var(--gz-bg) 14px); }
 .gz-grab { width: 44px; height: 5px; border-radius: 12px; background: var(--gz-border); margin: 0 auto 14px; }
 
 /* ---------- motion ---------- */
