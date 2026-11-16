@@ -157,6 +157,7 @@ export class AuthPage {
           this.form.controls.password.reset('');
           return;
         }
+        await this.store.whenScopeLoaded(this.auth.scope()); // the account's profile, not the guest's
         await this.store.updateProfile({ displayName: name.trim() });
         // navigateRoot clears the stack: Back can never return to the sign-up form.
         await this.nav.navigateRoot('/setup/avatar', { replaceUrl: true });
@@ -180,7 +181,10 @@ export class AuthPage {
       const r = await this.auth.signInWithGoogle();
       if (r.cancelled) return; // the user closed the account picker: nothing to report
       if (!r.ok) return void this.error.set(r.error ?? 'errGoogleFailed');
-      if (r.isNew) await this.store.updateProfile({ displayName: this.auth.user()?.name ?? '' });
+      if (r.isNew) {
+        await this.store.whenScopeLoaded(this.auth.scope());
+        await this.store.updateProfile({ displayName: this.auth.user()?.name ?? '' });
+      }
       await this.offerBiometrics();
       // navigateRoot clears the stack: Back can never return to the sign-in form.
       await this.nav.navigateRoot(r.isNew ? '/setup/avatar' : '/tabs/home', { replaceUrl: true });

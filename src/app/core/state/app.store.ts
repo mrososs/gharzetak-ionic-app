@@ -92,6 +92,18 @@ export class AppStore {
     this.loaded.set(true);
   }
 
+  /**
+   * Resolves once the store actually holds `scope`. After a sign-in/sign-up the auth scope changes first and the store reloads from its
+   * effect a moment later; writing before that lands in the previous scope (e.g. the sign-up name ending up in the guest profile).
+   */
+  async whenScopeLoaded(scope: Scope, timeoutMs = 5000): Promise<void> {
+    const t0 = Date.now();
+    while (!(this.scope() === scope && this.loaded())) {
+      if (Date.now() - t0 > timeoutMs) return;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  }
+
   /** Serialises IndexedDB writes so a later step can never be overwritten by an earlier one. */
   private write(fn: () => Promise<unknown>): Promise<void> {
     const next = this.writes.then(fn, fn);
