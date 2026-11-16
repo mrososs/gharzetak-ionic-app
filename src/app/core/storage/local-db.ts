@@ -32,7 +32,25 @@ export interface OutboxEntry {
   payload?: unknown;
 }
 
+/**
+ * A local change that the server's newer version replaced (or that the server rejected). It is kept on the device
+ * instead of being silently discarded, so the user's work can always be recovered.
+ */
+export interface ConflictBackup {
+  readonly id: string;
+  readonly at: number;
+  readonly kind: OutboxKind;
+  readonly entityId: string;
+  /** Human label (project / pattern name) shown in the notice. */
+  readonly label: string;
+  readonly reason: 'newer-on-server' | 'deleted' | 'rejected';
+  /** The exact data this device tried to save. */
+  readonly snapshot: unknown;
+}
+
 export interface ScopeDocs {
+  /** Most recent first-in-last-out list (capped) of local changes that lost a conflict. */
+  conflicts: ConflictBackup[];
   profile: Profile;
   favorites: string[];
   tutorials: Record<string, TutorialData>;
@@ -48,10 +66,13 @@ interface GzDb extends DBSchema {
   patterns: { key: string; value: { k: string; scope: Scope; v: Pattern }; indexes: { scope: string } };
   docs: { key: string; value: { k: string; scope: Scope; v: Partial<ScopeDocs> } };
   outbox: { key: string; value: OutboxEntry; indexes: { scope: string } };
+  /** Server revision last seen per synced entity (optimistic-concurrency base). key = `${scope}|${kind}|${id}` */
+  revisions: { key: string; value: { k: string; scope: Scope; rev: number }; indexes: { scope: string } };
 }
 
 const DB_NAME = 'gharzetak';
-const DB_VERSION = 1;
+/** v2 adds the `revisions` store. The upgrade is additive: existing stores and records are untouched. */
+const DB_VERSION = 2;
 
 /**
  * IndexedDB persistence for structured offline data (projects, patterns, tracker state,
@@ -69,11 +90,16 @@ export class LocalDb {
         typeof indexedDB === 'undefined'
           ? Promise.resolve(null)
           : openDB<GzDb>(DB_NAME, DB_VERSION, {
-              upgrade(db) {
-                db.createObjectStore('projects', { keyPath: 'k' }).createIndex('scope', 'scope');
-                db.createObjectStore('patterns', { keyPath: 'k' }).createIndex('scope', 'scope');
-                db.createObjectStore('docs', { keyPath: 'k' });
-                db.createObjectStore('outbox', { keyPath: 'key' }).createIndex('scope', 'scope');
+              upgrade(db, oldVersion) {
+                if (oldVersion < 1) {
+                  db.createObjectStore('projects', { keyPath: 'k' }).createIndex('scope', 'scope');
+                  db.createObjectStore('patterns', { keyPath: 'k' }).createIndex('scope', 'scope');
+                  db.createObjectStore('docs', { keyPath: 'k' });
+                  db.createObjectStore('outbox', { keyPath: 'key' }).createIndex('scope', 'scope');
+                }
+                if (oldVersion < 2) {
+                  db.createObjectStore('revisions', { keyPath: 'k' }).createIndex('scope', 'scope');
+                }
               },
             }).catch(() => null);
     }
@@ -161,6 +187,28 @@ export class LocalDb {
     if (cur) await db.put('outbox', { ...cur, attempts: cur.attempts + 1 });
   }
 
+  /** Server revisions last seen for every synced entity of a scope (`${kind}|${id}` -> revision). */
+  async revisions(scope: Scope): Promise<Map<string, number>> {
+    const db = await this.db();
+    const prefix = `${scope}|`;
+    if (!db) return new Map(this.memList<{ k: string; rev: number }>(`revisions|${prefix}`).map((r) => [r.k.slice(prefix.length), r.rev]));
+    const rows = await db.getAllFromIndex('revisions', 'scope', scope);
+    return new Map(rows.map((r) => [r.k.slice(prefix.length), r.rev]));
+  }
+
+  /** `rev` 0 forgets the entity (it no longer exists on the server). */
+  async setRevision(scope: Scope, key: string, rev: number): Promise<void> {
+    const k = `${scope}|${key}`;
+    const db = await this.db();
+    if (!db) {
+      if (rev > 0) this.mem.set(`revisions|${k}`, { k, rev });
+      else this.mem.delete(`revisions|${k}`);
+      return;
+    }
+    if (rev > 0) await db.put('revisions', { k, scope, rev });
+    else await db.delete('revisions', k);
+  }
+
   /** Erases everything stored for a scope on this device. */
   async clearScope(scope: Scope): Promise<void> {
     const db = await this.db();
@@ -168,8 +216,8 @@ export class LocalDb {
       for (const k of [...this.mem.keys()]) if (k.includes(`|${scope}`) || k.endsWith(scope)) this.mem.delete(k);
       return;
     }
-    const tx = db.transaction(['projects', 'patterns', 'docs', 'outbox'], 'readwrite');
-    for (const store of ['projects', 'patterns', 'outbox'] as const) {
+    const tx = db.transaction(['projects', 'patterns', 'docs', 'outbox', 'revisions'], 'readwrite');
+    for (const store of ['projects', 'patterns', 'outbox', 'revisions'] as const) {
       const keys = await tx.objectStore(store).index('scope').getAllKeys(scope);
       for (const k of keys) await tx.objectStore(store).delete(k);
     }

@@ -94,7 +94,8 @@
 
   /* layout */
   --gz-touch: 44px;
-  --gz-nav-h: 78px;
+  --gz-nav-h: 64px;
+  --gz-tab-float: 20px; /* how far the floating Tracker rises above the tab bar: pages keep their own bottom UI clear of it */
   --gz-screen-pad: 20px;
   --gz-card-pad: 16px;
   --gz-frame-w: 390px;

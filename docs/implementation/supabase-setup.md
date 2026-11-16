@@ -1,5 +1,9 @@
 # Supabase setup
 
+> **SUPERSEDED.** The backend moved to Cloudflare Workers + D1 + R2 (see `docs/cloudflare-migration/`). The Supabase
+> files are archived under `docs/cloudflare-migration/legacy-supabase/` for reference only until the migration is
+> approved; `@supabase/supabase-js` and the `supabase` CLI are no longer dependencies, so the commands below no longer work.
+
 Gharzetak uses its **own** Supabase project. Never point it at another project's database.
 
 ## Local (verified)

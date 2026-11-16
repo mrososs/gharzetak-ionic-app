@@ -1,16 +1,18 @@
 import { GENERATED_ENV } from './env.generated';
 
 export interface AppEnvironment {
-  readonly supabaseUrl: string;
-  readonly supabasePublishableKey: string;
-  /** Where Supabase email links (confirm / reset password) return to. Defaults to the current origin. */
+  /** Base URL of the Gharzetak Cloudflare Worker API (e.g. https://api.gharzetak.app). '' = no backend: guest-only mode. */
+  readonly apiUrl: string;
+  /** Where email links (confirm / reset password) return to. Defaults to the current origin. For native builds use the deep link scheme. */
   readonly authRedirectUrl: string;
-  /** OAuth providers that are actually configured in Supabase (e.g. ["google","apple"]). */
-  readonly oauthProviders: readonly string[];
-  /** Name of the Supabase Edge Function that answers assistant questions ('' = demo mode). */
+  /** Google OAuth *Web* client id (public). It is the audience of the ID token minted by the native Google picker. '' = Google sign-in is off. */
+  readonly googleWebClientId: string;
+  /** Google OAuth iOS client id (public). Required for Google sign-in on iOS; '' = Google sign-in is Android-only. */
+  readonly googleIosClientId: string;
+  /** API path that answers assistant questions, e.g. '/v1/assistant' ('' = demo mode). */
   readonly aiEndpoint: string;
 }
 
 export const environment: AppEnvironment = GENERATED_ENV;
 
-export const backendConfigured = (): boolean => !!environment.supabaseUrl && !!environment.supabasePublishableKey;
+export const backendConfigured = (): boolean => !!environment.apiUrl;

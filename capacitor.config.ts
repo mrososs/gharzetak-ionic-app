@@ -10,6 +10,10 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
   },
   plugins: {
+    // Only Google is bundled. Apple/Facebook/Twitter providers are switched off (not shipped in the APK/IPA).
+    SocialLogin: {
+      providers: { google: true, facebook: false, apple: false, twitter: false },
+    },
     Keyboard: {
       resize: 'native',
       resizeOnFullScreen: true,

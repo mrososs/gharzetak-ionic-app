@@ -1,20 +1,24 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { IonContent, IonHeader, NavController } from '@ionic/angular';
+import { AvatarId } from '../../core/data/avatars';
 import { CAT, CAT_IDS, CategoryId, HOOKS, LVL, LVL_IDS, LevelId, YARN, YARN_IDS, YarnId } from '../../core/data/catalog';
 import { photo } from '../../core/data/photos';
+import { SETUP_STEPS } from '../../core/data/flows';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { AppStore } from '../../core/state/app.store';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
+import { AvatarPickerComponent } from '../../shared/ui/avatar/avatar-picker.component';
 
-const STEPS = ['experience', 'interests', 'tools'] as const;
+const STEPS = SETUP_STEPS;
+const LAST = STEPS.length - 1;
 const toggle = <T,>(arr: readonly T[], x: T): T[] => (arr.includes(x) ? arr.filter((y) => y !== x) : [...arr, x]);
 
-/** GZ-S07…S09 — personalised setup (/setup/experience|interests|tools). */
+/** GZ-S07…S09 — personalised setup (/setup/avatar|experience|interests|tools). The avatar step is optional and never blocks. */
 @Component({
   selector: 'gz-setup',
-  imports: [IonHeader, IonContent, IconComponent, PhotoComponent],
+  imports: [IonHeader, IonContent, IconComponent, PhotoComponent, AvatarPickerComponent],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top" style="justify-content: space-between">
@@ -34,6 +38,9 @@ const toggle = <T,>(arr: readonly T[], x: T): T[] => (arr.includes(x) ? arr.filt
 
         @switch (step()) {
           @case (0) {
+            <gz-avatar-picker [selected]="draftAvatar()" (picked)="draftAvatar.set($event)" />
+          }
+          @case (1) {
             <span class="gz-lbl">{{ t().expQ }}</span>
             <div class="flex flex-col gap-2.5">
               @for (id of levels; track id) {
@@ -58,7 +65,7 @@ const toggle = <T,>(arr: readonly T[], x: T): T[] => (arr.includes(x) ? arr.filt
             </div>
             <p class="gz-xs gz-mute mx-0.5 mt-1.5">{{ t().termHint }}</p>
           }
-          @case (1) {
+          @case (2) {
             <div class="mt-3.5 grid grid-cols-2 gap-3">
               @for (id of cats; track id) {
                 @let on = pf().interests.includes(id);
@@ -82,7 +89,7 @@ const toggle = <T,>(arr: readonly T[], x: T): T[] => (arr.includes(x) ? arr.filt
               }
             </div>
           }
-          @case (2) {
+          @case (3) {
             <span class="gz-lbl">{{ t().hookQ }}</span>
             <div class="gz-chips">
               @for (h of hooks; track h) {
@@ -106,7 +113,13 @@ const toggle = <T,>(arr: readonly T[], x: T): T[] => (arr.includes(x) ? arr.filt
         }
 
         <div style="height: 18px"></div>
-        <button type="button" class="gz-btn" (click)="next()">{{ step() < 2 ? i18n.q('متابعة', 'Continue') : i18n.q('ابدئي الآن', 'Finish') }}<svg gzIcon="arrow" [flip]="true" /></button>
+        @if (step() === 0) {
+          <button type="button" class="gz-btn" (click)="confirmAvatar()">{{ i18n.q('دي شخصيتي!', "That's my buddy!") }}<svg gzIcon="check" /></button>
+          <button type="button" class="gz-btn2 mt-2.5" (click)="skipAvatar()">{{ i18n.q('هختار بعدين', "I'll choose later") }}</button>
+        } @else {
+          <button type="button" class="gz-btn" (click)="next()">{{ step() < last ? i18n.q('متابعة', 'Continue') : i18n.q('ابدئي الآن', 'Finish') }}<svg gzIcon="arrow" [flip]="true" /></button>
+        }
+        <div aria-hidden="true" style="height: var(--gz-safe-bottom)"></div>
       </div>
     </ion-content>
   `,
@@ -122,6 +135,9 @@ export class SetupPage {
   protected readonly t = this.i18n.t;
   protected readonly pf = this.store.profile;
   protected readonly steps = STEPS;
+  protected readonly last = LAST;
+  /** The avatar being previewed; only written to the profile when the user confirms it. */
+  protected readonly draftAvatar = signal<AvatarId | null>(this.store.profile().avatarId);
   protected readonly levels = LVL_IDS;
   protected readonly cats = CAT_IDS;
   protected readonly hooks = HOOKS;
@@ -132,8 +148,8 @@ export class SetupPage {
   protected readonly photoOf = photo;
 
   protected readonly step = computed(() => Math.max(0, STEPS.indexOf(this.stepKey() as (typeof STEPS)[number])));
-  protected readonly title = computed(() => [this.i18n.q('عرّفينا بمستواكي', 'Tell us about your level'), this.i18n.q('إيه اللي بتحبي تعمليه؟', 'What type are you interested in?'), this.i18n.q('أضيفي أدواتك', 'Add your tools')][this.step()]);
-  protected readonly sub = computed(() => [this.i18n.q('هنخصّص التجربة ليكي.', 'We will personalise your experience.'), this.i18n.q('اختاري واحد أو أكتر.', 'Choose one or more.'), this.i18n.q('ساعدينا نقترح عليكي الأنسب.', 'Help us suggest what fits you.')][this.step()]);
+  protected readonly title = computed(() => [this.i18n.q('اختاري شخصيتك في غرزتك', 'Choose your crochet buddy'), this.i18n.q('عرّفينا بمستواكي', 'Tell us about your level'), this.i18n.q('إيه اللي بتحبي تعمليه؟', 'What type are you interested in?'), this.i18n.q('أضيفي أدواتك', 'Add your tools')][this.step()]);
+  protected readonly sub = computed(() => [this.i18n.q('اختاري صاحبتك الصغيرة اللي هترافقك في كل مشروع كروشيه.', 'Pick the little friend who will join you in every crochet project.'), this.i18n.q('هنخصّص التجربة ليكي.', 'We will personalise your experience.'), this.i18n.q('اختاري واحد أو أكتر.', 'Choose one or more.'), this.i18n.q('ساعدينا نقترح عليكي الأنسب.', 'Help us suggest what fits you.')][this.step()]);
 
   protected setLevel(id: LevelId): void {
     void this.store.updateProfile({ level: id });
@@ -148,6 +164,18 @@ export class SetupPage {
     void this.store.updateProfile({ yarns: toggle(this.pf().yarns, y) });
   }
 
+  /** Saves the previewed avatar (the default preview counts as a choice once confirmed), then continues. */
+  protected async confirmAvatar(): Promise<void> {
+    const id = this.draftAvatar();
+    await this.store.setAvatar(id ?? this.store.avatar());
+    this.next();
+  }
+
+  /** Skips only the avatar: the default stays and Settings keeps the invitation. */
+  protected skipAvatar(): void {
+    this.next();
+  }
+
   protected back(): void {
     const i = this.step();
     if (i > 0) void this.nav.navigateBack(['/setup', STEPS[i - 1]]);
@@ -156,7 +184,7 @@ export class SetupPage {
 
   protected next(): void {
     const i = this.step();
-    if (i < 2) void this.nav.navigateForward(['/setup', STEPS[i + 1]]);
+    if (i < LAST) void this.nav.navigateForward(['/setup', STEPS[i + 1]]);
     else void this.finish(true);
   }
 

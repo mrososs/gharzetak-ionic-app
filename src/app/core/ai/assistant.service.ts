@@ -7,7 +7,7 @@ import { patternContext } from '../domain/tracker-engine';
 import { I18nService } from '../i18n/i18n.service';
 import { Pattern, Project } from '../models/models';
 import { AppStore } from '../state/app.store';
-import { SUPABASE } from '../supabase/supabase.client';
+import { ApiClient } from '../api/api.client';
 
 export interface AssistantReply {
   text: string;
@@ -19,24 +19,22 @@ export interface AssistantReply {
  * AI assistant boundary.
  *  - Default: a clearly labelled DEMO mode — deterministic replies built from the user's own
  *    project data (port of the prototype's rule set). Stitch arithmetic is never delegated to a model.
- *  - Future: set GZ_AI_FUNCTION to a Supabase Edge Function name. Only the question and a small,
- *    explicit project context are sent — never credentials or unrestricted DB access.
+ *  - Future: set GZ_AI_ENDPOINT to a Worker API path (e.g. /v1/assistant — not implemented yet). Only the
+ *    question and a small, explicit project context are sent — never credentials or unrestricted DB access.
  */
 @Injectable({ providedIn: 'root' })
 export class AssistantService {
   private readonly i18n = inject(I18nService);
   private readonly store = inject(AppStore);
-  private readonly sb = inject(SUPABASE);
+  private readonly api = inject(ApiClient);
 
-  readonly connected = !!environment.aiEndpoint && !!this.sb;
+  readonly connected = !!environment.aiEndpoint && this.api.configured;
 
   async ask(question: string, hasImage = false): Promise<AssistantReply> {
     if (this.connected) {
       try {
-        const { data, error } = await this.sb!.functions.invoke<{ text: string }>(environment.aiEndpoint, {
-          body: { question, lang: this.i18n.lang(), context: this.context() },
-        });
-        if (!error && data?.text) return { text: data.text, demo: false };
+        const data = await this.api.post<{ text?: string }>(environment.aiEndpoint, { question, lang: this.i18n.lang(), context: this.context() });
+        if (data?.text) return { text: data.text, demo: false };
       } catch {
         /* fall back to demo rules */
       }

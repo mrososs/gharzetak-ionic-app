@@ -238,8 +238,12 @@ html[dir='ltr'] .gz-msg { line-height: 1.5; }
   &.lg { width: 62px; height: 62px; font-size: 24px; }
 }
 
+.gz-avatar-btn { padding: 0; border: 0; background: transparent; border-radius: 50%; flex: none; cursor: pointer; line-height: 0; box-shadow: var(--gz-shadow-card); -webkit-tap-highlight-color: transparent; transition: transform 0.15s; &:active { transform: scale(0.94); } &:focus-visible { outline: 3px solid var(--gz-primary); outline-offset: 2px; } }
+
 /* ---------- sheets (ion-modal, sheet presentation) ---------- */
 .gz-sheet-body { padding: 10px var(--gz-screen-pad) calc(26px + var(--gz-safe-bottom)); background: var(--gz-bg); }
+/* Sheet actions stay reachable when the sheet scrolls, and clear the system navigation bar. */
+.gz-sheet-foot { position: sticky; bottom: calc(-26px - var(--gz-safe-bottom)); margin: 12px calc(-1 * var(--gz-screen-pad)) calc(-26px - var(--gz-safe-bottom)); padding: 10px var(--gz-screen-pad) calc(22px + var(--gz-safe-bottom)); background: linear-gradient(to bottom, rgba(255, 249, 245, 0), var(--gz-bg) 14px); }
 .gz-grab { width: 44px; height: 5px; border-radius: 12px; background: var(--gz-border); margin: 0 auto 14px; }
 
 /* ---------- motion ---------- */

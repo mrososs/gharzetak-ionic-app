@@ -32,7 +32,7 @@ export const routes: Routes = [
     path: 'setup',
     canMatch: [appGuard],
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'experience' },
+      { path: '', pathMatch: 'full', redirectTo: 'avatar' },
       { path: ':step', loadComponent: () => import('./features/onboarding/setup.page').then((m) => m.SetupPage) },
     ],
   },
