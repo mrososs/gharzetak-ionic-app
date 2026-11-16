@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
+import app from '../src/index';
 import { devOutbox } from '../src/services/mailer';
 import { hashPassword, verifyPassword } from '../src/services/password';
 import { ORIGIN, authed, call, json, signUp } from './helpers';
@@ -118,6 +119,22 @@ describe('authentication (Better Auth + bearer tokens)', () => {
 
     const reuse = await call('/api/auth/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, newPassword: 'another-password-123' }) });
     expect(reuse.status).toBeGreaterThanOrEqual(400); // single-use token
+  });
+
+  it('rate-limits repeated failed sign-ins (database-backed limiter, production setting)', async () => {
+    const u = await signUp('ratelimit');
+    const attempt = () =>
+      app.request(
+        '/api/auth/sign-in/email',
+        { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json', 'cf-connecting-ip': '203.0.113.7' }, body: JSON.stringify({ email: u.email, password: 'wrong-password-1' }) },
+        { ...env, ENVIRONMENT: 'test-ratelimit' },
+      );
+    const statuses: number[] = [];
+    for (let i = 0; i < 12; i++) statuses.push((await attempt()).status);
+    expect(statuses.slice(0, 5).every((s) => s === 401)).toBe(true);
+    expect(statuses).toContain(429);
+    const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM rate_limit').first<{ n: number }>();
+    expect(row!.n).toBeGreaterThan(0); // state lives in D1, so it holds across Worker isolates
   });
 
   it('does not reveal whether an email exists when requesting a reset', async () => {

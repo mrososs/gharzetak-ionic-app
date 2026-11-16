@@ -78,8 +78,14 @@ media.put('/pattern-files/:patternId', async (c) => {
 
   const { bytes, mime } = await receive(c, 'pattern-file');
   const key = `${userId}/${patternId}/source.${extFor(mime)}`;
-  const rawName = (c.req.header('x-file-name') ?? `source.${extFor(mime)}`).slice(0, 120);
-  const fileName = rawName.replace(/[\u0000-\u001f\u007f\\/]/g, '_');
+  // Header values are ASCII-only, so clients send the name percent-encoded (works for Arabic file names).
+  let rawName = c.req.header('x-file-name') ?? `source.${extFor(mime)}`;
+  try {
+    rawName = decodeURIComponent(rawName);
+  } catch {
+    /* not percent-encoded: use as is */
+  }
+  const fileName = rawName.slice(0, 120).replace(/[\u0000-\u001f\u007f\\/]/g, '_');
   await c.env.MEDIA.put(key, bytes, { httpMetadata: { contentType: mime, cacheControl: 'private, no-store' } });
   await db.batch([
     db.insert(mediaObjects).values({ key, userId, kind: 'pattern-file', patternId, mime, size: bytes.byteLength }).onConflictDoUpdate({ target: mediaObjects.key, set: { mime, size: bytes.byteLength } }),

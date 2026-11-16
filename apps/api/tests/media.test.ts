@@ -189,6 +189,15 @@ describe('R2 pattern files', () => {
     expect(((await ok.json()) as { name: string }).name).not.toContain('/');
   });
 
+  it('decodes percent-encoded (Arabic) file names sent in the ASCII-only header', async () => {
+    const u = await signUp('arname');
+    const id = uuid();
+    await json(u, 'PUT', `/v1/patterns/${id}`, pattern());
+    const res = await bytes(u, `/v1/media/pattern-files/${id}`, PDF, 'application/pdf', { 'X-File-Name': encodeURIComponent('باترن الأرنب.pdf') });
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as { name: string }).name).toBe('باترن الأرنب.pdf');
+  });
+
   it('deleting the pattern removes its file from R2', async () => {
     const u = await signUp('patdel');
     const id = uuid();
