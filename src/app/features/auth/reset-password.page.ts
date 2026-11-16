@@ -6,7 +6,7 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 
-/** Landing page of the recovery email link: set a new password for the recovery session. */
+/** Landing page of the recovery email link: set a new password using the one-time reset token. */
 @Component({
   selector: 'gz-reset-password',
   imports: [IonHeader, IonContent, IonInput, IonSpinner, ReactiveFormsModule, IconComponent],
@@ -20,7 +20,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
     </ion-header>
     <ion-content class="gz-scroll">
       <form class="gz-pad" (ngSubmit)="save()" novalidate>
-        @if (!auth.session()) {
+        @if (!auth.recovery()) {
           <div class="gz-note err mt-3" role="alert"><svg gzIcon="info" size="s" /><span>{{ t().resetLinkInvalid }}</span></div>
           <button type="button" class="gz-btn3 w mt-3" (click)="nav.navigateRoot('/auth/forgot')">{{ t().forgotTitle }}</button>
         } @else {
@@ -70,6 +70,7 @@ export class ResetPasswordPage {
     this.busy.set(false);
     if (!r.ok) return void this.error.set(r.error ?? 'errGeneric');
     await this.ui.toast(this.t().pwUpdated);
-    await this.nav.navigateRoot('/tabs/home', { replaceUrl: true });
+    // A reset revokes every existing session, so the user signs in with the new password.
+    await this.nav.navigateRoot('/auth/login', { replaceUrl: true });
   }
 }
