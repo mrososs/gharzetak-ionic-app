@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import type { AuthError, Session } from '@supabase/supabase-js';
 import { environment } from '../../../environments/environment';
+import { ApiClient, ApiError } from '../api/api.client';
 import type { Scope } from '../storage/local-db';
-import { SUPABASE } from '../supabase/supabase.client';
+import { AuthUser, SessionStore, StoredSession } from './session.store';
 
 const GUEST_KEY = 'gz.guest';
 
@@ -15,20 +15,31 @@ export interface AuthResult {
   readonly needsConfirm?: boolean;
 }
 
+interface BetterAuthUser {
+  id: string;
+  email: string;
+  name?: string;
+}
+
 /**
- * Real Supabase Auth (email + password, session restore, recovery) plus an explicit,
+ * Real email + password authentication against the Cloudflare Worker (Better Auth), plus an explicit,
  * clearly separate guest mode whose data never leaves the device.
+ *
+ * Session model: a bearer token (not cookies — cookies are unreliable in cross-origin Capacitor WebViews).
+ * The token + last known user are cached so the app restores its session OFFLINE; the token is revalidated
+ * in the background and the session is dropped only if the server says it is no longer valid (401).
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly sb = inject(SUPABASE);
+  private readonly api = inject(ApiClient);
+  private readonly store = inject(SessionStore);
 
-  readonly backend = !!this.sb;
-  readonly session = signal<Session | null>(null);
-  readonly user = computed(() => this.session()?.user ?? null);
+  readonly backend = this.api.configured;
+  readonly session = signal<StoredSession | null>(null);
+  readonly user = computed<AuthUser | null>(() => this.session()?.user ?? null);
   readonly guest = signal<boolean>(readGuest());
   readonly ready = signal(false);
-  /** True after arriving from a password-recovery email link. */
+  /** True after arriving from a valid password-reset email link (a one-time reset token is held in memory). */
   readonly recovery = signal(false);
   readonly signedIn = computed(() => !!this.user());
   readonly canEnterApp = computed(() => this.signedIn() || this.guest());
@@ -40,113 +51,177 @@ export class AuthService {
   readonly oauthProviders = environment.oauthProviders;
 
   private initPromise: Promise<void> | null = null;
+  private resetToken: string | null = null;
 
   init(): Promise<void> {
     if (this.initPromise) return this.initPromise;
     this.initPromise = (async () => {
-      if (!this.sb) {
+      if (!this.backend) {
         this.ready.set(true);
         return;
       }
-      this.sb.auth.onAuthStateChange((event, session) => {
-        this.session.set(session);
-        if (event === 'PASSWORD_RECOVERY') this.recovery.set(true);
-        if (session) this.setGuest(false);
-      });
-      try {
-        const { data } = await this.sb.auth.getSession();
-        this.session.set(data.session);
-      } catch {
-        /* offline with no cached session */
+      this.captureResetLinkFromLocation();
+      const cached = await this.store.load();
+      if (cached) {
+        this.session.set(cached);
+        this.setGuest(false);
+        void this.revalidate(); // never blocks start-up: offline launches keep working
       }
       this.ready.set(true);
     })();
     return this.initPromise;
   }
 
+  /** Confirms the cached token is still valid. Only an explicit 401 / empty session ends it. */
+  private async revalidate(): Promise<void> {
+    try {
+      const res = await this.api.raw<{ user?: BetterAuthUser } | null>('GET', '/api/auth/get-session');
+      const u = res.body?.user;
+      if (!u) return void (await this.expire());
+      const cur = this.session();
+      if (cur && cur.user.id === u.id && (cur.user.email !== u.email || cur.user.name !== (u.name ?? ''))) {
+        const next = { token: cur.token, user: { id: u.id, email: u.email, name: u.name ?? '' } };
+        this.session.set(next);
+        await this.store.save(next);
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.isUnauthorized) await this.expire();
+      /* offline / server down: keep the cached session */
+    }
+  }
+
+  /** The server rejected the token (expired, revoked, password reset elsewhere). Local data is kept for the next sign-in. */
+  async expire(): Promise<void> {
+    this.session.set(null);
+    await this.store.clear();
+  }
+
   async signIn(email: string, password: string): Promise<AuthResult> {
-    if (!this.sb) return { ok: false, error: 'backendOff' };
-    const { data, error } = await this.sb.auth.signInWithPassword({ email: email.trim(), password });
-    if (error) return { ok: false, error: mapError(error) };
-    this.session.set(data.session);
-    this.setGuest(false);
-    return { ok: true };
+    if (!this.backend) return { ok: false, error: 'backendOff' };
+    try {
+      const res = await this.api.raw<{ user: BetterAuthUser }>('POST', '/api/auth/sign-in/email', { email: email.trim(), password }, false);
+      return await this.adopt(res.headers.get('set-auth-token'), res.body?.user);
+    } catch (e) {
+      return { ok: false, error: mapError(e) };
+    }
   }
 
   async signUp(displayName: string, email: string, password: string): Promise<AuthResult> {
-    if (!this.sb) return { ok: false, error: 'backendOff' };
-    const { data, error } = await this.sb.auth.signUp({
-      email: email.trim(),
-      password,
-      options: { data: { display_name: displayName.trim() }, emailRedirectTo: this.redirect('/auth/login') },
-    });
-    if (error) return { ok: false, error: mapError(error) };
-    // Supabase returns a user with no identities when the email already exists (enumeration-safe).
-    if (data.user && data.user.identities && data.user.identities.length === 0) return { ok: false, error: 'errEmailTaken' };
-    if (!data.session) return { ok: true, needsConfirm: true };
-    this.session.set(data.session);
+    if (!this.backend) return { ok: false, error: 'backendOff' };
+    try {
+      const res = await this.api.raw<{ user: BetterAuthUser }>(
+        'POST',
+        '/api/auth/sign-up/email',
+        { email: email.trim(), password, name: displayName.trim(), callbackURL: this.redirect('/auth/login') },
+        false,
+      );
+      const token = res.headers.get('set-auth-token');
+      if (!token) return { ok: true, needsConfirm: true }; // the server requires email verification first
+      return await this.adopt(token, res.body?.user);
+    } catch (e) {
+      return { ok: false, error: mapError(e) };
+    }
+  }
+
+  private async adopt(token: string | null, u: BetterAuthUser | undefined): Promise<AuthResult> {
+    if (!token || !u) return { ok: false, error: 'errGeneric' };
+    const s: StoredSession = { token, user: { id: u.id, email: u.email, name: u.name ?? '' } };
+    await this.store.save(s);
+    this.session.set(s);
     this.setGuest(false);
     return { ok: true };
   }
 
   async requestPasswordReset(email: string): Promise<AuthResult> {
-    if (!this.sb) return { ok: false, error: 'backendOff' };
-    const { error } = await this.sb.auth.resetPasswordForEmail(email.trim(), { redirectTo: this.redirect('/auth/reset') });
-    // Always report success for unknown emails (no account enumeration); only surface network errors.
-    if (error && mapError(error) === 'errNetwork') return { ok: false, error: 'errNetwork' };
+    if (!this.backend) return { ok: false, error: 'backendOff' };
+    try {
+      await this.api.raw('POST', '/api/auth/request-password-reset', { email: email.trim(), redirectTo: this.redirect('/auth/reset') }, false);
+    } catch (e) {
+      // Always report success for unknown emails (no account enumeration); only surface network errors.
+      if (mapError(e) === 'errNetwork') return { ok: false, error: 'errNetwork' };
+    }
     return { ok: true };
   }
 
+  /** Completes the reset started by the emailed link. The user then signs in with the new password (all old sessions are revoked). */
   async updatePassword(password: string): Promise<AuthResult> {
-    if (!this.sb) return { ok: false, error: 'backendOff' };
-    if (!this.session()) return { ok: false, error: 'resetLinkInvalid' };
-    const { error } = await this.sb.auth.updateUser({ password });
-    if (error) return { ok: false, error: mapError(error) };
-    this.recovery.set(false);
-    return { ok: true };
+    if (!this.backend) return { ok: false, error: 'backendOff' };
+    if (!this.resetToken) return { ok: false, error: 'resetLinkInvalid' };
+    try {
+      await this.api.raw('POST', '/api/auth/reset-password', { token: this.resetToken, newPassword: password }, false);
+      this.resetToken = null;
+      this.recovery.set(false);
+      await this.expire(); // any cached session was revoked server-side
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 400) {
+        this.resetToken = null;
+        this.recovery.set(false);
+        return { ok: false, error: 'resetLinkInvalid' };
+      }
+      return { ok: false, error: mapError(e) };
+    }
   }
 
-  async signInWithProvider(provider: 'google' | 'apple'): Promise<AuthResult> {
-    if (!this.sb || !this.oauthProviders.includes(provider)) return { ok: false, error: 'backendOff' };
-    const { error } = await this.sb.auth.signInWithOAuth({ provider, options: { redirectTo: this.redirect('/tabs/home') } });
-    return error ? { ok: false, error: mapError(error) } : { ok: true };
+  /**
+   * Google / Apple are NOT wired yet: they need provider credentials on the API plus a native one-time-token
+   * hand-off for Capacitor (docs/cloudflare-migration/auth-strategy.md). Kept disabled until then.
+   */
+  async signInWithProvider(_provider: 'google' | 'apple'): Promise<AuthResult> {
+    return { ok: false, error: 'backendOff' };
   }
 
   async signOut(): Promise<void> {
     this.setGuest(false);
-    if (this.sb) {
+    if (this.backend && this.session()) {
       try {
-        await this.sb.auth.signOut({ scope: 'local' });
+        await this.api.raw('POST', '/api/auth/sign-out', {});
       } catch {
-        /* offline: local session is still cleared below */
+        /* offline: the local session is still cleared below; the server token expires on its own */
       }
     }
-    this.session.set(null);
+    await this.expire();
   }
 
   /**
-   * Native deep link (com.gharzetak.app://auth/...): completes the PKCE exchange from a
-   * confirmation / recovery email and returns the in-app path to open.
+   * Native deep link (com.gharzetak.app://auth/...): picks up the reset token or the post-verification
+   * landing and returns the in-app path to open.
    */
   async handleDeepLink(url: string): Promise<string | null> {
-    if (!this.sb) return null;
+    if (!this.backend) return null;
     let u: URL;
     try {
       u = new URL(url);
     } catch {
       return null;
     }
-    const code = u.searchParams.get('code');
-    if (code) {
-      const { error } = await this.sb.auth.exchangeCodeForSession(code);
-      if (error) return '/auth/login';
-    }
     const path = `/${u.host}${u.pathname}`.replace(/\/+$/, '');
-    return path.startsWith('/auth/reset') ? '/auth/reset' : this.signedIn() ? '/tabs/home' : '/auth/login';
+    if (path.startsWith('/auth/reset')) {
+      this.takeResetToken(u.searchParams.get('token'));
+      return '/auth/reset';
+    }
+    return this.signedIn() ? '/tabs/home' : '/auth/login';
   }
 
   continueAsGuest(): void {
     this.setGuest(true);
+  }
+
+  /** Web: the reset email lands on `<origin>/auth/reset?token=…`. Reads and removes the token from the address bar. */
+  private captureResetLinkFromLocation(): void {
+    if (typeof location === 'undefined' || !location.pathname.startsWith('/auth/reset')) return;
+    const params = new URLSearchParams(location.search);
+    this.takeResetToken(params.get('token'));
+    try {
+      history.replaceState(history.state, '', location.pathname);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private takeResetToken(token: string | null): void {
+    this.resetToken = token && /^[A-Za-z0-9_-]{8,256}$/.test(token) ? token : null;
+    this.recovery.set(!!this.resetToken);
   }
 
   private setGuest(v: boolean): void {
@@ -173,11 +248,11 @@ function readGuest(): boolean {
   }
 }
 
-function mapError(e: AuthError): AuthErrorKey {
-  const code = (e as AuthError & { code?: string }).code ?? '';
-  if (e.name === 'AuthRetryableFetchError' || e.status === 0 || /fetch|network/i.test(e.message)) return 'errNetwork';
-  if (code === 'invalid_credentials' || /invalid login/i.test(e.message)) return 'errCreds';
-  if (code === 'email_not_confirmed') return 'errNotConfirmed';
-  if (code === 'user_already_exists' || /already registered/i.test(e.message)) return 'errEmailTaken';
+function mapError(e: unknown): AuthErrorKey {
+  if (!(e instanceof ApiError)) return 'errGeneric';
+  if (e.isNetwork && e.status !== 429) return 'errNetwork';
+  if (e.status === 401 || /INVALID_EMAIL_OR_PASSWORD/i.test(e.code)) return 'errCreds';
+  if (e.status === 403 || /EMAIL_NOT_VERIFIED/i.test(e.code)) return 'errNotConfirmed';
+  if (e.status === 422 || /USER_ALREADY_EXISTS/i.test(e.code)) return 'errEmailTaken';
   return 'errGeneric';
 }

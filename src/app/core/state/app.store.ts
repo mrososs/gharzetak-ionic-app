@@ -17,7 +17,7 @@ export interface ProjectProgress {
 /**
  * Local-first application state (Angular signals).
  *  - Every mutation updates the signal immediately, is written to IndexedDB (awaited, ordered),
- *    and — for signed-in users — is queued in the outbox for Supabase sync.
+ *    and — for signed-in users — is queued in the outbox for Worker API sync.
  *  - Guest data lives in the 'guest' scope and never leaves the device.
  */
 @Injectable({ providedIn: 'root' })

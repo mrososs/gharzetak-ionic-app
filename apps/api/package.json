@@ -1,0 +1,28 @@
+{
+  "name": "@gharzetak/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply gharzetak-db --local",
+    "db:seed:local": "wrangler d1 execute gharzetak-db --local --file=./seed/sample-patterns.sql"
+  },
+  "dependencies": {
+    "better-auth": "1.7.25",
+    "drizzle-orm": "0.45.4",
+    "hono": "4.13.18",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.8.2",
+    "@cloudflare/workers-types": "5.20261116.1",
+    "drizzle-kit": "0.31.11",
+    "typescript": "~6.0.2",
+    "vitest": "~4.1.0",
+    "wrangler": "4.162.0"
+  }
+}

@@ -7,7 +7,7 @@ import { IconComponent } from '../icon/icon.component';
 /**
  * Photo slot (prototype "CrochetImage" pattern): a labelled tonal placeholder with the real
  * image layered on top. If the image fails to load, the placeholder stays visible.
- * `src` = local/bundled URL; `storagePath` = private Supabase object (resolved to a signed URL).
+ * `src` = local/bundled URL; `storagePath` = private R2 object (downloaded through the authenticated API as a blob: URL).
  */
 @Component({
   selector: 'gz-photo',
@@ -56,7 +56,7 @@ export class PhotoComponent {
         this.signedUrl.set(null);
         return;
       }
-      void this.sync.signedUrl(path).then((u) => this.signedUrl.set(u));
+      void this.sync.mediaUrl(path).then((u) => this.signedUrl.set(u));
     });
   }
 }

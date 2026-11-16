@@ -1,5 +1,5 @@
 /* UI strings — ported from the approved prototype (Main.dc.html → T), Egyptian-Arabic voice kept.
-   Keys marked "real:" were added for production features (Supabase auth, sync, guest import). */
+   Keys marked "real:" were added for production features (account auth, sync, guest import). */
 const ar = {
   langBtn: 'English', langAria: 'Switch language to English', brand: 'غرزتك', tagline: 'غرزتك... من أول غرزة لآخر لمسة',
   skip: 'تخطّي', back: 'رجوع', close: 'إغلاق', done: 'تم', cancel: 'إلغاء', delete: 'حذف', save: 'حفظ',

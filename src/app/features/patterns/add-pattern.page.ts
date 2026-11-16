@@ -153,16 +153,17 @@ export class AddPatternPage {
     this.busy.set(true);
     try {
       const id = uuid();
-      let file: PatternFile | null = null;
-      if (f) {
-        const storagePath = await this.sync.uploadPatternFile(id, f);
-        file = { name: f.name.slice(0, 200), size: f.size, mime: f.type, storagePath };
-      }
+      const file: PatternFile | null = f ? { name: f.name.slice(0, 200), size: f.size, mime: f.type, storagePath: null } : null;
       const pat: Pattern = {
         id, isSample: false, name: v.name.trim(), level: v.level, terms: v.terms, source: src, text: src === 'text' ? v.text.trim() : '',
         file, attribution: v.attribution.trim(), sourceUrl: '', position: 0, updatedAt: Date.now(), deletedAt: null,
       };
       await this.store.addPattern(pat);
+      if (f) {
+        // The pattern row must exist on the server before its private file can be attached to it.
+        const storagePath = await this.sync.uploadPatternFile(id, f);
+        if (storagePath) await this.store.updatePattern(id, (p) => ({ ...p, file: p.file ? { ...p.file, storagePath } : p.file }), false);
+      }
       await this.nav.navigateForward(['/tabs/home/patterns', id], { replaceUrl: true });
       await this.ui.say('تم حفظ الباترن', 'Pattern saved');
     } finally {
