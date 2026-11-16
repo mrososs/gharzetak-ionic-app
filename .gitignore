@@ -51,3 +51,11 @@ src/environments/env.generated.ts
 www/
 supabase/.temp/
 supabase/.branches/
+
+# Cloudflare API (apps/api)
+apps/api/node_modules/
+apps/api/.wrangler/
+apps/api/.dev.vars
+apps/api/.dev.vars.*
+!apps/api/.dev.vars.example
+apps/api/worker-configuration.d.ts

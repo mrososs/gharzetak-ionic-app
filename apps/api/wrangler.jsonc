@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gharzetak-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // Local development uses Wrangler's simulated D1 + R2 (persisted under .wrangler/state).
+  // Nothing here touches the real Cloudflare account until you deploy or pass --remote.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gharzetak-db",
+      // PLACEHOLDER: replace with the real id printed by `wrangler d1 create gharzetak-db`
+      // (remote creation is approval-gated). Local dev/test does not need a real id.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "drizzle"
+    }
+  ],
+
+  // Private bucket. No public domain, no r2.dev access: the Worker is the only reader/writer.
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "gharzetak-media" }],
+
+  "vars": {
+    "ENVIRONMENT": "development",
+    // Public URL of this API (used for auth email links).
+    "AUTH_BASE_URL": "http://localhost:8787",
+    // Origins allowed by CORS and Better Auth CSRF/origin checks. Capacitor WebViews use
+    // http(s)://localhost (Android) and capacitor://localhost (iOS); the custom scheme is the deep link.
+    "APP_ORIGINS": "http://localhost:4200,http://localhost,https://localhost,capacitor://localhost,com.gharzetak.app://",
+    "REQUIRE_EMAIL_VERIFICATION": "false"
+  }
+}
