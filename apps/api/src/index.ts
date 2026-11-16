@@ -7,14 +7,26 @@ import type { AppBindings } from './env';
 import { errorResponse } from './errors';
 import { requireUser } from './middleware/auth';
 import { entities } from './routes/entities';
+import { withPrefix } from './services/prefixed-bucket';
 import { media } from './routes/media';
 
 const app = new Hono<AppBindings>();
 
 app.use('*', secureHeaders());
 app.use('*', async (c, next) => {
+  // Refuse to run a deployed environment that still carries template placeholders (e.g. a REPLACE_... AUTH_BASE_URL).
+  if (c.env.ENVIRONMENT !== 'development' && c.env.ENVIRONMENT !== 'test' && /REPLACE_/.test(`${c.env.AUTH_BASE_URL}${c.env.APP_ORIGINS}`)) {
+    console.error('[config] placeholder value still present in AUTH_BASE_URL / APP_ORIGINS');
+    return c.json({ error: { code: 'misconfigured', message: 'Server configuration is incomplete' } }, 500);
+  }
+  // The development configuration (mail capture, no rate limiting) must never run on a public host.
+  if (c.env.ENVIRONMENT === 'development' && !['localhost', '127.0.0.1', '[::1]'].includes(new URL(c.req.url).hostname)) {
+    console.error('[config] ENVIRONMENT=development served on a non-local host; deploy with --env staging|production');
+    return c.json({ error: { code: 'misconfigured', message: 'Server configuration is incomplete' } }, 500);
+  }
   c.set('requestId', crypto.randomUUID());
   c.set('db', createDb(c.env.DB));
+  if (c.env.MEDIA_PREFIX) c.env = { ...c.env, MEDIA: withPrefix(c.env.MEDIA, c.env.MEDIA_PREFIX) };
   await next();
   c.header('X-Request-Id', c.get('requestId'));
 });

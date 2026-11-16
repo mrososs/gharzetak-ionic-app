@@ -215,6 +215,36 @@ describe('server-enforced concurrency', () => {
     expect((await serverPull(token)).progress[0]?.count).toBe(20); // newer progress survived
     await waitFor(() => d.store.project(p.id)?.tracker.simple.count === 20, 'stale device to adopt server state');
     expect(await outbox(d)).toHaveLength(0);
+
+    // ...and the stale device's own work was NOT silently discarded: it is kept as a backup and the user is told.
+    const notice = d.sync.conflictNotice();
+    expect(notice).toMatchObject({ kind: 'progress', label: 'Bunny', reason: 'newer-on-server' });
+    const backups = (await d.db.loadDocs(d.store.scope())).conflicts ?? [];
+    expect(backups).toHaveLength(1);
+    expect(backups[0]).toMatchObject({ kind: 'progress', entityId: p.id, reason: 'newer-on-server' });
+    expect((backups[0]!.snapshot as { count: number }).count).toBe(8); // exactly what this device had counted
+  });
+
+  it('a stale device that is FURTHER ALONG keeps its stitches even though its clock is older', async () => {
+    const { d, p, token } = await seeded();
+    const prog = (await serverPull(token)).progress[0]!;
+    // another device wrote count 20 later (newer clock)
+    await serverPut(token, `/v1/projects/${p.id}/progress`, {
+      baseRevision: prog.revision, clientUpdatedAt: Date.now() + 5_000, mode: 'simple', round: 1, target: 30, perTap: 1, count: 20, totalRounds: 0,
+      patternId: null, patternRoundIndex: 0, actionPtr: 0, countMode: 'action', history: [], patternHistory: [],
+    });
+    // this device counted MORE (25) while offline, but with an older timestamp
+    d.net.online.set(false);
+    await d.store.updateProject(p.id, (x) => ({ ...x, tracker: { ...x.tracker, simple: { ...x.tracker.simple, count: 25 }, updatedAt: Date.now() - 60_000 } }), ['progress']);
+    await waitFor(async () => (await outbox(d)).length > 0, 'offline edit queued');
+    d.net.online.set(true);
+    d.sync.schedule(0, true);
+    await d.sync.run();
+
+    expect((await serverPull(token)).progress[0]?.count).toBe(25); // the further-along position wins: no stitches lost
+    expect(d.store.project(p.id)?.tracker.simple.count).toBe(25);
+    expect(d.sync.conflictNotice()).toBeNull(); // nothing was discarded, so nothing to report
+    expect((await d.db.loadDocs(d.store.scope())).conflicts ?? []).toHaveLength(0);
   });
 
   it('a genuinely newer local edit rebases onto the server revision and wins', async () => {

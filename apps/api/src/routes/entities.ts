@@ -243,9 +243,18 @@ entities.put('/projects/:id/progress', async (c) => {
       .returning({ revision: projectProgress.revision });
     if (upd[0]) return accepted(c, upd[0].revision, cts, now);
   }
-  const cur = await db.select({ revision: projectProgress.revision, clientUpdatedAt: projectProgress.clientUpdatedAt }).from(projectProgress).where(and(eq(projectProgress.projectId, pid), eq(projectProgress.ownerId, userId))).get();
+  const cur = await db
+    .select({
+      revision: projectProgress.revision, clientUpdatedAt: projectProgress.clientUpdatedAt, mode: projectProgress.mode, round: projectProgress.round, count: projectProgress.count,
+      patternRoundIndex: projectProgress.patternRoundIndex, actionPtr: projectProgress.actionPtr,
+    })
+    .from(projectProgress)
+    .where(and(eq(projectProgress.projectId, pid), eq(projectProgress.ownerId, userId)))
+    .get();
   if (!cur) throw notFound('Progress');
-  return conflict(cur);
+  // The 409 carries the server's position so a stale device can compare progress, not just clocks, before deciding what to do.
+  const { revision, clientUpdatedAt, ...state } = cur;
+  return conflict({ revision, clientUpdatedAt, state });
 });
 
 entities.put('/projects/:id/notes', async (c) => {

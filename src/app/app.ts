@@ -38,6 +38,23 @@ export class App implements OnInit {
     effect(() => {
       if (this.auth.recovery()) untracked(() => void this.router.navigateByUrl('/auth/reset'));
     });
+    // A local change lost a sync conflict (or was rejected): it is kept on the device, and the user is told once.
+    effect(() => {
+      const n = this.sync.conflictNotice();
+      if (!n) return;
+      untracked(() => {
+        const q = (a: string, e: string) => this.i18n.q(a, e);
+        const what = n.label ? `«${n.label}»` : q('بياناتك', 'your data');
+        const text =
+          n.reason === 'rejected'
+            ? q(`تعذّر حفظ بعض تعديلات ${what} على السحابة. اتحفظت على جهازك.`, `Some changes to ${what} could not be saved to the cloud. They are kept on this device.`)
+            : n.reason === 'deleted'
+              ? q(`اتمسح ${what} من جهاز تاني. اتحفظت آخر تعديلاتك على جهازك.`, `${what} was deleted on another device. Your latest changes are kept on this device.`)
+              : q(`نسخة أحدث من ${what} جت من جهاز تاني وحلّت محل تعديلاتك. اتحفظت نسختك على جهازك.`, `A newer version of ${what} from another device replaced your changes. Your version is kept on this device.`);
+        this.sync.conflictNotice.set(null);
+        void this.ui.toast(text);
+      });
+    });
     // After sign-in, offer (never force) moving guest data into the account.
     effect(() => {
       const user = this.auth.user();

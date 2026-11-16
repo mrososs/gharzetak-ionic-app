@@ -12,5 +12,7 @@ Angular never touches D1 or R2 directly.
 | [storage-strategy.md](storage-strategy.md) | private R2, validation, access control |
 | [sync-strategy.md](sync-strategy.md) | outbox, revisions, conflict rules, fixed race |
 | [test-results.md](test-results.md) | what ran, what did not |
+| [security-review.md](security-review.md) | pre-staging security findings and status |
+| [staging-readiness.md](staging-readiness.md) | prepared (not deployed) staging environment, approval checklist |
 | [cutover-plan.md](cutover-plan.md) | approval-gated resources, cost, rollback |
 | [legacy-supabase/](legacy-supabase) | archived Supabase config, migrations, seed, RLS test |

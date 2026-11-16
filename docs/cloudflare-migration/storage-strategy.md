@@ -14,6 +14,12 @@
 The bucket is **private and stays private**: nothing serves it publicly. The Worker is the only reader/writer. Do **not** enable the
 `r2.dev` domain or attach a custom domain to this bucket.
 
+## Sharing one bucket between environments
+
+Staging uses the same bucket with `MEDIA_PREFIX=staging/`. A bucket wrapper (`src/services/prefixed-bucket.ts`) prefixes every R2 key for put/get/head/delete/list;
+D1 and API responses keep the unprefixed key. Tested: objects land under `staging/`, are invisible through another prefix and are removed with their project.
+This is an **application-level** boundary (the Worker binding can still reach the whole bucket); prefer a separate staging bucket before production shares it.
+
 ## Endpoints (all require `Authorization: Bearer`)
 
 | Method | Path | Purpose |

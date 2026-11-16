@@ -22,7 +22,8 @@ export const parseOrigins = (env: Pick<AppEnv, 'APP_ORIGINS'>): string[] =>
  */
 export function createAuth(env: AppEnv) {
   const db = createDb(env.DB);
-  const production = env.ENVIRONMENT === 'production';
+  // Rate limiting is on for every deployed environment (staging included); `test-ratelimit` lets tests exercise it.
+  const hardened = env.ENVIRONMENT === 'production' || env.ENVIRONMENT === 'staging' || env.ENVIRONMENT === 'test-ratelimit';
   return betterAuth({
     baseURL: env.AUTH_BASE_URL,
     secret: env.BETTER_AUTH_SECRET,
@@ -52,7 +53,7 @@ export function createAuth(env: AppEnv) {
     },
     session: { expiresIn: 60 * 60 * 24 * 30, updateAge: 60 * 60 * 24 },
     rateLimit: {
-      enabled: production || env.ENVIRONMENT === 'test-ratelimit',
+      enabled: hardened,
       storage: 'database',
       window: 60,
       max: 100,

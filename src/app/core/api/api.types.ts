@@ -6,11 +6,22 @@ export interface Accepted {
   updatedAt: number;
 }
 
+/** Where the server's tracker currently is (only sent for progress conflicts). */
+export interface ProgressPosition {
+  mode: string;
+  round: number;
+  count: number;
+  patternRoundIndex: number;
+  actionPtr: number;
+}
+
 export interface ConflictCurrent {
   revision: number;
   clientUpdatedAt: number;
   /** The row is a tombstone (deleted on another device). */
   deleted?: boolean;
+  /** Progress conflicts only: the server's tracker position. */
+  state?: ProgressPosition;
 }
 
 export interface MediaStored {

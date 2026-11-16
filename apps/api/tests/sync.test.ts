@@ -44,6 +44,8 @@ describe('projects + progress (create, resume, optimistic concurrency)', () => {
     const body = (await stale.json()) as { error: { code: string }; current: { revision: number } };
     expect(body.error.code).toBe('conflict');
     expect(body.current.revision).toBe(2);
+    // the 409 tells the stale device where the server's tracker is, so it can compare progress and not just clocks
+    expect((body.current as unknown as { state: Record<string, unknown> }).state).toEqual({ mode: 'simple', round: 1, count: 12, patternRoundIndex: 0, actionPtr: 0 });
     expect((await pull(u)).progress[0]?.count).toBe(12); // newer progress survived
   });
 
