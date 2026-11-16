@@ -1,4 +1,6 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ApiClient, ApiError } from '../api/api.client';
+import type { Accepted, MediaStored, PullResponse } from '../api/api.types';
 import { AuthService } from '../auth/auth.service';
 import { CategoryId, YarnId, AccessoryId, LevelId } from '../data/catalog';
 import { parsePattern } from '../domain/pattern-parser';
@@ -6,32 +8,39 @@ import { createPatternCursor, createSimpleCounter } from '../domain/tracker-engi
 import { Pattern, Profile, Project, ProjectPhoto, TutorialData } from '../models/models';
 import { NetworkService } from '../services/network.service';
 import { AppStore } from '../state/app.store';
-import { LocalDb, OutboxEntry, OutboxKind } from '../storage/local-db';
-import { SUPABASE } from '../supabase/supabase.client';
+import { LocalDb, OutboxEntry, OutboxKind, Scope } from '../storage/local-db';
 import { dataUrlToBlob } from '../utils/image';
 
 export type SyncState = 'local' | 'idle' | 'syncing' | 'offline' | 'error';
 
 const ORDER: OutboxKind[] = ['profile', 'tools', 'pattern', 'project', 'cover', 'progress', 'note', 'photo', 'session', 'favorite', 'tutorial', 'interest'];
 const MAX_ATTEMPTS = 5;
-const iso = (ms: number) => new Date(ms || Date.now()).toISOString();
-const ms = (s: string | null | undefined) => (s ? new Date(s).getTime() : 0);
+const MAX_REBASES = 3;
+/** Entity kinds whose server revision we track (everything else is idempotent by id). */
+const VERSIONED = new Set(['profile', 'tools', 'pattern', 'project', 'progress', 'note', 'tutorial']);
 
+/** The server could not be reached or asked us to back off: keep the outbox entry and retry later. */
 class NetworkFailure extends Error {}
+/** The bearer token is no longer valid. */
+class AuthExpired extends Error {}
 
 /**
- * Offline-first synchronisation with Supabase.
+ * Offline-first synchronisation with the Cloudflare Worker API (D1 + R2).
  *
- * Push: every local mutation of a signed-in user is coalesced in an IndexedDB outbox
- *       (one entry per entity) and flushed in dependency order when online. Upserts carry
- *       the client `updated_at`; a DB trigger ignores writes older than the stored row,
- *       so a stale device can never overwrite newer progress.
- * Pull: on sign-in, resume and reconnect, remote rows are merged last-write-wins, except
- *       entities with a pending local change, which are kept and pushed.
+ * Push: every local mutation of a signed-in user is coalesced in an IndexedDB outbox (one entry per entity)
+ *       and flushed in dependency order when online. An entry is removed ONLY after the server confirmed it.
+ *       Writes are compare-and-swap on a server revision (`baseRevision`): a stale device gets 409 with the
+ *       server's current revision and resolves it deterministically:
+ *         - server's clientUpdatedAt >= ours  -> our entry is obsolete (or already applied: idempotent retry);
+ *                                                it is dropped and the next pull adopts the server state;
+ *         - ours is newer                     -> adopt the server revision and retry (last-write-wins between
+ *                                                a user's own devices; the server clamps skewed clocks).
+ * Pull: on sign-in, resume and reconnect, remote rows are merged last-write-wins, except entities with a
+ *       pending local change, which are kept and pushed.
  */
 @Injectable({ providedIn: 'root' })
 export class SyncService {
-  private readonly sb = inject(SUPABASE);
+  private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   private readonly store = inject(AppStore);
   private readonly db = inject(LocalDb);
@@ -40,12 +49,17 @@ export class SyncService {
   readonly state = signal<SyncState>('local');
   readonly pending = signal(0);
   readonly lastError = signal<string | null>(null);
-  readonly active = computed(() => !!this.sb && this.auth.signedIn());
+  readonly active = computed(() => this.api.configured && this.auth.signedIn());
 
   private running: Promise<void> | null = null;
   private again = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private readonly signed = new Map<string, { url: string; exp: number }>();
+  private pullRequested = false;
+  private retryDelay = 0;
+
+  private revs = new Map<string, number>();
+  private revScope: Scope | null = null;
+  private readonly media = new Map<string, Promise<string | null>>();
 
   constructor() {
     this.store.onQueued = () => this.schedule(400);
@@ -56,6 +70,11 @@ export class SyncService {
       if (loaded && scope !== 'guest' && this.active()) untracked(() => this.schedule(0, true));
       if (!this.active()) untracked(() => this.state.set('local'));
     });
+    // Private media URLs are blob: URLs of authenticated downloads: drop them when the account changes.
+    effect(() => {
+      this.auth.scope();
+      untracked(() => this.revokeMedia());
+    });
   }
 
   /** Debounced flush (+ optional pull). */
@@ -65,8 +84,6 @@ export class SyncService {
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.run(), delay);
   }
-  private pullRequested = false;
-  private retryDelay = 0;
 
   async run(): Promise<void> {
     if (!this.active()) return;
@@ -84,6 +101,7 @@ export class SyncService {
         }
         this.state.set('syncing');
         try {
+          await this.loadRevisions(this.store.scope());
           await this.flush();
           if (this.pullRequested) {
             this.pullRequested = false;
@@ -93,9 +111,16 @@ export class SyncService {
           this.state.set('idle');
           this.retryDelay = 0;
         } catch (e) {
+          if (e instanceof AuthExpired) {
+            this.state.set('error');
+            this.lastError.set('session expired');
+            await this.auth.expire(); // local data stays on the device; sign in again to resume syncing
+            await this.countPending();
+            break;
+          }
           this.state.set(e instanceof NetworkFailure ? 'offline' : 'error');
           this.lastError.set(e instanceof Error ? e.message : String(e));
-          // Server unreachable while the device reports "online": retry with backoff (5s → 5min).
+          // Server unreachable while the device reports "online": retry with backoff (5s -> 5min).
           this.retryDelay = Math.min(300_000, Math.max(5_000, this.retryDelay * 2));
           this.schedule(this.retryDelay, true);
         }
@@ -110,10 +135,25 @@ export class SyncService {
     this.pending.set(scope === 'guest' ? 0 : (await this.db.outbox(scope)).length);
   }
 
-  private uid(): string {
-    const id = this.auth.user()?.id;
-    if (!id) throw new Error('not signed in');
-    return id;
+  /* ------------------------------------------------------------------ */
+  /* revisions (optimistic-concurrency base, persisted per scope)        */
+  /* ------------------------------------------------------------------ */
+
+  private async loadRevisions(scope: Scope): Promise<void> {
+    if (this.revScope === scope) return;
+    this.revs = await this.db.revisions(scope);
+    this.revScope = scope;
+  }
+
+  private rev(key: string): number {
+    return this.revs.get(key) ?? 0;
+  }
+
+  private async setRev(key: string, rev: number): Promise<void> {
+    if (!this.revScope) return;
+    if (rev > 0) this.revs.set(key, rev);
+    else this.revs.delete(key);
+    await this.db.setRevision(this.revScope, key, rev);
   }
 
   /* ------------------------------------------------------------------ */
@@ -122,14 +162,15 @@ export class SyncService {
 
   private async flush(): Promise<void> {
     const scope = this.store.scope();
-    if (scope === 'guest') return;
+    if (scope === 'guest' || scope !== this.auth.scope()) return;
     const entries = (await this.db.outbox(scope)).sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind) || a.queuedAt - b.queuedAt);
     for (const e of entries) {
+      if (this.store.scope() !== scope) return; // the user switched accounts mid-flush: never push another scope's data
       try {
         await this.push(e);
-        await this.db.dequeue(e);
+        await this.db.dequeue(e); // only after the server confirmed
       } catch (err) {
-        if (err instanceof NetworkFailure) throw err;
+        if (err instanceof NetworkFailure || err instanceof AuthExpired) throw err;
         console.warn('[sync] push failed', e.kind, e.id, err);
         if (e.attempts + 1 >= MAX_ATTEMPTS) await this.db.dequeue(e);
         else await this.db.bumpAttempts(e);
@@ -137,109 +178,116 @@ export class SyncService {
     }
   }
 
-  private check<T extends { error: { message: string; code?: string } | null }>(res: T): T {
-    if (res.error) {
-      const msg = res.error.message || '';
-      if (/fetch|network|Failed to fetch|timeout/i.test(msg) || res.error.code === '') throw new NetworkFailure(msg);
-      throw new Error(`${res.error.code ?? ''} ${msg}`.trim());
+  /** Runs an API call and classifies failures for the retry policy. */
+  private async call<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e instanceof ApiError) {
+        if (e.isUnauthorized) throw new AuthExpired(e.message);
+        if (e.isNetwork) throw new NetworkFailure(e.message);
+        throw new Error(`${e.status} ${e.code} ${e.message}`.trim(), { cause: e }); // keeps the ApiError (e.g. 409 + current revision)
+      }
+      throw e;
     }
-    return res;
+  }
+
+  /**
+   * Versioned upsert with deterministic conflict resolution (see class doc).
+   * Returns 'applied' or 'superseded' (the server already holds same-or-newer data).
+   */
+  private async versioned(key: string, path: string, localTs: number, body: Record<string, unknown>): Promise<'applied' | 'superseded'> {
+    for (let attempt = 0; attempt <= MAX_REBASES; attempt++) {
+      try {
+        const r = await this.call(() => this.api.put<Accepted>(path, { ...body, baseRevision: this.rev(key), clientUpdatedAt: localTs }));
+        await this.setRev(key, r.revision);
+        return 'applied';
+      } catch (e) {
+        const cause = e instanceof Error && 'cause' in e ? (e.cause as unknown) : null;
+        const conflict = cause instanceof ApiError && cause.isConflict ? cause : null;
+        if (!conflict?.current) throw e;
+        const cur = conflict.current;
+        await this.setRev(key, cur.revision);
+        if (cur.deleted || cur.clientUpdatedAt >= localTs) {
+          this.pullRequested = true; // adopt the server's state
+          return 'superseded';
+        }
+      }
+    }
+    throw new Error(`conflict on ${key} did not settle`);
   }
 
   private async push(e: OutboxEntry): Promise<void> {
-    const sb = this.sb!;
-    const uid = this.uid();
     const project = () => this.store.project(e.id);
+    const key = `${e.kind}|${e.id}`;
 
     switch (e.kind) {
       case 'profile': {
         const p = this.store.profile();
-        this.check(
-          await sb.from('profiles').upsert({
-            id: uid, display_name: p.displayName.slice(0, 80), level: p.level, terms: p.terms, locale: document.documentElement.lang === 'en' ? 'en' : 'ar',
-            interests: [...p.interests], onboarded: p.onboarded, updated_at: iso(p.updatedAt),
-          }),
-        );
+        await this.versioned(key, '/v1/profile', p.updatedAt, {
+          displayName: p.displayName.slice(0, 80), level: p.level, terms: p.terms, locale: document.documentElement.lang === 'en' ? 'en' : 'ar',
+          interests: [...p.interests], onboarded: p.onboarded,
+        });
         return;
       }
       case 'tools': {
         const p = this.store.profile();
-        const rows = [
-          ...p.hooks.map((value) => ({ user_id: uid, kind: 'hook', value })),
-          ...p.yarns.map((value) => ({ user_id: uid, kind: 'yarn', value })),
-          ...p.accessories.map((value) => ({ user_id: uid, kind: 'accessory', value })),
-        ];
-        this.check(await sb.from('user_tools').delete().eq('user_id', uid));
-        if (rows.length) this.check(await sb.from('user_tools').insert(rows));
+        await this.versioned(key, '/v1/tools', p.updatedAt, { hooks: [...p.hooks], yarns: [...p.yarns], accessories: [...p.accessories] });
         return;
       }
       case 'pattern': {
         if (e.op === 'delete') {
-          this.check(await sb.from('patterns').delete().eq('id', e.id).eq('owner_id', uid));
+          await this.call(() => this.api.delete(`/v1/patterns/${e.id}`));
+          await this.setRev(key, 0);
           return;
         }
         const p = this.store.pattern(e.id);
         if (!p || p.isSample) return;
-        this.check(
-          await sb.from('patterns').upsert({
-            id: p.id, owner_id: uid, is_sample: false, name: p.name.slice(0, 120), level: p.level, terms: p.terms, source_type: p.source,
-            source_url: p.sourceUrl || null, attribution: p.attribution || null, raw_text: p.text, file_path: p.file?.storagePath ?? null,
-            file_name: p.file?.name ?? null, file_size: p.file?.size ?? null, file_mime: p.file?.mime ?? null, reading_position: p.position, updated_at: iso(p.updatedAt),
-          }),
-        );
         const parsed = parsePattern(p.text);
-        this.check(await sb.from('pattern_rounds').delete().eq('pattern_id', p.id));
-        if (parsed.rounds.length) {
-          this.check(
-            await sb.from('pattern_rounds').insert(
-              parsed.rounds.map((r, i) => ({ pattern_id: p.id, position: i, round_number: r.n, raw: r.raw.slice(0, 500), parsed_ok: r.ok, consumed: r.cons, produced: r.prod, declared_total: r.declared })),
-            ),
-          );
-        }
+        await this.versioned(key, `/v1/patterns/${p.id}`, p.updatedAt, {
+          name: p.name.slice(0, 120), level: p.level, terms: p.terms, sourceType: p.source === 'sample' ? 'text' : p.source,
+          sourceUrl: p.sourceUrl ? p.sourceUrl.slice(0, 500) : null, attribution: p.attribution ? p.attribution.slice(0, 200) : null,
+          rawText: p.text.slice(0, 20000), readingPosition: Math.max(0, Math.trunc(p.position)),
+          rounds: parsed.rounds.slice(0, 500).map((r) => ({ n: r.n, raw: r.raw.slice(0, 500), ok: r.ok, cons: r.cons, prod: r.prod, declared: r.declared })),
+        });
         return;
       }
       case 'project': {
         if (e.op === 'delete') {
-          const { data } = await sb.storage.from('project-photos').list(`${uid}/${e.id}`, { limit: 1000 });
-          if (data?.length) await sb.storage.from('project-photos').remove(data.map((f) => `${uid}/${e.id}/${f.name}`));
-          this.check(await sb.from('projects').delete().eq('id', e.id).eq('owner_id', uid));
+          await this.call(() => this.api.delete(`/v1/projects/${e.id}`)); // the server also removes the project's R2 objects
+          await this.setRev(key, 0);
           return;
         }
         const p = project();
         if (!p) return;
-        this.check(await sb.from('projects').upsert(this.projectRow(p, uid)));
+        await this.versioned(key, `/v1/projects/${p.id}`, p.updatedAt, {
+          name: p.name.slice(0, 120), category: p.category, hookSize: p.hook, yarnType: p.yarn, status: p.status, patternId: p.tracker.patternId,
+          estimatedHours: p.estimatedHours, workedSeconds: p.workedSeconds, lastWorkedAt: p.lastWorkedAt, createdAt: p.createdAt,
+        });
         return;
       }
       case 'progress': {
         const p = project();
         if (!p) return;
         const t = p.tracker;
-        this.check(
-          await sb.from('project_progress').upsert({
-            project_id: p.id, owner_id: uid, mode: t.mode, round: t.simple.round, target: t.simple.target, per_tap: t.simple.perTap,
-            count: t.simple.count, total_rounds: t.simple.totalRounds, pattern_id: t.patternId, pattern_round_index: t.cursor.roundIndex,
-            action_ptr: t.cursor.ptr, count_mode: t.cursor.mode, history: t.simple.history.slice(-100) as never, pattern_history: t.cursor.history.slice(-100) as never,
-            updated_at: iso(t.updatedAt),
-          }),
-        );
+        await this.versioned(key, `/v1/projects/${p.id}/progress`, t.updatedAt, {
+          mode: t.mode, round: t.simple.round, target: t.simple.target, perTap: t.simple.perTap, count: t.simple.count, totalRounds: t.simple.totalRounds,
+          patternId: t.patternId, patternRoundIndex: t.cursor.roundIndex, actionPtr: t.cursor.ptr, countMode: t.cursor.mode,
+          history: t.simple.history.slice(-100), patternHistory: t.cursor.history.slice(-100),
+        });
         return;
       }
       case 'note': {
         const p = project();
         if (!p) return;
-        this.check(await sb.from('project_notes').upsert({ project_id: p.id, owner_id: uid, body: p.notes.slice(0, 10000), updated_at: iso(p.updatedAt) }, { onConflict: 'project_id' }));
+        await this.versioned(key, `/v1/projects/${p.id}/notes`, p.updatedAt, { body: p.notes.slice(0, 10000) });
         return;
       }
       case 'cover': {
         const p = project();
         if (!p?.coverLocalUrl) return;
-        const path = `${uid}/${p.id}/cover-${Date.now()}.jpg`;
-        const blob = dataUrlToBlob(p.coverLocalUrl);
-        this.check(await sb.storage.from('project-photos').upload(path, blob, { contentType: 'image/jpeg', upsert: true }));
-        const old = p.coverPath;
-        await this.store.updateProject(p.id, (x) => ({ ...x, coverPath: path }), []);
-        this.check(await sb.from('projects').update({ cover_path: path, updated_at: iso(Date.now()) }).eq('id', p.id));
-        if (old && old !== path) await sb.storage.from('project-photos').remove([old]);
+        const stored = await this.call(() => this.api.putBytes<MediaStored>(`/v1/media/project-covers/${p.id}`, dataUrlToBlob(p.coverLocalUrl!)));
+        await this.store.updateProject(p.id, (x) => ({ ...x, coverPath: stored.key }), []);
         return;
       }
       case 'photo': {
@@ -248,61 +296,41 @@ export class SyncService {
         if (!p) return;
         if (e.op === 'delete') {
           const path = (e.payload as { storagePath?: string }).storagePath;
-          if (path) await sb.storage.from('project-photos').remove([path]);
-          this.check(await sb.from('project_photos').delete().eq('id', e.id));
+          if (path) await this.call(() => this.api.delete('/v1/media/object', { key: path }));
           return;
         }
         const ph = p.photos.find((x) => x.id === e.id);
         if (!ph?.localUrl) return;
-        const path = `${uid}/${p.id}/${ph.id}.jpg`;
-        const blob = dataUrlToBlob(ph.localUrl);
-        this.check(await sb.storage.from('project-photos').upload(path, blob, { contentType: 'image/jpeg', upsert: true }));
-        this.check(await sb.from('project_photos').upsert({ id: ph.id, project_id: p.id, owner_id: uid, storage_path: path, mime_type: 'image/jpeg', size_bytes: blob.size }));
-        await this.store.updateProject(p.id, (x) => ({ ...x, photos: x.photos.map((y) => (y.id === ph.id ? { ...y, storagePath: path } : y)) }), []);
+        const stored = await this.call(() => this.api.putBytes<MediaStored>(`/v1/media/project-photos/${p.id}/${ph.id}`, dataUrlToBlob(ph.localUrl!)));
+        await this.store.updateProject(p.id, (x) => ({ ...x, photos: x.photos.map((y) => (y.id === ph.id ? { ...y, storagePath: stored.key } : y)) }), []);
         return;
       }
       case 'session': {
         const s = e.payload as { projectId: string; startedAt: number; endedAt: number; seconds: number };
         if (!this.store.project(s.projectId)) return;
-        this.check(await sb.from('work_sessions').upsert({ id: e.id, project_id: s.projectId, owner_id: uid, started_at: iso(s.startedAt), ended_at: iso(s.endedAt), seconds: s.seconds }));
+        await this.call(() => this.api.put(`/v1/sessions/${e.id}`, { projectId: s.projectId, startedAt: s.startedAt, endedAt: s.endedAt, seconds: s.seconds }));
         return;
       }
       case 'favorite': {
-        if (e.op === 'delete') this.check(await sb.from('favorites').delete().match({ user_id: uid, item_type: 'tutorial', item_id: e.id }));
-        else this.check(await sb.from('favorites').upsert({ user_id: uid, item_type: 'tutorial', item_id: e.id }));
+        if (e.op === 'delete') await this.call(() => this.api.delete(`/v1/favorites/${encodeURIComponent(e.id)}`));
+        else await this.call(() => this.api.put(`/v1/favorites/${encodeURIComponent(e.id)}`));
         return;
       }
       case 'tutorial': {
         const t = this.store.tutorial(e.id);
-        const yt = /^https:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//i.test(t.link) ? t.link : null;
-        const res = this.check(
-          await sb
-            .from('tutorial_bookmarks')
-            .upsert({ user_id: uid, tutorial_id: e.id, youtube_url: yt, creator_name: t.creator ? t.creator.slice(0, 120) : null, project_id: t.projectId && this.store.project(t.projectId) ? t.projectId : null, notes: t.notes, updated_at: iso(t.updatedAt) }, { onConflict: 'user_id,tutorial_id' })
-            .select('id')
-            .maybeSingle(),
-        );
-        let bookmarkId = res.data?.id;
-        if (!bookmarkId) bookmarkId = (this.check(await sb.from('tutorial_bookmarks').select('id').match({ user_id: uid, tutorial_id: e.id }).maybeSingle())).data?.id;
-        if (!bookmarkId) return;
-        this.check(await sb.from('tutorial_timestamps').delete().eq('bookmark_id', bookmarkId));
-        if (t.stamps.length) this.check(await sb.from('tutorial_timestamps').insert(t.stamps.map((s) => ({ id: s.id, bookmark_id: bookmarkId!, user_id: uid, seconds: s.sec, note: s.note.slice(0, 300) }))));
+        const yt = /^https:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//i.test(t.link) ? t.link.slice(0, 500) : null;
+        await this.versioned(key, `/v1/tutorials/${encodeURIComponent(e.id)}`, t.updatedAt, {
+          youtubeUrl: yt, creatorName: t.creator ? t.creator.slice(0, 120) : null, projectId: t.projectId && this.store.project(t.projectId) ? t.projectId : null,
+          notes: t.notes.slice(0, 10000), stamps: t.stamps.slice(0, 500).map((s) => ({ id: s.id, seconds: s.sec, note: s.note.slice(0, 300) })),
+        });
         return;
       }
       case 'interest': {
-        if (e.op === 'delete') this.check(await sb.from('store_interest').delete().eq('user_id', uid));
-        else this.check(await sb.from('store_interest').upsert({ user_id: uid, email: this.store.storeEmail().trim() }));
+        if (e.op === 'delete') await this.call(() => this.api.delete('/v1/interest'));
+        else await this.call(() => this.api.put('/v1/interest', { email: this.store.storeEmail().trim() }));
         return;
       }
     }
-  }
-
-  private projectRow(p: Project, uid: string) {
-    return {
-      id: p.id, owner_id: uid, name: p.name.slice(0, 120), category: p.category, hook_size: p.hook, yarn_type: p.yarn, status: p.status,
-      pattern_id: p.tracker.patternId, cover_path: p.coverPath, estimated_hours: p.estimatedHours, worked_seconds: p.workedSeconds,
-      last_worked_at: iso(p.lastWorkedAt), created_at: iso(p.createdAt), updated_at: iso(p.updatedAt),
-    };
   }
 
   /* ------------------------------------------------------------------ */
@@ -310,127 +338,154 @@ export class SyncService {
   /* ------------------------------------------------------------------ */
 
   private async pull(): Promise<void> {
-    const sb = this.sb!;
-    const uid = this.uid();
     const scope = this.store.scope();
-    const outbox = await this.db.outbox(scope);
-    const dirty = new Set(outbox.map((o) => `${o.kind}|${o.id}`));
-
-    const [prof, tools, pats, projs, progs, notes, photos, favs, bms, stamps, interest] = await Promise.all([
-      sb.from('profiles').select('*').eq('id', uid).maybeSingle(),
-      sb.from('user_tools').select('kind,value').eq('user_id', uid),
-      sb.from('patterns').select('*').eq('owner_id', uid),
-      sb.from('projects').select('*').eq('owner_id', uid),
-      sb.from('project_progress').select('*').eq('owner_id', uid),
-      sb.from('project_notes').select('*').eq('owner_id', uid),
-      sb.from('project_photos').select('*').eq('owner_id', uid),
-      sb.from('favorites').select('item_id').eq('user_id', uid).eq('item_type', 'tutorial'),
-      sb.from('tutorial_bookmarks').select('*').eq('user_id', uid),
-      sb.from('tutorial_timestamps').select('*').eq('user_id', uid),
-      sb.from('store_interest').select('email').eq('user_id', uid).maybeSingle(),
-    ]);
-    for (const r of [prof, tools, pats, projs, progs, notes, photos, favs, bms, stamps, interest]) this.check(r);
+    if (scope === 'guest' || scope !== this.auth.scope()) return;
+    const r = await this.call(() => this.api.get<PullResponse>('/v1/sync/pull'));
+    // Re-read the outbox AFTER the response: edits queued while the request was in flight stay "dirty".
+    const dirty = new Set((await this.db.outbox(scope)).map((o) => `${o.kind}|${o.id}`));
     if (this.store.scope() !== scope) return; // user switched meanwhile
+    await this.recordRevisions(r, dirty);
+    if (this.store.scope() !== scope) return;
 
-    // profile + tools
+    // ---- Everything below, up to the signal updates in applyMerged(), is synchronous: a project created or
+    // ---- edited while this pull was running can therefore never be dropped or overwritten by a stale snapshot.
+    let profileAdopted = false;
     const lp = this.store.profile();
-    if (prof.data && !dirty.has('profile|me') && ms(prof.data.updated_at) > lp.updatedAt) {
+    if (r.profile && !dirty.has('profile|me') && r.profile.clientUpdatedAt > lp.updatedAt) {
       const next: Profile = {
-        ...lp, displayName: prof.data.display_name, level: prof.data.level as LevelId, terms: prof.data.terms as 'us' | 'uk',
-        interests: prof.data.interests as CategoryId[], onboarded: prof.data.onboarded, updatedAt: ms(prof.data.updated_at),
+        ...lp, displayName: r.profile.displayName, level: r.profile.level as LevelId, terms: r.profile.terms as 'us' | 'uk',
+        interests: r.profile.interests as CategoryId[], onboarded: r.profile.onboarded, updatedAt: r.profile.clientUpdatedAt,
       };
-      if (!dirty.has('tools|me') && tools.data && (tools.data.length || prof.data.onboarded)) {
+      if (!dirty.has('tools|me') && (r.tools.length || r.profile.onboarded)) {
         Object.assign(next, {
-          hooks: tools.data.filter((t) => t.kind === 'hook').map((t) => t.value),
-          yarns: tools.data.filter((t) => t.kind === 'yarn').map((t) => t.value as YarnId),
-          accessories: tools.data.filter((t) => t.kind === 'accessory').map((t) => t.value as AccessoryId),
+          hooks: r.tools.filter((t) => t.kind === 'hook').map((t) => t.value),
+          yarns: r.tools.filter((t) => t.kind === 'yarn').map((t) => t.value as YarnId),
+          accessories: r.tools.filter((t) => t.kind === 'accessory').map((t) => t.value as AccessoryId),
         });
       }
       this.store.profile.set(next);
-      await this.db.patchDocs(scope, { profile: next });
+      profileAdopted = true;
     }
 
     // patterns
     const localPats = this.store.patterns();
-    const remotePats = new Map((pats.data ?? []).map((r) => [r.id, r]));
-    const mergedPats: Pattern[] = localPats.filter((p) => p.isSample || remotePats.has(p.id) || dirty.has(`pattern|${p.id}`));
-    for (const r of remotePats.values()) {
-      const local = mergedPats.find((p) => p.id === r.id);
-      if (local && (dirty.has(`pattern|${r.id}`) || local.updatedAt >= ms(r.updated_at))) continue;
+    const remotePats = new Map(r.patterns.map((x) => [x.id, x]));
+    // Keep anything the server has never confirmed (revision 0): it is a pending creation, not a remote deletion.
+    const mergedPats: Pattern[] = localPats.filter((p) => p.isSample || remotePats.has(p.id) || dirty.has(`pattern|${p.id}`) || this.rev(`pattern|${p.id}`) === 0);
+    for (const x of remotePats.values()) {
+      const local = mergedPats.find((p) => p.id === x.id);
+      if (local && (dirty.has(`pattern|${x.id}`) || local.updatedAt >= x.clientUpdatedAt)) {
+        // keep the local text, but learn about a file uploaded from another device
+        if (local && !dirty.has(`pattern|${x.id}`) && x.fileName && local.file?.storagePath !== x.filePath) {
+          mergedPats.splice(mergedPats.indexOf(local), 1, { ...local, file: { name: x.fileName, size: x.fileSize ?? 0, mime: x.fileMime ?? '', storagePath: x.filePath } });
+        }
+        continue;
+      }
       const pat: Pattern = {
-        id: r.id, isSample: false, name: r.name, level: r.level as LevelId, terms: r.terms as 'us' | 'uk', source: r.source_type as Pattern['source'],
-        text: r.raw_text, attribution: r.attribution ?? '', sourceUrl: r.source_url ?? '', position: r.reading_position,
-        file: r.file_name ? { name: r.file_name, size: r.file_size ?? 0, mime: r.file_mime ?? '', storagePath: r.file_path } : null,
-        updatedAt: ms(r.updated_at), deletedAt: null,
+        id: x.id, isSample: false, name: x.name, level: x.level as LevelId, terms: x.terms as 'us' | 'uk', source: x.sourceType as Pattern['source'],
+        text: x.rawText, attribution: x.attribution ?? '', sourceUrl: x.sourceUrl ?? '', position: x.readingPosition,
+        file: x.fileName ? { name: x.fileName, size: x.fileSize ?? 0, mime: x.fileMime ?? '', storagePath: x.filePath } : null,
+        updatedAt: x.clientUpdatedAt, deletedAt: null,
       };
       if (local) mergedPats.splice(mergedPats.indexOf(local), 1, pat);
       else mergedPats.push(pat);
     }
 
     // projects (+ progress, notes, photos)
-    const progBy = new Map((progs.data ?? []).map((r) => [r.project_id, r]));
-    const noteBy = new Map((notes.data ?? []).map((r) => [r.project_id, r]));
+    const progBy = new Map(r.progress.map((x) => [x.projectId, x]));
+    const noteBy = new Map(r.notes.map((x) => [x.projectId, x]));
     const localProjects = this.store.projects();
-    const remoteIds = new Set((projs.data ?? []).map((r) => r.id));
-    const merged: Project[] = localProjects.filter((p) => remoteIds.has(p.id) || dirty.has(`project|${p.id}`));
-    for (const r of projs.data ?? []) {
-      const local = merged.find((p) => p.id === r.id);
-      const pr = progBy.get(r.id);
-      const note = noteBy.get(r.id);
-      const remotePhotos: ProjectPhoto[] = (photos.data ?? [])
-        .filter((x) => x.project_id === r.id && !x.is_cover)
-        .map((x) => ({ id: x.id, storagePath: x.storage_path, localUrl: local?.photos.find((lp2) => lp2.id === x.id)?.localUrl ?? null, createdAt: ms(x.created_at) }));
-      const keepLocalPhotos = (local?.photos ?? []).filter((x) => !remotePhotos.some((y) => y.id === x.id));
-      const projDirty = dirty.has(`project|${r.id}`) || (!!local && local.updatedAt > ms(r.updated_at));
-      const progDirty = dirty.has(`progress|${r.id}`) || (!!local && !!pr && local.tracker.updatedAt > ms(pr.updated_at));
+    const remoteIds = new Set(r.projects.map((x) => x.id));
+    const merged: Project[] = localProjects.filter((p) => remoteIds.has(p.id) || dirty.has(`project|${p.id}`) || this.rev(`project|${p.id}`) === 0);
+    for (const x of r.projects) {
+      const local = merged.find((p) => p.id === x.id);
+      const pr = progBy.get(x.id);
+      const note = noteBy.get(x.id);
+      const remotePhotos: ProjectPhoto[] = r.photos
+        .filter((ph) => ph.projectId === x.id)
+        .map((ph) => ({ id: ph.id, storagePath: ph.storagePath, localUrl: local?.photos.find((lp2) => lp2.id === ph.id)?.localUrl ?? null, createdAt: ph.createdAt }));
+      const keepLocalPhotos = (local?.photos ?? []).filter((ph) => !remotePhotos.some((y) => y.id === ph.id));
+      const projDirty = dirty.has(`project|${x.id}`) || (!!local && local.updatedAt > x.clientUpdatedAt);
+      const progDirty = dirty.has(`progress|${x.id}`) || (!!local && !!pr && local.tracker.updatedAt > pr.clientUpdatedAt);
       const base: Project =
         local && projDirty
-          ? local
+          ? { ...local, coverPath: x.coverPath ?? local.coverPath }
           : {
-              id: r.id, name: r.name, category: r.category as CategoryId, hook: r.hook_size, yarn: r.yarn_type as YarnId, status: r.status as Project['status'],
-              notes: local?.notes ?? '', coverLocalUrl: local && local.coverPath === r.cover_path ? local.coverLocalUrl : null, coverPath: r.cover_path,
-              photos: [], workedSeconds: r.worked_seconds, estimatedHours: Number(r.estimated_hours), lastWorkedAt: ms(r.last_worked_at),
-              createdAt: ms(r.created_at), updatedAt: ms(r.updated_at), deletedAt: null, tracker: local?.tracker ?? this.emptyTracker(),
+              id: x.id, name: x.name, category: x.category as CategoryId, hook: x.hookSize, yarn: x.yarnType as YarnId, status: x.status as Project['status'],
+              notes: local?.notes ?? '', coverLocalUrl: local && local.coverPath === x.coverPath ? local.coverLocalUrl : null, coverPath: x.coverPath,
+              photos: [], workedSeconds: x.workedSeconds, estimatedHours: x.estimatedHours, lastWorkedAt: x.lastWorkedAt,
+              createdAt: x.createdAt, updatedAt: x.clientUpdatedAt, deletedAt: null, tracker: local?.tracker ?? this.emptyTracker(),
             };
       const tracker =
         pr && !progDirty
           ? {
               mode: pr.mode as 'simple' | 'pattern',
-              simple: createSimpleCounter({ round: pr.round, target: pr.target, perTap: pr.per_tap, count: pr.count, totalRounds: pr.total_rounds, history: (pr.history as never) ?? [] }),
-              patternId: pr.pattern_id,
-              cursor: createPatternCursor({ roundIndex: pr.pattern_round_index, ptr: pr.action_ptr, mode: pr.count_mode as 'action', history: (pr.pattern_history as never) ?? [] }),
-              updatedAt: ms(pr.updated_at),
+              simple: createSimpleCounter({ round: pr.round, target: pr.target, perTap: pr.perTap, count: pr.count, totalRounds: pr.totalRounds, history: (pr.history as never) ?? [] }),
+              patternId: pr.patternId,
+              cursor: createPatternCursor({ roundIndex: pr.patternRoundIndex, ptr: pr.actionPtr, mode: pr.countMode as 'action', history: (pr.patternHistory as never) ?? [] }),
+              updatedAt: pr.clientUpdatedAt,
             }
           : base.tracker;
-      const notesText = note && !dirty.has(`note|${r.id}`) && (!local || ms(note.updated_at) >= local.updatedAt || !projDirty) ? note.body : base.notes;
+      const notesText = note && !dirty.has(`note|${x.id}`) && (!local || note.clientUpdatedAt >= local.updatedAt || !projDirty) ? note.body : base.notes;
       const next: Project = { ...base, tracker, notes: notesText, photos: [...remotePhotos, ...keepLocalPhotos] };
       if (local) merged.splice(merged.indexOf(local), 1, next);
       else merged.push(next);
     }
 
     // favourites, tutorials, store interest
-    const favList = dirty.size && [...dirty].some((d) => d.startsWith('favorite|')) ? this.store.favorites() : (favs.data ?? []).map((f) => f.item_id);
+    const favList = [...dirty].some((d) => d.startsWith('favorite|')) ? this.store.favorites() : r.favorites;
     const tutorials: Record<string, TutorialData> = { ...this.store.tutorials() };
-    for (const b of bms.data ?? []) {
-      if (dirty.has(`tutorial|${b.tutorial_id}`) || (tutorials[b.tutorial_id]?.updatedAt ?? 0) > ms(b.updated_at)) continue;
-      tutorials[b.tutorial_id] = {
-        tutorialId: b.tutorial_id, link: b.youtube_url ?? '', creator: b.creator_name ?? '', notes: b.notes, projectId: b.project_id, updatedAt: ms(b.updated_at),
-        stamps: (stamps.data ?? []).filter((s) => s.bookmark_id === b.id).map((s) => ({ id: s.id, sec: s.seconds, note: s.note })).sort((a, z) => a.sec - z.sec),
+    for (const b of r.tutorials) {
+      if (dirty.has(`tutorial|${b.tutorialId}`) || (tutorials[b.tutorialId]?.updatedAt ?? 0) > b.clientUpdatedAt) continue;
+      tutorials[b.tutorialId] = {
+        tutorialId: b.tutorialId, link: b.youtubeUrl ?? '', creator: b.creatorName ?? '', notes: b.notes, projectId: b.projectId, updatedAt: b.clientUpdatedAt,
+        stamps: b.stamps.map((s) => ({ id: s.id, sec: s.seconds, note: s.note })).sort((a, z) => a.sec - z.sec),
       };
     }
 
-    await this.applyMerged(scope, merged, mergedPats, favList, tutorials, dirty.has('interest|me') ? null : (interest.data?.email ?? ''));
+    await this.applyMerged(scope, merged, mergedPats, favList, tutorials, dirty.has('interest|me') ? null : (r.interest ?? ''), profileAdopted);
   }
 
-  private async applyMerged(scope: string, projects: Project[], patterns: Pattern[], favorites: string[], tutorials: Record<string, TutorialData>, interestEmail: string | null): Promise<void> {
+  /**
+   * Remembers the server revision of every non-dirty entity (the base for its next local edit) and forgets
+   * entities that no longer exist remotely. Dirty entities keep their old base so their push surfaces the conflict.
+   */
+  private async recordRevisions(r: PullResponse, dirty: Set<string>): Promise<void> {
+    const server = new Map<string, number>();
+    if (r.profile) {
+      server.set('profile|me', r.profile.revision);
+      if (r.profile.toolsRevision > 0) server.set('tools|me', r.profile.toolsRevision);
+    }
+    for (const x of r.patterns) server.set(`pattern|${x.id}`, x.revision);
+    for (const x of r.projects) server.set(`project|${x.id}`, x.revision);
+    for (const x of r.progress) server.set(`progress|${x.projectId}`, x.revision);
+    for (const x of r.notes) server.set(`note|${x.projectId}`, x.revision);
+    for (const x of r.tutorials) server.set(`tutorial|${x.tutorialId}`, x.revision);
+
+    for (const [key, rev] of server) if (!dirty.has(key) && this.rev(key) !== rev) await this.setRev(key, rev);
+    for (const key of [...this.revs.keys()]) {
+      if (!server.has(key) && !dirty.has(key) && VERSIONED.has(key.slice(0, key.indexOf('|')))) await this.setRev(key, 0);
+    }
+  }
+
+  /**
+   * 1) Publishes the merged state to the signals in ONE synchronous turn (no await before it).
+   * 2) Persists what is *now* in memory, so an edit the user makes while IndexedDB is being written is never
+   *    overwritten by the stale merge result, and a project deleted meanwhile is never resurrected.
+   */
+  private async applyMerged(
+    scope: string,
+    projects: Project[],
+    patterns: Pattern[],
+    favorites: string[],
+    tutorials: Record<string, TutorialData>,
+    interestEmail: string | null,
+    profileAdopted: boolean,
+  ): Promise<void> {
     const s = scope as `user:${string}`;
-    const old = this.store.projects();
-    for (const p of old) if (!projects.some((x) => x.id === p.id)) await this.db.removeProject(s, p.id);
-    for (const p of projects) await this.db.putProject(s, p);
-    const oldPats = this.store.patterns();
-    for (const p of oldPats) if (!p.isSample && !patterns.some((x) => x.id === p.id)) await this.db.removePattern(s, p.id);
-    for (const p of patterns) if (!p.isSample) await this.db.putPattern(s, p);
-    await this.db.patchDocs(s, { favorites, tutorials, lastSyncAt: Date.now(), ...(interestEmail !== null ? { storeEmail: interestEmail, storeNotified: !!interestEmail } : {}) });
+    const oldProjects = this.store.projects();
+    const oldPatterns = this.store.patterns();
+
     this.store.projects.set(projects);
     this.store.patterns.set(patterns);
     this.store.favorites.set(favorites);
@@ -439,6 +494,26 @@ export class SyncService {
       this.store.storeEmail.set(interestEmail);
       this.store.storeNotified.set(!!interestEmail);
     }
+
+    const same = () => this.store.scope() === scope;
+    for (const p of oldProjects) if (same() && !projects.some((x) => x.id === p.id)) await this.db.removeProject(s, p.id);
+    for (const p of projects) {
+      const cur = this.store.project(p.id);
+      if (same() && cur) await this.db.putProject(s, cur);
+    }
+    for (const p of oldPatterns) if (same() && !p.isSample && !patterns.some((x) => x.id === p.id)) await this.db.removePattern(s, p.id);
+    for (const p of patterns) {
+      const cur = this.store.pattern(p.id);
+      if (same() && cur && !cur.isSample) await this.db.putPattern(s, cur);
+    }
+    if (!same()) return;
+    await this.db.patchDocs(s, {
+      favorites: this.store.favorites(),
+      tutorials: this.store.tutorials(),
+      lastSyncAt: Date.now(),
+      ...(profileAdopted ? { profile: this.store.profile() } : {}),
+      ...(interestEmail !== null ? { storeEmail: this.store.storeEmail(), storeNotified: this.store.storeNotified() } : {}),
+    });
   }
 
   private emptyTracker(): Project['tracker'] {
@@ -449,24 +524,51 @@ export class SyncService {
   /* private media                                                       */
   /* ------------------------------------------------------------------ */
 
-  /** Short-lived signed URL for a private storage object (cached). */
-  async signedUrl(path: string, bucket: 'project-photos' | 'pattern-files' = 'project-photos'): Promise<string | null> {
-    if (!this.sb || !path) return null;
-    const hit = this.signed.get(path);
-    if (hit && hit.exp > Date.now() + 60_000) return hit.url;
-    const { data } = await this.sb.storage.from(bucket).createSignedUrl(path, 3600);
-    if (!data?.signedUrl) return null;
-    this.signed.set(path, { url: data.signedUrl, exp: Date.now() + 3600_000 });
-    return data.signedUrl;
+  /**
+   * Object URL for a private R2 file. The Worker only serves files to their owner with a bearer token, so an
+   * <img src> cannot fetch it directly: the bytes are downloaded through the API and exposed as a blob: URL
+   * (cached per file, revoked when the account changes).
+   */
+  mediaUrl(path: string): Promise<string | null> {
+    if (!this.active() || !path) return Promise.resolve(null);
+    let hit = this.media.get(path);
+    if (!hit) {
+      hit = this.api
+        .getBlob('/v1/media/object', { key: path })
+        .then((blob) => URL.createObjectURL(blob))
+        .catch(() => {
+          this.media.delete(path); // allow a retry (offline, token refresh, ...)
+          return null;
+        });
+      this.media.set(path, hit);
+    }
+    return hit;
   }
 
-  /** Uploads a pattern reference file (PDF / image) right away; returns the storage path. */
+  private revokeMedia(): void {
+    for (const p of this.media.values()) void p.then((u) => u && URL.revokeObjectURL(u));
+    this.media.clear();
+  }
+
+  /**
+   * Uploads a pattern reference file (PDF / image) and returns its storage key. The pattern row must exist on
+   * the server first, so the outbox is flushed before (and, if needed, once more after) the first attempt.
+   */
   async uploadPatternFile(patternId: string, file: File): Promise<string | null> {
     if (!this.active() || !this.net.online()) return null;
-    const uid = this.uid();
-    const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5);
-    const path = `${uid}/${patternId}/source.${ext}`;
-    const { error } = await this.sb!.storage.from('pattern-files').upload(path, file, { contentType: file.type, upsert: true });
-    return error ? null : path;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this.run();
+      try {
+        const stored = await this.api.putBytes<MediaStored>(`/v1/media/pattern-files/${patternId}`, file, { 'X-File-Name': encodeURIComponent(file.name).slice(0, 120) });
+        return stored.key;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404 && attempt < 2) {
+          await new Promise((res) => setTimeout(res, 400)); // outbox entry not written yet: let it land, then flush again
+          continue;
+        }
+        return null;
+      }
+    }
+    return null;
   }
 }
