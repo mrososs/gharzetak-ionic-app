@@ -1,6 +1,6 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ApiClient, ApiError } from '../api/api.client';
-import type { Accepted, MediaStored, PullResponse } from '../api/api.types';
+import type { Accepted, ConflictCurrent, MediaStored, PullResponse } from '../api/api.types';
 import { AuthService } from '../auth/auth.service';
 import { CategoryId, YarnId, AccessoryId, LevelId } from '../data/catalog';
 import { parsePattern } from '../domain/pattern-parser';
@@ -8,7 +8,8 @@ import { createPatternCursor, createSimpleCounter } from '../domain/tracker-engi
 import { Pattern, Profile, Project, ProjectPhoto, TutorialData } from '../models/models';
 import { NetworkService } from '../services/network.service';
 import { AppStore } from '../state/app.store';
-import { LocalDb, OutboxEntry, OutboxKind, Scope } from '../storage/local-db';
+import { uuid } from '../state/factories';
+import { ConflictBackup, LocalDb, OutboxEntry, OutboxKind, Scope } from '../storage/local-db';
 import { dataUrlToBlob } from '../utils/image';
 
 export type SyncState = 'local' | 'idle' | 'syncing' | 'offline' | 'error';
@@ -16,6 +17,17 @@ export type SyncState = 'local' | 'idle' | 'syncing' | 'offline' | 'error';
 const ORDER: OutboxKind[] = ['profile', 'tools', 'pattern', 'project', 'cover', 'progress', 'note', 'photo', 'session', 'favorite', 'tutorial', 'interest'];
 const MAX_ATTEMPTS = 5;
 const MAX_REBASES = 3;
+const MAX_BACKUPS = 25;
+
+/** A position on the tracker as one comparable number (rounds / pattern rows dominate, then the stitch within it). */
+const position = (mode: string, round: number, count: number, rowIndex: number, ptr: number): number => (mode === 'pattern' ? rowIndex * 1_000_000 + ptr : round * 1_000_000 + count);
+
+export interface ConflictNotice {
+  readonly kind: OutboxKind;
+  readonly label: string;
+  readonly reason: ConflictBackup['reason'];
+  readonly at: number;
+}
 /** Entity kinds whose server revision we track (everything else is idempotent by id). */
 const VERSIONED = new Set(['profile', 'tools', 'pattern', 'project', 'progress', 'note', 'tutorial']);
 
@@ -49,6 +61,8 @@ export class SyncService {
   readonly state = signal<SyncState>('local');
   readonly pending = signal(0);
   readonly lastError = signal<string | null>(null);
+  /** Set when a local change lost a conflict (or was rejected) and was kept as a backup; the app shows it once and clears it. */
+  readonly conflictNotice = signal<ConflictNotice | null>(null);
   readonly active = computed(() => this.api.configured && this.auth.signedIn());
 
   private running: Promise<void> | null = null;
@@ -172,10 +186,49 @@ export class SyncService {
       } catch (err) {
         if (err instanceof NetworkFailure || err instanceof AuthExpired) throw err;
         console.warn('[sync] push failed', e.kind, e.id, err);
-        if (e.attempts + 1 >= MAX_ATTEMPTS) await this.db.dequeue(e);
-        else await this.db.bumpAttempts(e);
+        if (e.attempts + 1 >= MAX_ATTEMPTS) {
+          // Stop retrying, but never silently: keep what we tried to send and tell the user.
+          await this.keepBackup(e.kind, e.id, this.labelFor(e), this.snapshotFor(e), 'rejected');
+          await this.db.dequeue(e);
+        } else await this.db.bumpAttempts(e);
       }
     }
+  }
+
+  /** Human label for notices. */
+  private labelFor(e: OutboxEntry): string {
+    switch (e.kind) {
+      case 'project': case 'progress': case 'note': case 'cover': return this.store.project(e.id)?.name ?? '';
+      case 'photo': return this.store.project((e.payload as { projectId?: string } | undefined)?.projectId)?.name ?? '';
+      case 'pattern': return this.store.pattern(e.id)?.name ?? '';
+      default: return '';
+    }
+  }
+
+  /** What the device holds for an outbox entry right now (used for conflict backups). */
+  private snapshotFor(e: OutboxEntry): unknown {
+    switch (e.kind) {
+      case 'project': return this.store.project(e.id);
+      case 'progress': return this.store.project(e.id)?.tracker ?? null;
+      case 'note': return { notes: this.store.project(e.id)?.notes ?? '' };
+      case 'pattern': return this.store.pattern(e.id);
+      case 'profile': case 'tools': return this.store.profile();
+      case 'tutorial': return this.store.tutorial(e.id);
+      default: return e.payload ?? null;
+    }
+  }
+
+  /**
+   * Keeps a local change that is about to lose (server newer / rejected) in IndexedDB and raises a notice, so unsynced
+   * progress is never discarded without a trace. The list is capped; the newest entries are kept.
+   */
+  private async keepBackup(kind: OutboxKind, entityId: string, label: string, snapshot: unknown, reason: ConflictBackup['reason']): Promise<void> {
+    const scope = this.store.scope();
+    if (scope === 'guest') return;
+    const docs = await this.db.loadDocs(scope);
+    const backup: ConflictBackup = { id: uuid(), at: Date.now(), kind, entityId, label, reason, snapshot: JSON.parse(JSON.stringify(snapshot ?? null)) };
+    await this.db.patchDocs(scope, { conflicts: [...(docs.conflicts ?? []), backup].slice(-MAX_BACKUPS) });
+    this.conflictNotice.set({ kind, label, reason, at: backup.at });
   }
 
   /** Runs an API call and classifies failures for the retry policy. */
@@ -196,7 +249,13 @@ export class SyncService {
    * Versioned upsert with deterministic conflict resolution (see class doc).
    * Returns 'applied' or 'superseded' (the server already holds same-or-newer data).
    */
-  private async versioned(key: string, path: string, localTs: number, body: Record<string, unknown>): Promise<'applied' | 'superseded'> {
+  private async versioned(
+    key: string,
+    path: string,
+    localTs: number,
+    body: Record<string, unknown>,
+    info: { kind: OutboxKind; id: string; label: string; ahead?: (cur: ConflictCurrent) => 'ahead' | 'same' | 'behind' },
+  ): Promise<'applied' | 'superseded'> {
     for (let attempt = 0; attempt <= MAX_REBASES; attempt++) {
       try {
         const r = await this.call(() => this.api.put<Accepted>(path, { ...body, baseRevision: this.rev(key), clientUpdatedAt: localTs }));
@@ -208,10 +267,25 @@ export class SyncService {
         if (!conflict?.current) throw e;
         const cur = conflict.current;
         await this.setRev(key, cur.revision);
-        if (cur.deleted || cur.clientUpdatedAt >= localTs) {
-          this.pullRequested = true; // adopt the server's state
+
+        // 1) Same clientUpdatedAt = our earlier attempt already reached the server (lost response): nothing to do, nothing lost.
+        if (!cur.deleted && cur.clientUpdatedAt === localTs) {
+          this.pullRequested = true;
           return 'superseded';
         }
+        // 2) Tracker progress: the further-along position always wins, whatever the clocks say, so no stitches are thrown away.
+        const rel = cur.deleted ? 'behind' : (info.ahead?.(cur) ?? 'behind');
+        if (rel === 'same') {
+          this.pullRequested = true;
+          return 'superseded'; // the server is at the same position: our write adds nothing
+        }
+        // 3) Otherwise the newer write wins (last-write-wins between a user's own devices). Server newer: rebase only if ours is newer.
+        if (!cur.deleted && (rel === 'ahead' || localTs > cur.clientUpdatedAt)) continue;
+
+        // The server's version wins. Keep ours so it is never silently discarded, then adopt the server state.
+        await this.keepBackup(info.kind, info.id, info.label, body, cur.deleted ? 'deleted' : 'newer-on-server');
+        this.pullRequested = true;
+        return 'superseded';
       }
     }
     throw new Error(`conflict on ${key} did not settle`);
@@ -227,12 +301,12 @@ export class SyncService {
         await this.versioned(key, '/v1/profile', p.updatedAt, {
           displayName: p.displayName.slice(0, 80), level: p.level, terms: p.terms, locale: document.documentElement.lang === 'en' ? 'en' : 'ar',
           interests: [...p.interests], onboarded: p.onboarded,
-        });
+        }, { kind: 'profile', id: e.id, label: '' });
         return;
       }
       case 'tools': {
         const p = this.store.profile();
-        await this.versioned(key, '/v1/tools', p.updatedAt, { hooks: [...p.hooks], yarns: [...p.yarns], accessories: [...p.accessories] });
+        await this.versioned(key, '/v1/tools', p.updatedAt, { hooks: [...p.hooks], yarns: [...p.yarns], accessories: [...p.accessories] }, { kind: 'tools', id: e.id, label: '' });
         return;
       }
       case 'pattern': {
@@ -249,7 +323,7 @@ export class SyncService {
           sourceUrl: p.sourceUrl ? p.sourceUrl.slice(0, 500) : null, attribution: p.attribution ? p.attribution.slice(0, 200) : null,
           rawText: p.text.slice(0, 20000), readingPosition: Math.max(0, Math.trunc(p.position)),
           rounds: parsed.rounds.slice(0, 500).map((r) => ({ n: r.n, raw: r.raw.slice(0, 500), ok: r.ok, cons: r.cons, prod: r.prod, declared: r.declared })),
-        });
+        }, { kind: 'pattern', id: e.id, label: p.name });
         return;
       }
       case 'project': {
@@ -263,7 +337,7 @@ export class SyncService {
         await this.versioned(key, `/v1/projects/${p.id}`, p.updatedAt, {
           name: p.name.slice(0, 120), category: p.category, hookSize: p.hook, yarnType: p.yarn, status: p.status, patternId: p.tracker.patternId,
           estimatedHours: p.estimatedHours, workedSeconds: p.workedSeconds, lastWorkedAt: p.lastWorkedAt, createdAt: p.createdAt,
-        });
+        }, { kind: 'project', id: e.id, label: p.name });
         return;
       }
       case 'progress': {
@@ -274,13 +348,22 @@ export class SyncService {
           mode: t.mode, round: t.simple.round, target: t.simple.target, perTap: t.simple.perTap, count: t.simple.count, totalRounds: t.simple.totalRounds,
           patternId: t.patternId, patternRoundIndex: t.cursor.roundIndex, actionPtr: t.cursor.ptr, countMode: t.cursor.mode,
           history: t.simple.history.slice(-100), patternHistory: t.cursor.history.slice(-100),
+        }, {
+          kind: 'progress', id: e.id, label: p.name,
+          ahead: (cur) => {
+            const s = cur.state;
+            if (!s || s.mode !== t.mode) return 'behind'; // different counting modes are not comparable: fall back to the clock rule
+            const mine = position(t.mode, t.simple.round, t.simple.count, t.cursor.roundIndex, t.cursor.ptr);
+            const theirs = position(s.mode, s.round, s.count, s.patternRoundIndex, s.actionPtr);
+            return mine > theirs ? 'ahead' : mine === theirs ? 'same' : 'behind';
+          },
         });
         return;
       }
       case 'note': {
         const p = project();
         if (!p) return;
-        await this.versioned(key, `/v1/projects/${p.id}/notes`, p.updatedAt, { body: p.notes.slice(0, 10000) });
+        await this.versioned(key, `/v1/projects/${p.id}/notes`, p.updatedAt, { body: p.notes.slice(0, 10000) }, { kind: 'note', id: e.id, label: p.name });
         return;
       }
       case 'cover': {
@@ -322,7 +405,7 @@ export class SyncService {
         await this.versioned(key, `/v1/tutorials/${encodeURIComponent(e.id)}`, t.updatedAt, {
           youtubeUrl: yt, creatorName: t.creator ? t.creator.slice(0, 120) : null, projectId: t.projectId && this.store.project(t.projectId) ? t.projectId : null,
           notes: t.notes.slice(0, 10000), stamps: t.stamps.slice(0, 500).map((s) => ({ id: s.id, seconds: s.sec, note: s.note.slice(0, 300) })),
-        });
+        }, { kind: 'tutorial', id: e.id, label: '' });
         return;
       }
       case 'interest': {

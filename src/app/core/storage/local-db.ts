@@ -32,7 +32,25 @@ export interface OutboxEntry {
   payload?: unknown;
 }
 
+/**
+ * A local change that the server's newer version replaced (or that the server rejected). It is kept on the device
+ * instead of being silently discarded, so the user's work can always be recovered.
+ */
+export interface ConflictBackup {
+  readonly id: string;
+  readonly at: number;
+  readonly kind: OutboxKind;
+  readonly entityId: string;
+  /** Human label (project / pattern name) shown in the notice. */
+  readonly label: string;
+  readonly reason: 'newer-on-server' | 'deleted' | 'rejected';
+  /** The exact data this device tried to save. */
+  readonly snapshot: unknown;
+}
+
 export interface ScopeDocs {
+  /** Most recent first-in-last-out list (capped) of local changes that lost a conflict. */
+  conflicts: ConflictBackup[];
   profile: Profile;
   favorites: string[];
   tutorials: Record<string, TutorialData>;
