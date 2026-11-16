@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { IonContent, IonHeader, IonInput, NavController } from '@ionic/angular';
+import { IonContent, IonHeader, IonInput, NavController, ViewWillEnter } from '@ionic/angular';
 import { CAT, CAT_IDS, CategoryId, HOOKS, YARN, YARN_IDS, YarnId } from '../../core/data/catalog';
 import { parsePattern } from '../../core/domain/pattern-parser';
 import { I18nService } from '../../core/i18n/i18n.service';
@@ -92,7 +92,7 @@ import { StepperComponent } from '../../shared/ui/inputs/stepper.component';
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class NewProjectPage {
+export class NewProjectPage implements ViewWillEnter {
   protected readonly i18n = inject(I18nService);
   protected readonly nav = inject(NavController);
   private readonly store = inject(AppStore);
@@ -133,6 +133,22 @@ export class NewProjectPage {
       : this.i18n.q(`${p.bad} سطر مش مدعوم — هيتحفظ كنص، لكن العدّ بالباترن مش هيشتغل.`, `${p.bad} line(s) unsupported — saved as text, but pattern counting will not work.`);
   });
 
+  /**
+   * Ionic keeps routed pages cached inside the tab stack and re-activates the same instance when the URL is opened again, so a
+   * discarded draft (name, pattern and especially the chosen cover photo) used to reappear in the NEXT new project. Every entry
+   * starts from a blank form.
+   */
+  ionViewWillEnter(): void {
+    this.resetForm();
+  }
+
+  private resetForm(): void {
+    this.form.reset({ name: '', category: 'amigurumi', hook: '3.0', yarn: 'cotton', target: 0, pattern: '' });
+    this.cover.set(null);
+    this.submitted.set(false);
+    this.busy.set(false);
+  }
+
   protected setTarget(n: number): void {
     this.form.controls.target.setValue(Math.max(0, Math.min(500, n)));
   }
@@ -163,6 +179,7 @@ export class NewProjectPage {
       }
       const project = createProject({ name: v.name, category: v.category, hook: v.hook, yarn: v.yarn, target: v.target, coverLocalUrl: this.cover(), patternId, totalRounds: parsed?.ok ? parsed.rounds.length : 0 });
       await this.store.addProject(project);
+      this.resetForm(); // a cached page instance must not keep the saved project's cover/name
       await this.nav.navigateRoot('/tabs/projects');
       await this.ui.say('تم حفظ المشروع وظهر في «مشاريعي»', 'Project saved and added to My projects');
     } finally {
