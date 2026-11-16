@@ -1,0 +1,51 @@
+/*
+ * Tailwind CSS v4 entry. Preflight lives in @layer base, so Ionic's un-layered global
+ * styles always win over Tailwind's reset. Theme keys map to the approved tokens.
+ */
+@import 'tailwindcss';
+
+@theme inline {
+  --font-sans: var(--gz-font);
+  --font-latin: var(--gz-font-latin);
+
+  --color-primary: var(--gz-primary);
+  --color-primary-hover: var(--gz-primary-hover);
+  --color-primary-tint: var(--gz-primary-tint);
+  --color-lavender: var(--gz-lavender);
+  --color-lavender-100: var(--gz-lavender-100);
+  --color-lavender-200: var(--gz-lavender-200);
+  --color-pink: var(--gz-pink);
+  --color-pink-100: var(--gz-pink-100);
+  --color-pink-200: var(--gz-pink-200);
+  --color-pink-ink: var(--gz-pink-ink);
+  --color-peach: var(--gz-peach);
+  --color-peach-100: var(--gz-peach-100);
+  --color-peach-ink: var(--gz-peach-ink);
+  --color-mint: var(--gz-mint);
+  --color-mint-100: var(--gz-mint-100);
+  --color-mint-200: var(--gz-mint-200);
+  --color-mint-ink: var(--gz-mint-ink);
+  --color-cream: var(--gz-bg);
+  --color-surface: var(--gz-surface);
+  --color-blush: var(--gz-surface-elevated);
+  --color-line: var(--gz-border);
+  --color-line-strong: var(--gz-border-strong);
+  --color-ink: var(--gz-text);
+  --color-ink-2: var(--gz-text-2);
+  --color-ink-3: var(--gz-text-3);
+  --color-success: var(--gz-success);
+  --color-warning: var(--gz-warning);
+  --color-error: var(--gz-error);
+
+  --radius-xs: var(--gz-r-xs);
+  --radius-sm: var(--gz-r-sm);
+  --radius-md: var(--gz-r-md);
+  --radius-lg: var(--gz-r-lg);
+
+  --shadow-card: var(--gz-shadow-card);
+  --shadow-raised: var(--gz-shadow-raised);
+  --shadow-sheet: var(--gz-shadow-sheet);
+
+  --spacing-screen: var(--gz-screen-pad);
+  --spacing-touch: var(--gz-touch);
+}

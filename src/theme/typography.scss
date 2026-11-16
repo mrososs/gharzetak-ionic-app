@@ -1,0 +1,64 @@
+// Typography — from handoff/typography.css. Arabic: no letter-spacing, line-height ≥ 1.45.
+html {
+  font-family: var(--gz-font);
+  font-size: var(--gz-fs-body);
+  font-weight: var(--gz-fw-regular);
+  line-height: var(--gz-lh-ar);
+  color: var(--gz-text);
+  -webkit-text-size-adjust: 100%;
+}
+html[dir='ltr'] {
+  font-family: var(--gz-font-latin);
+  line-height: var(--gz-lh-en);
+}
+body {
+  font-family: inherit;
+  line-height: inherit;
+  color: var(--gz-text);
+  background: var(--gz-bg);
+}
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+.gz-h1 { font-size: var(--gz-fs-h1); font-weight: var(--gz-fw-bold); line-height: 1.5; margin: 0; }
+.gz-h2 { font-size: var(--gz-fs-h2); font-weight: var(--gz-fw-bold); line-height: 1.5; margin: 0; }
+.gz-h3 { font-size: var(--gz-fs-body-lg); font-weight: var(--gz-fw-bold); line-height: 1.5; margin: 0; }
+.gz-title { font-size: var(--gz-fs-title); font-weight: var(--gz-fw-bold); line-height: 1.5; margin: 0; }
+html[dir='ltr'] .gz-h1 { line-height: 1.25; }
+html[dir='ltr'] .gz-h2,
+html[dir='ltr'] .gz-hd { line-height: 1.3; }
+.gz-hd { font-weight: var(--gz-fw-bold); letter-spacing: 0; line-height: var(--gz-lh-heading); }
+.gz-body { font-size: var(--gz-fs-body); }
+.gz-sm { font-size: var(--gz-fs-small); }
+.gz-xs { font-size: var(--gz-fs-caption); }
+.gz-b { font-weight: var(--gz-fw-bold); }
+.gz-mute { color: var(--gz-text-2); }
+.gz-plum { color: var(--gz-text); }
+.gz-purple { color: var(--gz-primary); }
+
+/* numerals: tabular, heavy, always LTR even inside Arabic */
+.gz-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--gz-fw-heavy);
+  line-height: 1.1;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+.gz-ltr { direction: ltr; unicode-bidi: isolate; }
+/* stitch code (R3: (sc, inc) × 6 [18]) — always LTR */
+.gz-code {
+  direction: ltr;
+  text-align: left;
+  font-family: var(--gz-font-latin), ui-monospace, monospace;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+  unicode-bidi: isolate;
+  overflow-wrap: anywhere;
+}

@@ -1,1 +1,7 @@
-/* You can add global styles to this file, and also import other style files */
+/* Global styles. Load order (angular.json): Tailwind → Ionic core CSS → fonts → tokens.css → this file.
+   This file: Ionic theme → typography → design-system components → Ionic overrides. */
+@use './theme/variables';
+@use './theme/typography';
+@use './theme/components';
+@use './theme/forms';
+@use './theme/ionic-overrides';

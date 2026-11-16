@@ -1,0 +1,604 @@
+{
+  "app": "Gharzetak",
+  "generated": "prototype build",
+  "statusKey": {
+    "real": "exists in the artifact and is original or properly licensed",
+    "placeholder": "labelled tonal placeholder drawn in the UI; real photo still to be sourced/shot",
+    "missing": "not created; listed so it is not assumed"
+  },
+  "note": "No image URLs are listed because none could be fetched while building (external image hosts were blocked). Search descriptions are shoot/stock briefs, not links.",
+  "assets": [
+    {
+      "id": "brand/logo-mark",
+      "type": "logo",
+      "status": "real",
+      "usedIn": [
+        "GZ-S01",
+        "Design System"
+      ],
+      "searchDescription": "Original flat 2D mark: pink yarn ball, peach hook, mint thread on purple tile",
+      "descriptionAr": "",
+      "format": "inline SVG 48×48 viewBox",
+      "notes": "Drawn for this project; no third-party source. Export SVG/PNG 1024 and favicon set before store submission."
+    },
+    {
+      "id": "brand/wordmark-ar",
+      "type": "wordmark",
+      "status": "real",
+      "usedIn": [
+        "GZ-S01"
+      ],
+      "searchDescription": "غرزتك in Playpen Sans Arabic 700",
+      "descriptionAr": "",
+      "format": "text (font)",
+      "notes": "Convert to outlines only for print."
+    },
+    {
+      "id": "font/playpen-sans-arabic",
+      "type": "font",
+      "status": "real",
+      "usedIn": [
+        "all"
+      ],
+      "searchDescription": "Playpen Sans Arabic variable 100–800",
+      "descriptionAr": "",
+      "format": "Google Fonts (OFL)",
+      "notes": "Self-host woff2 in the Ionic app (offline use)."
+    },
+    {
+      "id": "font/playpen-sans",
+      "type": "font",
+      "status": "real",
+      "usedIn": [
+        "all (English UI)"
+      ],
+      "searchDescription": "Playpen Sans variable 100–800",
+      "descriptionAr": "",
+      "format": "Google Fonts (OFL)",
+      "notes": "Self-host woff2."
+    },
+    {
+      "id": "icons/set-56",
+      "type": "icon set",
+      "status": "real",
+      "usedIn": [
+        "all"
+      ],
+      "searchDescription": "56 single-path stroke icons, 24 px grid",
+      "descriptionAr": "",
+      "format": "inline SVG paths (design-tokens.json → icons)",
+      "notes": "Original paths drawn for the prototype."
+    },
+    {
+      "id": "photo/ob0",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S01"
+      ],
+      "searchDescription": "Crochet bunny doll next to a basket of yarn, natural window light, cream backdrop",
+      "descriptionAr": "دمية أرنب كروشيه وسلة خيوط",
+      "format": "JPG/WebP 4:3 ≥ 1170×880 (radius 28)",
+      "notes": "Lavender-tone slide"
+    },
+    {
+      "id": "photo/ob1",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S02"
+      ],
+      "searchDescription": "Close-up of hands crocheting with a pink hook and cotton yarn, shallow depth of field",
+      "descriptionAr": "إيدين بتشتغل كروشيه",
+      "format": "JPG/WebP 4:3 ≥ 1170×880 (radius 28)",
+      "notes": "Blush-tone slide"
+    },
+    {
+      "id": "photo/ob2",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S03"
+      ],
+      "searchDescription": "Granny square in progress on a wooden table, hook resting on it",
+      "descriptionAr": "مربّع جراني قيد التنفيذ",
+      "format": "JPG/WebP 4:3 ≥ 1170×880 (radius 28)",
+      "notes": "Sage-tone slide"
+    },
+    {
+      "id": "photo/ob3",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S04"
+      ],
+      "searchDescription": "Finished amigurumi doll held in hands, soft daylight",
+      "descriptionAr": "دمية أميجورومي مكتملة",
+      "format": "JPG/WebP 4:3 ≥ 1170×880 (radius 28)",
+      "notes": "Peach-tone slide"
+    },
+    {
+      "id": "photo/cat_amigurumi",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S08"
+      ],
+      "searchDescription": "Handmade amigurumi doll, natural light",
+      "descriptionAr": "دمية أميجورومي مصنوعة يدويًا",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "photo/cat_clothes",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S08"
+      ],
+      "searchDescription": "Hand-crocheted sweater, natural light",
+      "descriptionAr": "بلوفر كروشيه مصنوع يدويًا",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "photo/cat_accessories",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S08"
+      ],
+      "searchDescription": "Crochet bag with flowers, natural light",
+      "descriptionAr": "حقيبة كروشيه بزهور",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "photo/cat_home",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S08"
+      ],
+      "searchDescription": "Crochet basket home decor, natural light",
+      "descriptionAr": "سلة كروشيه لديكور المنزل",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "photo/cat_gifts",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S08"
+      ],
+      "searchDescription": "Wrapped crochet gift, natural light",
+      "descriptionAr": "هدية كروشيه مغلّفة",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "photo/yarn_cotton",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S09"
+      ],
+      "searchDescription": "Cotton yarn balls, neutral backdrop",
+      "descriptionAr": "قطن",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "photo/yarn_acrylic",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S09"
+      ],
+      "searchDescription": "Acrylic yarn, neutral backdrop",
+      "descriptionAr": "أكريليك",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "photo/yarn_wool",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S09"
+      ],
+      "searchDescription": "Wool yarn, neutral backdrop",
+      "descriptionAr": "صوف",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "photo/yarn_velvet",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S09"
+      ],
+      "searchDescription": "Velvet yarn, neutral backdrop",
+      "descriptionAr": "قطيفة",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "photo/yarn_blend",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S09"
+      ],
+      "searchDescription": "Blended yarn, neutral backdrop",
+      "descriptionAr": "خليط",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "photo/yarn_milk",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S09"
+      ],
+      "searchDescription": "Milk cotton yarn, neutral backdrop",
+      "descriptionAr": "قطن حليبي",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "photo/proj_bunny",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S10",
+        "GZ-S11",
+        "GZ-S12"
+      ],
+      "searchDescription": "Finished or in-progress cute bunny doll (handmade crochet), natural light",
+      "descriptionAr": "دمية أرنب لطيف",
+      "format": "JPG/WebP 4:3 ≥ 1170×880",
+      "notes": "Users replace with their own cover (real upload supported)."
+    },
+    {
+      "id": "photo/proj_granny",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S10",
+        "GZ-S11",
+        "GZ-S12"
+      ],
+      "searchDescription": "Finished or in-progress granny square blanket (handmade crochet), natural light",
+      "descriptionAr": "بطانية مربعات جراني",
+      "format": "JPG/WebP 4:3 ≥ 1170×880",
+      "notes": "Users replace with their own cover (real upload supported)."
+    },
+    {
+      "id": "photo/proj_bag",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S10",
+        "GZ-S11",
+        "GZ-S12"
+      ],
+      "searchDescription": "Finished or in-progress summer flower bag (handmade crochet), natural light",
+      "descriptionAr": "شنطة زهور صيفية",
+      "format": "JPG/WebP 4:3 ≥ 1170×880",
+      "notes": "Users replace with their own cover (real upload supported)."
+    },
+    {
+      "id": "photo/proj_basket",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S10",
+        "GZ-S11",
+        "GZ-S12"
+      ],
+      "searchDescription": "Finished or in-progress cotton storage basket (handmade crochet), natural light",
+      "descriptionAr": "سلة تخزين قطن",
+      "format": "JPG/WebP 4:3 ≥ 1170×880",
+      "notes": "Users replace with their own cover (real upload supported)."
+    },
+    {
+      "id": "photo/proj_sweater",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S10",
+        "GZ-S11",
+        "GZ-S12"
+      ],
+      "searchDescription": "Finished or in-progress child's sweater (handmade crochet), natural light",
+      "descriptionAr": "بلوفر أطفال",
+      "format": "JPG/WebP 4:3 ≥ 1170×880",
+      "notes": "Users replace with their own cover (real upload supported)."
+    },
+    {
+      "id": "photo/proj_bear",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S10",
+        "GZ-S11",
+        "GZ-S12"
+      ],
+      "searchDescription": "Finished or in-progress little teddy bear (handmade crochet), natural light",
+      "descriptionAr": "دبدوب تيدي صغير",
+      "format": "JPG/WebP 4:3 ≥ 1170×880",
+      "notes": "Users replace with their own cover (real upload supported)."
+    },
+    {
+      "id": "photo/proj_coasters",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S10",
+        "GZ-S11",
+        "GZ-S12"
+      ],
+      "searchDescription": "Finished or in-progress coaster set (handmade crochet), natural light",
+      "descriptionAr": "طقم كوستر",
+      "format": "JPG/WebP 4:3 ≥ 1170×880",
+      "notes": "Users replace with their own cover (real upload supported)."
+    },
+    {
+      "id": "photo/vid_magic-ring",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S19",
+        "GZ-S20"
+      ],
+      "searchDescription": "Video thumbnail: hands demonstrating “Magic ring (magic circle)”, close-up, warm light",
+      "descriptionAr": "الحلقة السحرية (Magic Ring)",
+      "format": "JPG/WebP 16:9 ≥ 1280×720",
+      "notes": "Real thumbnails come from the video provider; no videos are hosted."
+    },
+    {
+      "id": "photo/vid_sc-basic",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S19",
+        "GZ-S20"
+      ],
+      "searchDescription": "Video thumbnail: hands demonstrating “Single crochet for beginners”, close-up, warm light",
+      "descriptionAr": "الغرزة القصيرة للمبتدئات",
+      "format": "JPG/WebP 16:9 ≥ 1280×720",
+      "notes": "Real thumbnails come from the video provider; no videos are hosted."
+    },
+    {
+      "id": "photo/vid_inc-dec",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S19",
+        "GZ-S20"
+      ],
+      "searchDescription": "Video thumbnail: hands demonstrating “Increase and decrease (inc / dec)”, close-up, warm light",
+      "descriptionAr": "الزيادة والتنقيص (inc / dec)",
+      "format": "JPG/WebP 16:9 ≥ 1280×720",
+      "notes": "Real thumbnails come from the video provider; no videos are hosted."
+    },
+    {
+      "id": "photo/vid_invisible-dec",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S19",
+        "GZ-S20"
+      ],
+      "searchDescription": "Video thumbnail: hands demonstrating “Invisible decrease”, close-up, warm light",
+      "descriptionAr": "التنقيص الخفي",
+      "format": "JPG/WebP 16:9 ≥ 1280×720",
+      "notes": "Real thumbnails come from the video provider; no videos are hosted."
+    },
+    {
+      "id": "photo/vid_read-pattern",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S19",
+        "GZ-S20"
+      ],
+      "searchDescription": "Video thumbnail: hands demonstrating “How to read a crochet pattern”, close-up, warm light",
+      "descriptionAr": "إزاي تقرأي باترن كروشيه",
+      "format": "JPG/WebP 16:9 ≥ 1280×720",
+      "notes": "Real thumbnails come from the video provider; no videos are hosted."
+    },
+    {
+      "id": "photo/vid_amigurumi-assemble",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S19",
+        "GZ-S20"
+      ],
+      "searchDescription": "Video thumbnail: hands demonstrating “Assembling amigurumi parts”, close-up, warm light",
+      "descriptionAr": "تجميع أجزاء الأميجورومي",
+      "format": "JPG/WebP 16:9 ≥ 1280×720",
+      "notes": "Real thumbnails come from the video provider; no videos are hosted."
+    },
+    {
+      "id": "photo/vid_granny",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S19",
+        "GZ-S20"
+      ],
+      "searchDescription": "Video thumbnail: hands demonstrating “Classic granny square”, close-up, warm light",
+      "descriptionAr": "مربع الجراني الكلاسيك",
+      "format": "JPG/WebP 16:9 ≥ 1280×720",
+      "notes": "Real thumbnails come from the video provider; no videos are hosted."
+    },
+    {
+      "id": "photo/vid_no-twist",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S19",
+        "GZ-S20"
+      ],
+      "searchDescription": "Video thumbnail: hands demonstrating “Working in the round without twisting”, close-up, warm light",
+      "descriptionAr": "الشغل الدائري من غير التواء",
+      "format": "JPG/WebP 16:9 ≥ 1280×720",
+      "notes": "Real thumbnails come from the video provider; no videos are hosted."
+    },
+    {
+      "id": "photo/vid_sweater",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S19",
+        "GZ-S20"
+      ],
+      "searchDescription": "Video thumbnail: hands demonstrating “Top-down crochet sweater”, close-up, warm light",
+      "descriptionAr": "بلوفر كروشيه من فوق لتحت",
+      "format": "JPG/WebP 16:9 ≥ 1280×720",
+      "notes": "Real thumbnails come from the video provider; no videos are hosted."
+    },
+    {
+      "id": "photo/vid_basket",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S19",
+        "GZ-S20"
+      ],
+      "searchDescription": "Video thumbnail: hands demonstrating “Crochet basket with cotton yarn”, close-up, warm light",
+      "descriptionAr": "سلة كروشيه بخيط القطن",
+      "format": "JPG/WebP 16:9 ≥ 1280×720",
+      "notes": "Real thumbnails come from the video provider; no videos are hosted."
+    },
+    {
+      "id": "photo/store_yarn",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S24"
+      ],
+      "searchDescription": "Product category photo: yarn for crochet, flat-lay on cream",
+      "descriptionAr": "خيوط",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": "Store is coming soon; no real products."
+    },
+    {
+      "id": "photo/store_hooks",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S24"
+      ],
+      "searchDescription": "Product category photo: hooks for crochet, flat-lay on cream",
+      "descriptionAr": "إبر كروشيه",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": "Store is coming soon; no real products."
+    },
+    {
+      "id": "photo/store_kits",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S24"
+      ],
+      "searchDescription": "Product category photo: kits for crochet, flat-lay on cream",
+      "descriptionAr": "كيتات جاهزة",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": "Store is coming soon; no real products."
+    },
+    {
+      "id": "photo/store_acc",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S24"
+      ],
+      "searchDescription": "Product category photo: accessories for crochet, flat-lay on cream",
+      "descriptionAr": "إكسسوارات",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": "Store is coming soon; no real products."
+    },
+    {
+      "id": "photo/store_hero",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S24",
+        "GZ-S10"
+      ],
+      "searchDescription": "Flat-lay of yarn balls, hooks and a small crochet kit on a cream surface",
+      "descriptionAr": "خيوط وإبر كروشيه",
+      "format": "JPG/WebP 16:9 ≥ 1280×720",
+      "notes": ""
+    },
+    {
+      "id": "photo/store_patterns",
+      "type": "photo",
+      "status": "placeholder",
+      "usedIn": [
+        "GZ-S24"
+      ],
+      "searchDescription": "Printed crochet pattern pages with a hook on top, flat-lay",
+      "descriptionAr": "باترنات",
+      "format": "JPG/WebP 1:1 ≥ 600×600",
+      "notes": ""
+    },
+    {
+      "id": "upload/project-cover",
+      "type": "photo",
+      "status": "real",
+      "usedIn": [
+        "GZ-S12",
+        "GZ-S13"
+      ],
+      "searchDescription": "User-uploaded project cover",
+      "descriptionAr": "",
+      "format": "JPEG ≤ 720 px, resized in browser, stored in local storage",
+      "notes": "Real user content; never sent anywhere."
+    },
+    {
+      "id": "upload/progress-photos",
+      "type": "photo",
+      "status": "real",
+      "usedIn": [
+        "GZ-S12"
+      ],
+      "searchDescription": "User-uploaded progress photos",
+      "descriptionAr": "",
+      "format": "JPEG ≤ 720 px, local storage",
+      "notes": "Real user content."
+    },
+    {
+      "id": "media/tutorial-videos",
+      "type": "video",
+      "status": "missing",
+      "usedIn": [
+        "GZ-S19",
+        "GZ-S20"
+      ],
+      "searchDescription": "Hosted tutorial videos (licensed or original)",
+      "descriptionAr": "",
+      "format": "n/a",
+      "notes": "No video files exist; the app links out to search."
+    },
+    {
+      "id": "media/ai-avatar",
+      "type": "illustration",
+      "status": "missing",
+      "usedIn": [
+        "GZ-S21"
+      ],
+      "searchDescription": "Optional assistant avatar (flat 2D, no 3D, no mascot character)",
+      "descriptionAr": "",
+      "format": "SVG",
+      "notes": "Intentionally not created: brief excludes an AI mascot."
+    }
+  ]
+}

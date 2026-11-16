@@ -1,0 +1,1075 @@
+{
+  "app": "Gharzetak",
+  "version": "1.0-prototype",
+  "languages": [
+    "ar-RTL (default)",
+    "en-LTR"
+  ],
+  "screenCount": 25,
+  "stateCount": 9,
+  "screens": [
+    {
+      "id": "GZ-S01",
+      "previewKey": "ob-1",
+      "group": "Onboarding",
+      "name": {
+        "ar": "الترحيب",
+        "en": "Welcome"
+      },
+      "proposedRoute": "/onboarding/welcome",
+      "bottomTab": null,
+      "status": "implemented",
+      "purpose": "First impression: brand lockup, promise, primary CTA and a “I already have an account” path.",
+      "components": [
+        "gz-brand-lockup",
+        "gz-photo (placeholder)",
+        "gz-dots",
+        "gz-button primary + secondary",
+        "gz-chip (language)"
+      ],
+      "works": "Language switch (AR/EN, live RTL↔LTR flip), Skip, Next, “I have an account”.",
+      "notes": "Photo slot is a labelled placeholder.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S01.dc.html",
+      "verifiedNavigationTo": [
+        "auth"
+      ]
+    },
+    {
+      "id": "GZ-S02",
+      "previewKey": "ob-2",
+      "group": "Onboarding",
+      "name": {
+        "ar": "تعلّمي خطوة بخطوة",
+        "en": "Learn step by step"
+      },
+      "proposedRoute": "/onboarding/learn",
+      "bottomTab": null,
+      "status": "implemented",
+      "purpose": "Explains guided video learning.",
+      "components": [
+        "gz-photo",
+        "gz-dots",
+        "gz-button"
+      ],
+      "works": "Next / Skip / language switch.",
+      "notes": "Blush tone slide.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S02.dc.html",
+      "verifiedNavigationTo": [
+        "auth"
+      ]
+    },
+    {
+      "id": "GZ-S03",
+      "previewKey": "ob-3",
+      "group": "Onboarding",
+      "name": {
+        "ar": "تابعي غرزك",
+        "en": "Track your stitches"
+      },
+      "proposedRoute": "/onboarding/track",
+      "bottomTab": null,
+      "status": "implemented",
+      "purpose": "Explains the smart stitch counter.",
+      "components": [
+        "gz-photo",
+        "gz-dots",
+        "gz-button"
+      ],
+      "works": "Next / Skip / language switch.",
+      "notes": "Sage tone slide.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S03.dc.html",
+      "verifiedNavigationTo": [
+        "auth"
+      ]
+    },
+    {
+      "id": "GZ-S04",
+      "previewKey": "ob-4",
+      "group": "Onboarding",
+      "name": {
+        "ar": "مساعدك الذكي",
+        "en": "Your AI assistant"
+      },
+      "proposedRoute": "/onboarding/assistant",
+      "bottomTab": null,
+      "status": "demo",
+      "purpose": "Explains the assistant and moves to sign-in.",
+      "components": [
+        "gz-photo",
+        "gz-dots",
+        "gz-button",
+        "gz-link"
+      ],
+      "works": "“Let’s start” → Auth; “I have an account”.",
+      "notes": "The assistant itself is a scripted demo in this prototype.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S04.dc.html",
+      "verifiedNavigationTo": [
+        "auth"
+      ]
+    },
+    {
+      "id": "GZ-S05",
+      "previewKey": "auth-login",
+      "group": "Account",
+      "name": {
+        "ar": "تسجيل الدخول",
+        "en": "Log in"
+      },
+      "proposedRoute": "/auth/login",
+      "bottomTab": null,
+      "status": "demo",
+      "purpose": "Email + password sign-in form with guest path.",
+      "components": [
+        "gz-segment",
+        "gz-input (email, password + show/hide)",
+        "gz-button primary",
+        "gz-button social (Apple, Google)",
+        "gz-note (demo)"
+      ],
+      "works": "Validation (email format, 6+ char password), show/hide password, continue as guest, switch to sign-up.",
+      "notes": "No auth server: any valid-looking credentials create a local profile. Social buttons are visual only.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 908,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S05.dc.html",
+      "verifiedNavigationTo": [
+        "home"
+      ]
+    },
+    {
+      "id": "GZ-S06",
+      "previewKey": "auth-signup",
+      "group": "Account",
+      "name": {
+        "ar": "إنشاء حساب",
+        "en": "Sign up"
+      },
+      "proposedRoute": "/auth/signup",
+      "bottomTab": null,
+      "status": "demo",
+      "purpose": "Account creation with name, email, password.",
+      "components": [
+        "gz-segment",
+        "gz-input ×3",
+        "gz-button primary",
+        "gz-note (demo)"
+      ],
+      "works": "Validation, then continues to Setup.",
+      "notes": "Local only; no email verification or password reset.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 957,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S06.dc.html",
+      "verifiedNavigationTo": [
+        "home"
+      ]
+    },
+    {
+      "id": "GZ-S07",
+      "previewKey": "setup-1",
+      "group": "Setup",
+      "name": {
+        "ar": "الخبرة والمصطلحات",
+        "en": "Experience & terminology"
+      },
+      "proposedRoute": "/setup/experience",
+      "bottomTab": null,
+      "status": "implemented",
+      "purpose": "Step 1 of 3: experience level and US/UK terminology preference.",
+      "components": [
+        "gz-level-card",
+        "gz-segment (US/UK)",
+        "gz-progress dots"
+      ],
+      "works": "Select level and terms; Back/Skip/Next.",
+      "notes": "Order in prototype: experience → interests → tools.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S07.dc.html",
+      "verifiedNavigationTo": [
+        "home"
+      ]
+    },
+    {
+      "id": "GZ-S08",
+      "previewKey": "setup-2",
+      "group": "Setup",
+      "name": {
+        "ar": "الاهتمامات",
+        "en": "Interests"
+      },
+      "proposedRoute": "/setup/interests",
+      "bottomTab": null,
+      "status": "implemented",
+      "purpose": "Step 2 of 3: pick project interests (multi-select).",
+      "components": [
+        "gz-photo-chip card",
+        "gz-progress dots"
+      ],
+      "works": "Multi-select categories.",
+      "notes": "Category photos are placeholders.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S08.dc.html",
+      "verifiedNavigationTo": [
+        "home"
+      ]
+    },
+    {
+      "id": "GZ-S09",
+      "previewKey": "setup-3",
+      "group": "Setup",
+      "name": {
+        "ar": "الأدوات والخيوط",
+        "en": "Hooks, yarn & accessories"
+      },
+      "proposedRoute": "/setup/tools",
+      "bottomTab": null,
+      "status": "implemented",
+      "purpose": "Step 3 of 3: hook sizes, yarn types and accessories you own.",
+      "components": [
+        "gz-chip multi-select",
+        "gz-photo yarn cards"
+      ],
+      "works": "Multi-select; finishing saves the profile and opens Home.",
+      "notes": "Saved to local storage.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S09.dc.html",
+      "verifiedNavigationTo": [
+        "home"
+      ]
+    },
+    {
+      "id": "GZ-S10",
+      "previewKey": "home",
+      "group": "Main",
+      "name": {
+        "ar": "الرئيسية",
+        "en": "Home"
+      },
+      "proposedRoute": "/tabs/home",
+      "bottomTab": "home",
+      "status": "implemented",
+      "purpose": "Dashboard: current project, tools summary, quick actions, past projects, store teaser.",
+      "components": [
+        "gz-avatar",
+        "gz-icon-button ×2",
+        "gz-hero (current project)",
+        "gz-quick-tile ×6",
+        "gz-hscroll cards",
+        "gz-tab-bar"
+      ],
+      "works": "Continue project, open any quick action, notifications and favourites sheets, tools sheet.",
+      "notes": "Store teaser is coming-soon content.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 1582,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S10.dc.html",
+      "verifiedNavigationTo": [
+        "ai",
+        "learn",
+        "newp",
+        "patterns",
+        "pdetail",
+        "projects",
+        "settings",
+        "sheet:notif",
+        "sheet:tools",
+        "store",
+        "terms",
+        "tracker"
+      ]
+    },
+    {
+      "id": "GZ-S11",
+      "previewKey": "projects",
+      "group": "Projects",
+      "name": {
+        "ar": "مشاريعي",
+        "en": "My projects"
+      },
+      "proposedRoute": "/tabs/projects",
+      "bottomTab": "projects",
+      "status": "implemented",
+      "purpose": "Projects grouped by status tabs.",
+      "components": [
+        "gz-segment (status)",
+        "gz-project-card",
+        "gz-tab-bar"
+      ],
+      "works": "Switch status tab, open project, new project.",
+      "notes": "Seven sample projects are seeded; stored locally.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S11.dc.html",
+      "verifiedNavigationTo": [
+        "newp",
+        "pdetail"
+      ]
+    },
+    {
+      "id": "GZ-S12",
+      "previewKey": "pdetail",
+      "group": "Projects",
+      "name": {
+        "ar": "تفاصيل المشروع",
+        "en": "Project details"
+      },
+      "proposedRoute": "/projects/:id",
+      "bottomTab": "projects",
+      "status": "implemented",
+      "purpose": "Everything about one project: cover, status, counting mode, linked pattern, materials, time, photos, notes.",
+      "components": [
+        "gz-hero image",
+        "gz-segment",
+        "gz-link-card",
+        "gz-stat tiles",
+        "gz-textarea",
+        "gz-button"
+      ],
+      "works": "Change status, switch counter mode, link/unlink pattern, add progress photos (real uploads), edit notes, resume tracking.",
+      "notes": "Photos are real user uploads, resized and kept in local storage.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 1469,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S12.dc.html",
+      "verifiedNavigationTo": [
+        "home",
+        "pat",
+        "tracker"
+      ]
+    },
+    {
+      "id": "GZ-S13",
+      "previewKey": "newp",
+      "group": "Projects",
+      "name": {
+        "ar": "مشروع جديد",
+        "en": "New project"
+      },
+      "proposedRoute": "/projects/new",
+      "bottomTab": "projects",
+      "status": "implemented",
+      "purpose": "Create a project with category, hook, yarn, cover, target and optional pattern text.",
+      "components": [
+        "gz-input",
+        "gz-chip groups",
+        "gz-stepper presets",
+        "gz-textarea",
+        "gz-button"
+      ],
+      "works": "Validation, preset targets, pattern text parsing with live feedback, save.",
+      "notes": "Pattern text is parsed deterministically (sc, hdc, dc, tr, inc, dec, groups, repeats, totals).",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 1100,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S13.dc.html",
+      "verifiedNavigationTo": [
+        "home"
+      ]
+    },
+    {
+      "id": "GZ-S14",
+      "previewKey": "tracker-simple",
+      "group": "Tracker",
+      "name": {
+        "ar": "العدّاد البسيط",
+        "en": "Smart tracker — simple"
+      },
+      "proposedRoute": "/tabs/tracker",
+      "bottomTab": "tracker",
+      "status": "implemented",
+      "purpose": "Big counter for round-based work with per-tap increments, remaining count, undo and reset.",
+      "components": [
+        "gz-ring",
+        "gz-count-button",
+        "gz-stepper",
+        "gz-icon-button",
+        "gz-badge tiles",
+        "gz-sheet (config/reset)"
+      ],
+      "works": "Count in increments of N without exceeding the round target, undo, reset round/project, timer.",
+      "notes": "Remainder rule: a tap never exceeds the target (e.g. 3+3+2).",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S14.dc.html",
+      "verifiedNavigationTo": [
+        "newp",
+        "pat",
+        "patterns",
+        "sheet:cfg",
+        "sheet:picker",
+        "sheet:reset"
+      ]
+    },
+    {
+      "id": "GZ-S15",
+      "previewKey": "tracker-pattern",
+      "group": "Tracker",
+      "name": {
+        "ar": "العدّاد حسب الباترن",
+        "en": "Smart tracker — pattern-aware"
+      },
+      "proposedRoute": "/tabs/tracker?mode=pattern",
+      "bottomTab": "tracker",
+      "status": "implemented",
+      "purpose": "Follows a parsed pattern: current round, stitch-by-stitch action, produced/consumed counts and inc/dec semantics.",
+      "components": [
+        "gz-round-pills",
+        "gz-round-card",
+        "gz-ring",
+        "gz-stat tiles",
+        "gz-segment (action/group/round)",
+        "gz-count-button"
+      ],
+      "works": "Per-action, per-group and per-round counting; inc consumes 1 produces 2, dec consumes 2 produces 1; undo; open pattern reader.",
+      "notes": "Verified in offline tests against the sample 11-round head pattern.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 1023,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S15.dc.html",
+      "verifiedNavigationTo": [
+        "newp",
+        "pat",
+        "patterns",
+        "sheet:cfg",
+        "sheet:picker",
+        "sheet:reset"
+      ]
+    },
+    {
+      "id": "GZ-S16",
+      "previewKey": "patterns",
+      "group": "Patterns",
+      "name": {
+        "ar": "مكتبة الباترنات",
+        "en": "Pattern library"
+      },
+      "proposedRoute": "/patterns",
+      "bottomTab": "home",
+      "status": "implemented",
+      "purpose": "List of saved patterns with source, level and term system.",
+      "components": [
+        "gz-pattern-card",
+        "gz-button (add)"
+      ],
+      "works": "Open pattern, add pattern.",
+      "notes": "Two sample patterns; user patterns are stored locally.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S16.dc.html",
+      "verifiedNavigationTo": [
+        "addpat",
+        "home",
+        "pat"
+      ]
+    },
+    {
+      "id": "GZ-S17",
+      "previewKey": "pat",
+      "group": "Patterns",
+      "name": {
+        "ar": "قارئ الباترن",
+        "en": "Pattern reader"
+      },
+      "proposedRoute": "/patterns/:id",
+      "bottomTab": "home",
+      "status": "implemented",
+      "purpose": "Round-by-round reader with expanded explanation and start-tracking.",
+      "components": [
+        "gz-round-pills",
+        "gz-round-card",
+        "gz-note",
+        "gz-button"
+      ],
+      "works": "Navigate rounds, explain round, link to dictionary, start tracking.",
+      "notes": "Explanations are deterministic, not AI.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 1899,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S17.dc.html",
+      "verifiedNavigationTo": [
+        "home",
+        "terms",
+        "tracker"
+      ]
+    },
+    {
+      "id": "GZ-S18",
+      "previewKey": "addpat",
+      "group": "Patterns",
+      "name": {
+        "ar": "إضافة باترن",
+        "en": "Add pattern"
+      },
+      "proposedRoute": "/patterns/new",
+      "bottomTab": "home",
+      "status": "demo",
+      "purpose": "Add a pattern from pasted text or an image/PDF reference.",
+      "components": [
+        "gz-segment",
+        "gz-textarea",
+        "gz-input",
+        "gz-button"
+      ],
+      "works": "Paste text → parsed and validated; saved to library.",
+      "notes": "Image/PDF text extraction (OCR) is not available: the file is stored as a reference only.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S18.dc.html",
+      "verifiedNavigationTo": [
+        "home"
+      ]
+    },
+    {
+      "id": "GZ-S19",
+      "previewKey": "learn",
+      "group": "Learn",
+      "name": {
+        "ar": "تعلّمي",
+        "en": "Learn (video library)"
+      },
+      "proposedRoute": "/tabs/learn",
+      "bottomTab": "learn",
+      "status": "demo",
+      "purpose": "Searchable, filterable list of tutorial videos.",
+      "components": [
+        "gz-search input",
+        "gz-chip filters",
+        "gz-video-card list"
+      ],
+      "works": "Search, category and level filters, saved filter, open video.",
+      "notes": "Videos are catalogue entries that link to external search/links; no hosted video player or media.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 1909,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S19.dc.html",
+      "verifiedNavigationTo": [
+        "vdetail"
+      ]
+    },
+    {
+      "id": "GZ-S20",
+      "previewKey": "vdetail",
+      "group": "Learn",
+      "name": {
+        "ar": "تفاصيل الفيديو",
+        "en": "Video detail"
+      },
+      "proposedRoute": "/learn/:id",
+      "bottomTab": "learn",
+      "status": "demo",
+      "purpose": "Video information, timestamp notes and a mini stitch counter to practice alongside.",
+      "components": [
+        "gz-photo",
+        "gz-clock",
+        "gz-count-button",
+        "gz-textarea",
+        "gz-chip"
+      ],
+      "works": "Counter, practice clock, timestamp notes, favourite, project link.",
+      "notes": "No real video playback: the clock is a manual practice timer.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 1556,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S20.dc.html",
+      "verifiedNavigationTo": [
+        "home"
+      ]
+    },
+    {
+      "id": "GZ-S21",
+      "previewKey": "ai",
+      "group": "Assistant",
+      "name": {
+        "ar": "المساعد الذكي",
+        "en": "AI assistant"
+      },
+      "proposedRoute": "/tabs/assistant",
+      "bottomTab": "ai",
+      "status": "demo",
+      "purpose": "Chat entry with suggested questions and context of the current project.",
+      "components": [
+        "gz-chat-bubble",
+        "gz-chip suggestions",
+        "gz-input bar",
+        "gz-note (demo)"
+      ],
+      "works": "Suggested prompts, free text, photo attach (preview only).",
+      "notes": "Replies come from a scripted rule set; no model is connected. Photo analysis is not available.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": null,
+        "internalScroll": true
+      },
+      "artboard": "Screen_S21.dc.html",
+      "verifiedNavigationTo": []
+    },
+    {
+      "id": "GZ-S22",
+      "previewKey": "terms",
+      "group": "Tools",
+      "name": {
+        "ar": "قاموس المصطلحات",
+        "en": "Terminology dictionary"
+      },
+      "proposedRoute": "/tools/terms",
+      "bottomTab": "home",
+      "status": "implemented",
+      "purpose": "US and UK crochet terms with examples.",
+      "components": [
+        "gz-segment",
+        "gz-search",
+        "gz-term-card"
+      ],
+      "works": "Search, switch US/UK display.",
+      "notes": "15 terms.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 3466,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S22.dc.html",
+      "verifiedNavigationTo": [
+        "home"
+      ]
+    },
+    {
+      "id": "GZ-S23",
+      "previewKey": "terms-conv",
+      "group": "Tools",
+      "name": {
+        "ar": "محوّل المصطلحات",
+        "en": "Terminology converter"
+      },
+      "proposedRoute": "/tools/converter",
+      "bottomTab": "home",
+      "status": "implemented",
+      "purpose": "Convert pattern text between US and UK terms.",
+      "components": [
+        "gz-segment",
+        "gz-textarea",
+        "gz-code",
+        "gz-button"
+      ],
+      "works": "Boundary-safe US↔UK conversion with a count of converted abbreviations.",
+      "notes": "sc↔dc, hdc↔htr, dc↔tr, tr↔dtr, dtr↔trtr.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S23.dc.html",
+      "verifiedNavigationTo": [
+        "home"
+      ]
+    },
+    {
+      "id": "GZ-S24",
+      "previewKey": "store",
+      "group": "Tools",
+      "name": {
+        "ar": "المتجر",
+        "en": "Store (coming soon)"
+      },
+      "proposedRoute": "/store",
+      "bottomTab": "home",
+      "status": "demo",
+      "purpose": "Teaser for a future marketplace; email interest capture.",
+      "components": [
+        "gz-hero",
+        "gz-category tiles",
+        "gz-input",
+        "gz-button"
+      ],
+      "works": "Notify-me form stores the email locally.",
+      "notes": "No products, prices or checkout exist.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 1181,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S24.dc.html",
+      "verifiedNavigationTo": [
+        "home"
+      ]
+    },
+    {
+      "id": "GZ-S25",
+      "previewKey": "settings",
+      "group": "Tools",
+      "name": {
+        "ar": "الإعدادات",
+        "en": "Settings"
+      },
+      "proposedRoute": "/settings",
+      "bottomTab": "home",
+      "status": "implemented",
+      "purpose": "Profile, language, terminology, tools, notifications, reset and sign-out.",
+      "components": [
+        "gz-avatar",
+        "gz-segment",
+        "gz-chip groups",
+        "gz-list rows",
+        "gz-sheet (reset)"
+      ],
+      "works": "Edit profile, language, tools, replay intro, reset all data, log out.",
+      "notes": "All data is local to the device/browser.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 1127,
+        "internalScroll": false
+      },
+      "artboard": "Screen_S25.dc.html",
+      "verifiedNavigationTo": [
+        "home",
+        "ob",
+        "sheet:resetAll",
+        "sheet:tools"
+      ]
+    },
+    {
+      "id": "GZ-T01",
+      "previewKey": "projects-done",
+      "group": "States",
+      "name": {
+        "ar": "المشاريع — المكتملة",
+        "en": "Projects — done tab"
+      },
+      "proposedRoute": "/tabs/projects?status=done",
+      "bottomTab": "projects",
+      "status": "implemented",
+      "purpose": "Status tab variant.",
+      "components": [
+        "gz-segment",
+        "gz-project-card"
+      ],
+      "works": "Same as GZ-S11.",
+      "notes": "State of GZ-S11.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_T01.dc.html",
+      "verifiedNavigationTo": [
+        "newp",
+        "pdetail"
+      ]
+    },
+    {
+      "id": "GZ-T02",
+      "previewKey": "projects-empty",
+      "group": "States",
+      "name": {
+        "ar": "المشاريع — حالة فارغة",
+        "en": "Projects — empty state"
+      },
+      "proposedRoute": "/tabs/projects",
+      "bottomTab": "projects",
+      "status": "implemented",
+      "purpose": "Empty state with a single call to action.",
+      "components": [
+        "gz-empty-state",
+        "gz-button"
+      ],
+      "works": "New project.",
+      "notes": "Shown when a status tab has no projects (rendered here with no projects at all).",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_T02.dc.html",
+      "verifiedNavigationTo": [
+        "newp",
+        "pdetail"
+      ]
+    },
+    {
+      "id": "GZ-T03",
+      "previewKey": "tracker-done",
+      "group": "States",
+      "name": {
+        "ar": "العدّاد — اكتمل الدور",
+        "en": "Tracker — round complete"
+      },
+      "proposedRoute": "/tabs/tracker",
+      "bottomTab": "tracker",
+      "status": "implemented",
+      "purpose": "Completion state: Mint ring, disabled count button, success note.",
+      "components": [
+        "gz-ring (mint)",
+        "gz-count-button (done)",
+        "gz-note success"
+      ],
+      "works": "Reset / undo / next round.",
+      "notes": "State of GZ-S14.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": 844,
+        "internalScroll": false
+      },
+      "artboard": "Screen_T03.dc.html",
+      "verifiedNavigationTo": [
+        "newp",
+        "pat",
+        "patterns",
+        "sheet:cfg",
+        "sheet:picker",
+        "sheet:reset"
+      ]
+    },
+    {
+      "id": "GZ-T04",
+      "previewKey": "ai-chat",
+      "group": "States",
+      "name": {
+        "ar": "المساعد — محادثة",
+        "en": "Assistant — conversation"
+      },
+      "proposedRoute": "/tabs/assistant",
+      "bottomTab": "ai",
+      "status": "demo",
+      "purpose": "A conversation with the scripted demo reply.",
+      "components": [
+        "gz-chat-bubble",
+        "gz-note (demo reply label)"
+      ],
+      "works": "Continue chatting.",
+      "notes": "Reply is generated by the local rule set and labelled “demo reply”.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": null,
+        "internalScroll": true
+      },
+      "artboard": "Screen_T04.dc.html",
+      "verifiedNavigationTo": []
+    },
+    {
+      "id": "GZ-T05",
+      "previewKey": "sheet-cfg",
+      "group": "States",
+      "name": {
+        "ar": "ورقة إعدادات العدّاد",
+        "en": "Sheet — counter settings"
+      },
+      "proposedRoute": "(overlay on tracker)",
+      "bottomTab": "tracker",
+      "status": "implemented",
+      "purpose": "Bottom sheet: round, target, per-tap step with presets.",
+      "components": [
+        "gz-sheet",
+        "gz-stepper",
+        "gz-chip presets"
+      ],
+      "works": "Change target and per-tap step; presets.",
+      "notes": "Overlay state.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": null,
+        "internalScroll": true
+      },
+      "artboard": "Screen_T05.dc.html",
+      "verifiedNavigationTo": []
+    },
+    {
+      "id": "GZ-T06",
+      "previewKey": "sheet-reset",
+      "group": "States",
+      "name": {
+        "ar": "ورقة إعادة الضبط",
+        "en": "Sheet — reset confirmation"
+      },
+      "proposedRoute": "(overlay on tracker)",
+      "bottomTab": "tracker",
+      "status": "implemented",
+      "purpose": "Confirm resetting the round.",
+      "components": [
+        "gz-sheet",
+        "gz-button destructive"
+      ],
+      "works": "Cancel / confirm.",
+      "notes": "Overlay state.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": null,
+        "internalScroll": true
+      },
+      "artboard": "Screen_T06.dc.html",
+      "verifiedNavigationTo": []
+    },
+    {
+      "id": "GZ-T07",
+      "previewKey": "sheet-tools",
+      "group": "States",
+      "name": {
+        "ar": "ورقة الأدوات",
+        "en": "Sheet — tools"
+      },
+      "proposedRoute": "(overlay)",
+      "bottomTab": "tracker",
+      "status": "implemented",
+      "purpose": "Quick tools: dictionary, converter, assistant shortcuts.",
+      "components": [
+        "gz-sheet",
+        "gz-quick-tile"
+      ],
+      "works": "Open tools.",
+      "notes": "Overlay state.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": null,
+        "internalScroll": true
+      },
+      "artboard": "Screen_T07.dc.html",
+      "verifiedNavigationTo": []
+    },
+    {
+      "id": "GZ-T09",
+      "previewKey": "sheet-resetall",
+      "group": "States",
+      "name": {
+        "ar": "ورقة مسح كل البيانات",
+        "en": "Sheet — erase all data"
+      },
+      "proposedRoute": "(overlay on settings)",
+      "bottomTab": "home",
+      "status": "implemented",
+      "purpose": "Destructive confirmation for erasing local data.",
+      "components": [
+        "gz-sheet",
+        "gz-button destructive"
+      ],
+      "works": "Cancel / erase.",
+      "notes": "Overlay state.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": null,
+        "internalScroll": true
+      },
+      "artboard": "Screen_T09.dc.html",
+      "verifiedNavigationTo": []
+    },
+    {
+      "id": "GZ-T08",
+      "previewKey": "sheet-notif",
+      "group": "States",
+      "name": {
+        "ar": "ورقة الإشعارات",
+        "en": "Sheet — notifications"
+      },
+      "proposedRoute": "(overlay on home)",
+      "bottomTab": "home",
+      "status": "demo",
+      "purpose": "Notification centre explaining reminders are coming soon.",
+      "components": [
+        "gz-sheet",
+        "gz-note"
+      ],
+      "works": "Close.",
+      "notes": "No push or local notifications exist yet.",
+      "frame": {
+        "width": 390,
+        "height": 844,
+        "fullScrollHeight": null,
+        "internalScroll": true
+      },
+      "artboard": "Screen_T08.dc.html",
+      "verifiedNavigationTo": []
+    }
+  ]
+}

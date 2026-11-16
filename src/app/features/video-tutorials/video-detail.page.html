@@ -1,0 +1,99 @@
+<ion-header class="gz-header ion-no-border">
+  <div class="gz-top">
+    <button type="button" class="gz-icb" (click)="nav.back()" [attr.aria-label]="t().back"><svg gzIcon="arrowl" [flip]="true" /></button>
+    <h1 class="gz-ttl gz-hd" style="font-size: 16px">{{ t().tutorial }}</h1>
+    <button type="button" class="gz-icb" (click)="toggleFav()" [attr.aria-pressed]="vm().fav" [attr.aria-label]="t().favs" [style.color]="vm().fav ? 'var(--gz-pink-ink)' : 'var(--gz-text)'">
+      <svg gzIcon="heart" [fill]="vm().fav" />
+    </button>
+  </div>
+</ion-header>
+
+<ion-content class="gz-scroll">
+  <div class="gz-pad">
+    @if (embed(); as src) {
+      <div class="overflow-hidden rounded-lg bg-ink" style="aspect-ratio: 16 / 9">
+        <iframe
+          [src]="src"
+          [title]="vm().title"
+          class="h-full w-full border-0"
+          allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"
+        ></iframe>
+      </div>
+      <p class="gz-xs gz-mute mt-1.5">{{ t().creator }}: {{ d().creator || i18n.q('كما هو ظاهر على يوتيوب', 'as shown on YouTube') }} · YouTube</p>
+    } @else {
+      <gz-photo [tone]="vm().tone" [icon]="null" [src]="vm().img" [alt]="vm().title" height="190px" extraClass="r28">
+        <span class="relative z-[1] flex h-[62px] w-[62px] items-center justify-center rounded-full bg-primary text-white"><svg gzIcon="play" size="l" [fill]="true" /></span>
+      </gz-photo>
+    }
+    <h1 class="gz-h2 gz-hd" style="margin: 14px 0 4px">{{ vm().title }}</h1>
+    <div class="flex flex-wrap gap-1.5"><span class="gz-badge {{ vm().lvlCls }}">{{ vm().lvlName }}</span><span class="gz-badge">{{ vm().catName }}</span></div>
+    <p class="gz-mute gz-sm" style="margin: 8px 0 12px">{{ vm().desc }}</p>
+
+    <a class="gz-btn" [href]="vm().searchUrl" target="_blank" rel="noopener noreferrer"><svg gzIcon="external" />{{ t().openYT }}</a>
+    <div class="gz-note mt-2.5"><svg gzIcon="info" size="s" /><span>{{ t().noEmbed }}</span></div>
+
+    <label class="gz-lbl" for="vd-link">{{ t().myVideoLink }}</label>
+    <div class="gz-in"><svg gzIcon="external" /><input id="vd-link" type="url" dir="ltr" inputmode="url" [value]="d().link" (input)="onLink($event)" placeholder="https://www.youtube.com/watch?v=…" /></div>
+    @if (d().link && !ytId()) {
+      <div class="gz-err">{{ i18n.q('ده مش رابط يوتيوب صالح.', 'That is not a valid YouTube link.') }}</div>
+    }
+    @if (ytId()) {
+      <label class="gz-lbl" for="vd-creator">{{ t().creator }}</label>
+      <div class="gz-in"><svg gzIcon="user" /><input id="vd-creator" type="text" maxlength="120" [value]="d().creator ?? ''" (input)="onCreator($event)" [placeholder]="i18n.q('اسم القناة', 'Channel name')" /></div>
+      <a class="gz-btn3 w mt-2" [href]="openAt(0)" target="_blank" rel="noopener noreferrer"><svg gzIcon="play" size="s" />{{ t().openMyLink }}</a>
+    }
+
+    <div class="gz-sec"><h2 class="gz-h3 gz-hd">{{ t().assocProject }}</h2></div>
+    <div class="gz-hs" style="margin-top: -4px">
+      @for (x of projChoices(); track x.id) {
+        <button type="button" class="gz-chip sm" [class.on]="linkedProject()?.id === x.id" [attr.aria-pressed]="linkedProject()?.id === x.id" (click)="linkProject(x.id)">{{ x.name }}</button>
+      }
+    </div>
+
+    @if (counter(); as c) {
+      <div class="gz-card mt-1.5" style="background: var(--gz-primary-tint); box-shadow: none; border: 1.5px solid var(--gz-border)">
+        <div class="flex items-center gap-1.5"><svg gzIcon="counter" size="s" style="color: var(--gz-primary)" /><span class="gz-b gz-sm flex-1">{{ t().companionCounter }}: {{ c.name }}</span></div>
+        <div class="mt-2 flex items-center gap-3">
+          <div class="flex-1"><div class="gz-hd gz-num" style="font-size: 36px">{{ c.main }}</div><div class="gz-xs gz-mute">{{ c.sub }}</div></div>
+          <button type="button" class="gz-icb" style="width: 54px; height: 54px" (click)="undo()" [attr.aria-label]="t().undo"><svg gzIcon="undo" /></button>
+          <button type="button" class="gz-btn" style="width: auto; min-width: 96px; min-height: 54px" (click)="tap()" [disabled]="c.disabled"><svg gzIcon="plus" /><span class="gz-ltr">{{ c.label }}</span></button>
+        </div>
+      </div>
+    }
+
+    <div class="gz-sec"><h2 class="gz-h3 gz-hd">{{ t().timestamps }}</h2></div>
+    <div class="gz-card soft">
+      <div class="gz-xs gz-mute mb-1.5">{{ t().playheadHint }}</div>
+      <div class="flex items-center justify-center gap-2">
+        <button type="button" class="gz-btn3" style="padding: 0 12px; min-width: 56px" (click)="shift(-10)" aria-label="-10s"><span class="gz-ltr">−10s</span></button>
+        <div class="gz-hd gz-num text-center" style="font-size: 36px; min-width: 112px" role="timer">{{ clockText() }}</div>
+        <button type="button" class="gz-btn3" style="padding: 0 12px; min-width: 56px" (click)="shift(10)" aria-label="+10s"><span class="gz-ltr">+10s</span></button>
+      </div>
+      <div class="mt-2.5 flex gap-2">
+        <button type="button" class="gz-btn3 flex-1" (click)="toggleClock()"><svg [gzIcon]="clockOn() ? 'pause' : 'play'" size="s" />{{ clockOn() ? i18n.q('إيقاف مؤقت', 'Pause') : i18n.q('تشغيل المؤقّت', 'Start timer') }}</button>
+        <button type="button" class="gz-btn3 flex-1" (click)="resetClock()"><svg gzIcon="reset" size="s" />{{ t().reset }}</button>
+      </div>
+      <label class="gz-lbl" for="vd-tsn" style="margin-top: 12px">{{ t().tsNote }}</label>
+      <div class="gz-in"><svg gzIcon="notes" /><input id="vd-tsn" type="text" maxlength="300" [value]="tsNote()" (input)="tsNote.set($any($event.target).value)" [placeholder]="t().tsNotePh" /></div>
+      <button type="button" class="gz-btn mt-2.5" style="min-height: 50px" (click)="saveStamp()"><svg gzIcon="bookmark" />{{ t().saveTs }}</button>
+    </div>
+    <div class="mt-2.5 flex flex-col gap-2">
+      @for (s of stamps(); track s.id) {
+        <div class="gz-card soft flex items-center gap-2.5" style="padding: 10px 12px">
+          <span class="gz-pill cur flex-none">{{ s.time }}</span>
+          <span class="gz-sm flex-1">{{ s.note }}</span>
+          <button type="button" class="gz-btn3" style="min-height: 44px; padding: 0 12px; font-size: 13px" (click)="resumeAt(s.sec)">{{ t().resumeFrom }}</button>
+          <button type="button" class="gz-reset flex h-11 w-10 items-center justify-center" style="color: var(--gz-pink-ink)" (click)="deleteStamp(s.id)" [attr.aria-label]="t().delete"><svg gzIcon="trash" size="s" /></button>
+        </div>
+      }
+    </div>
+    @if (!stamps().length) {
+      <div class="gz-note lav mt-2"><span>{{ t().noStamps }}</span></div>
+    }
+
+    <div class="gz-sec"><h2 class="gz-h3 gz-hd">{{ t().notes }}</h2></div>
+    <textarea class="gz-ta" [value]="d().notes" (input)="onNotes($event)" [placeholder]="t().vNotesPh" [attr.aria-label]="t().notes" maxlength="10000"></textarea>
+  </div>
+</ion-content>

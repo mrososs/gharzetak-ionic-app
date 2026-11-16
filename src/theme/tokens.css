@@ -1,0 +1,111 @@
+/*
+ * Gharzetak design tokens — exact values from the approved Design System
+ * (Claude Design artifact → project/handoff/design-tokens.json, theme-variables.scss).
+ * Do not hand-edit individual colours in screens; use these variables / Tailwind theme keys.
+ */
+:root {
+  /* brand */
+  --gz-primary: #813db5;
+  --gz-primary-hover: #6f3199;
+  --gz-primary-pressed: #5d2884;
+  --gz-primary-tint: #f3e8fb;
+  --gz-lavender: #c5a4f4;
+  --gz-lavender-100: #f1e8fd;
+  --gz-lavender-200: #e2d0fa;
+  --gz-pink: #f56fa8;
+  --gz-pink-100: #ffe3ef;
+  --gz-pink-200: #fdc2db;
+  --gz-pink-ink: #a81f5e;
+  --gz-peach: #ffccaa;
+  --gz-peach-100: #ffeadb;
+  --gz-peach-ink: #8a3f12;
+  --gz-mint: #a6dcc9;
+  --gz-mint-100: #ddf3ea;
+  --gz-mint-200: #c6ebdd;
+  --gz-mint-ink: #17594a;
+
+  /* surfaces & text */
+  --gz-bg: #fff9f5;
+  --gz-surface: #ffffff;
+  --gz-surface-elevated: #fff1f7;
+  --gz-border: #ebddea;
+  --gz-border-strong: #d5bfd2;
+  --gz-text: #35253e;
+  --gz-text-2: #5b4866;
+  --gz-text-3: #73608a;
+
+  /* semantic */
+  --gz-success: #17594a;
+  --gz-success-bg: #ddf3ea;
+  --gz-warning: #8a5a00;
+  --gz-warning-bg: #fff0cc;
+  --gz-error: #b3213f;
+  --gz-error-bg: #ffe4ea;
+  --gz-disabled-bg: #efe8f1;
+  --gz-disabled-fg: #8e7e99;
+
+  /* elevation */
+  --gz-shadow-card: 0 6px 22px rgba(53, 37, 62, 0.1);
+  --gz-shadow-raised: 0 8px 18px rgba(129, 61, 181, 0.3);
+  --gz-shadow-sheet: 0 -6px 20px rgba(53, 37, 62, 0.08);
+  --gz-shadow-pink: 0 8px 18px rgba(245, 111, 168, 0.38);
+  --gz-shadow-big: 0 12px 26px rgba(129, 61, 181, 0.36);
+
+  /* typography — self-hosted variable fonts (offline) + Google Fonts names as fallback */
+  --gz-font: 'Playpen Sans Arabic Variable', 'Playpen Sans Arabic', 'Playpen Sans Variable', 'Playpen Sans', 'Noto Sans Arabic', 'Segoe UI', Tahoma, system-ui, sans-serif;
+  --gz-font-latin: 'Playpen Sans Variable', 'Playpen Sans', 'Playpen Sans Arabic Variable', 'Playpen Sans Arabic', 'Segoe UI', system-ui, sans-serif;
+  --gz-fs-caption: 12px;
+  --gz-fs-small: 13px;
+  --gz-fs-body-sm: 14px;
+  --gz-fs-body: 15px;
+  --gz-fs-body-lg: 16px;
+  --gz-fs-title: 18px;
+  --gz-fs-h2: 20px;
+  --gz-fs-h1: 24px;
+  --gz-fs-num-sm: 28px;
+  --gz-fs-num-md: 36px;
+  --gz-fs-num-xl: 68px;
+  --gz-fw-regular: 400;
+  --gz-fw-medium: 500;
+  --gz-fw-semibold: 600;
+  --gz-fw-bold: 700;
+  --gz-fw-heavy: 800;
+  --gz-lh-ar: 1.7;
+  --gz-lh-en: 1.55;
+  --gz-lh-heading: 1.45;
+
+  /* radius */
+  --gz-r-xs: 12px;
+  --gz-r-sm: 16px;
+  --gz-r-md: 20px;
+  --gz-r-lg: 28px;
+  --gz-r-pill: 999px;
+
+  /* spacing */
+  --gz-space-1: 4px;
+  --gz-space-2: 8px;
+  --gz-space-3: 12px;
+  --gz-space-4: 16px;
+  --gz-space-5: 20px;
+  --gz-space-6: 24px;
+  --gz-space-7: 32px;
+  --gz-space-8: 40px;
+  --gz-space-9: 48px;
+
+  /* layout */
+  --gz-touch: 44px;
+  --gz-nav-h: 78px;
+  --gz-screen-pad: 20px;
+  --gz-card-pad: 16px;
+  --gz-frame-w: 390px;
+  --gz-frame-h: 844px;
+  --gz-safe-top: var(--ion-safe-area-top, env(safe-area-inset-top, 0px));
+  --gz-safe-bottom: var(--ion-safe-area-bottom, env(safe-area-inset-bottom, 0px));
+
+  /* motion */
+  --gz-dur-fade: 300ms;
+  --gz-dur-sheet: 280ms;
+  --gz-dur-toast: 300ms;
+  --gz-dur-pop: 600ms;
+  --gz-dur-glow: 1400ms;
+}

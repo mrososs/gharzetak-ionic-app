@@ -1,0 +1,155 @@
+{
+  "source": "executed against Main.dc.html (test/edges.js)",
+  "edges": {
+    "ob>auth": [
+      "ob.skip",
+      "ob.login"
+    ],
+    "auth>home": [
+      "back",
+      "auth.guest"
+    ],
+    "setup>home": [
+      "setup.back",
+      "setup.skip"
+    ],
+    "home>settings": [
+      "go.settings"
+    ],
+    "home>sheet:notif": [
+      "home.openNotif"
+    ],
+    "home>learn": [
+      "home.openFavs",
+      "home.quick[].go"
+    ],
+    "home>tracker": [
+      "home.openCur",
+      "home.quick[].go"
+    ],
+    "home>pdetail": [
+      "home.openCurDetail",
+      "home.prev[].open"
+    ],
+    "home>newp": [
+      "go.newp",
+      "home.quick[].go"
+    ],
+    "home>sheet:tools": [
+      "home.openTools"
+    ],
+    "home>ai": [
+      "home.quick[].go"
+    ],
+    "home>patterns": [
+      "home.quick[].go"
+    ],
+    "home>terms": [
+      "home.quick[].go"
+    ],
+    "home>projects": [
+      "go.projects"
+    ],
+    "home>store": [
+      "go.store"
+    ],
+    "projects>newp": [
+      "go.newp"
+    ],
+    "projects>pdetail": [
+      "plist.items[].open"
+    ],
+    "pdetail>home": [
+      "back"
+    ],
+    "pdetail>tracker": [
+      "pd.resume",
+      "pd.openTracker"
+    ],
+    "pdetail>pat": [
+      "pd.openPat"
+    ],
+    "newp>home": [
+      "back"
+    ],
+    "tracker>sheet:picker": [
+      "trk.openPicker"
+    ],
+    "tracker>sheet:cfg": [
+      "trk.openCfg"
+    ],
+    "tracker>sheet:reset": [
+      "trk.askReset"
+    ],
+    "tracker>patterns": [
+      "go.patterns"
+    ],
+    "tracker>pat": [
+      "pt.openReader"
+    ],
+    "tracker>newp": [
+      "go.newp"
+    ],
+    "patterns>home": [
+      "back"
+    ],
+    "patterns>addpat": [
+      "go.addpat"
+    ],
+    "patterns>pat": [
+      "plib.items[].open"
+    ],
+    "pat>home": [
+      "back"
+    ],
+    "pat>terms": [
+      "pr.openTerms"
+    ],
+    "pat>tracker": [
+      "pr.track"
+    ],
+    "addpat>home": [
+      "back"
+    ],
+    "learn>vdetail": [
+      "lrn.items[].open"
+    ],
+    "vdetail>home": [
+      "back"
+    ],
+    "terms>home": [
+      "back"
+    ],
+    "store>home": [
+      "back"
+    ],
+    "settings>home": [
+      "back"
+    ],
+    "settings>sheet:tools": [
+      "home.openTools"
+    ],
+    "settings>ob": [
+      "se.replayIntro",
+      "se.logout"
+    ],
+    "settings>sheet:resetAll": [
+      "se.askResetAll"
+    ],
+    "nav>projects": [
+      "nav.items[].go"
+    ],
+    "nav>tracker": [
+      "nav.items[].go"
+    ],
+    "nav>learn": [
+      "nav.items[].go"
+    ],
+    "nav>ai": [
+      "nav.items[].go"
+    ],
+    "sheet:picker>newp": [
+      "pick.newp"
+    ]
+  }
+}

@@ -1,59 +1,68 @@
-# Gharzetak
+# غرزتك · Gharzetak
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.2.7.
+Crochet companion app — learn, track stitches, read patterns, organise projects.
+Ionic 9 + Angular 22 (standalone, signals, zoneless) + Tailwind CSS v4 + Capacitor 8 + Supabase.
+Arabic (RTL, default) and English (LTR). Built from the approved Claude Design artifact
+(see `docs/design-handoff/`).
 
-## Development server
+## Requirements (Windows)
 
-To start a local development server, run:
+| Tool | Version | Notes |
+|---|---|---|
+| Node.js | ≥ 24.15 (or 22.22.3+) | Angular 22 requirement. This machine uses a portable Node at `D:\mostqel\.tools\node24`. |
+| Docker Desktop | running | only for the local Supabase stack |
+| Android Studio | with SDK 36 | its bundled JDK 21 (`jbr`) builds the Android project; JDK 25 is too new for Gradle 8.14 |
 
-```bash
-ng serve
+## Run the web app (PowerShell)
+
+```powershell
+cd D:\mostqel\Gharzetak
+$env:PATH = "D:\mostqel\.tools\node24;" + $env:PATH   # only if the system Node is older than 24.15
+npm ci
+npx supabase start            # local backend on :55421 (first run pulls Docker images)
+Copy-Item .env.example .env   # then fill GZ_SUPABASE_URL / GZ_SUPABASE_PUBLISHABLE_KEY from `npx supabase status -o env`
+npm start                     # http://localhost:4200
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Without `.env` the app still runs in **guest-only mode** (everything stays on the device).
 
-## Code scaffolding
+## Environment variables (`.env`, git-ignored)
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+| Variable | Meaning |
+|---|---|
+| `GZ_SUPABASE_URL` | Supabase project URL (dedicated Gharzetak project) |
+| `GZ_SUPABASE_PUBLISHABLE_KEY` | publishable / anon key. Secret or service-role keys are **refused** by `scripts/set-env.mjs` |
+| `GZ_AUTH_REDIRECT_URL` | where auth emails return (empty = current origin; Android: `com.gharzetak.app://auth/callback`) |
+| `GZ_OAUTH_PROVIDERS` | `google,apple` once configured in Supabase; empty hides them behind a "not enabled" message |
+| `GZ_AI_FUNCTION` | Edge Function name for the assistant; empty = clearly-labelled demo mode |
 
-```bash
-ng generate component component-name
+## Tests
+
+```powershell
+npm test            # unit tests (Vitest): tracker engine, pattern parser, US/UK converter
+npm run test:rls    # RLS / storage / last-write-wins integration tests against the LOCAL Supabase
+npm run typecheck
+npm run build       # production build → www/browser
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## Android
 
-```bash
-ng generate --help
+```powershell
+.\scripts\android-debug.ps1          # build → cap sync → gradlew assembleDebug
+npx cap open android                 # open in Android Studio (run on device/emulator)
 ```
+The APK is `android\app\build\outputs\apk\debug\app-debug.apk`. A device cannot reach `127.0.0.1`
+on your PC — for device testing point `.env` at a hosted Supabase project (or your PC's LAN IP over HTTPS).
+iOS: `ios/` is generated; building needs macOS + Xcode (`npx cap open ios`).
 
-## Building
+## Supabase
 
-To build the project run:
+Migrations in `supabase/migrations` are the single source of truth. Setup, hosted project and provider
+configuration: `docs/implementation/supabase-setup.md`.
 
-```bash
-ng build
-```
+## Docs
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+- `docs/architecture/overview.md`, `folder-structure.md`
+- `docs/design-handoff/screen-map.md`, `design-tokens.md`, `asset-manifest.md`, `design-source-audit.md`, `source/`
+- `docs/implementation/progress.md`, `supabase-setup.md`
+- `docs/testing/test-report.md`, `visual-qa.md`

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">غرزتك</string>
+    <string name="title_activity_main">غرزتك</string>
+    <string name="package_name">com.gharzetak.app</string>
+    <string name="custom_url_scheme">com.gharzetak.app</string>
+</resources>

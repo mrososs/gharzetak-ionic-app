@@ -1,0 +1,2 @@
+-- Local development seed. Sample patterns live in migrations (they are production content).
+-- Intentionally no fake users or projects.

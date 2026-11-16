@@ -1,0 +1,44 @@
+/* Gharzetak — typography.css (generated from the prototype's CSS tokens)
+   Load the font once in index.html (or via @import):
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Playpen+Sans+Arabic:wght@100..800&family=Playpen+Sans:wght@100..800&display=swap" rel="stylesheet"> */
+:root{
+  --gz-font:'Playpen Sans Arabic','Playpen Sans','Noto Sans Arabic','Segoe UI',Tahoma,system-ui,sans-serif;
+  --gz-font-latin:'Playpen Sans','Playpen Sans Arabic','Segoe UI',system-ui,sans-serif;
+  --gz-fs-caption:12px;
+  --gz-fs-small:13px;
+  --gz-fs-body-sm:14px;
+  --gz-fs-body:15px;
+  --gz-fs-body-lg:16px;
+  --gz-fs-title:18px;
+  --gz-fs-h2:20px;
+  --gz-fs-h1:24px;
+  --gz-fs-num-sm:28px;
+  --gz-fs-num-md:36px;
+  --gz-fs-num-xl:68px;
+  --gz-fw-regular:400;
+  --gz-fw-medium:500;
+  --gz-fw-semibold:600;
+  --gz-fw-bold:700;
+  --gz-fw-heavy:800;
+  --gz-lh-ar:1.7;
+  --gz-lh-en:1.55;
+  --gz-lh-heading:1.45;
+}
+html{font-family:var(--gz-font);font-size:var(--gz-fs-body);font-weight:var(--gz-fw-regular);line-height:var(--gz-lh-ar);color:var(--gz-text,#35253E)}
+html[dir="ltr"]{font-family:var(--gz-font-latin);line-height:var(--gz-lh-en)}
+.gz-h1{font-size:var(--gz-fs-h1);font-weight:var(--gz-fw-bold);line-height:1.5}
+html[dir="ltr"] .gz-h1{line-height:1.25}
+.gz-h2{font-size:var(--gz-fs-h2);font-weight:var(--gz-fw-bold);line-height:1.5}
+.gz-title{font-size:var(--gz-fs-title);font-weight:var(--gz-fw-bold);line-height:1.5}
+.gz-card-title{font-size:var(--gz-fs-body-lg);font-weight:var(--gz-fw-semibold);line-height:1.45}
+.gz-body{font-size:var(--gz-fs-body);font-weight:var(--gz-fw-regular)}
+.gz-body-sm{font-size:var(--gz-fs-body-sm);font-weight:var(--gz-fw-medium)}
+.gz-small{font-size:var(--gz-fs-small)}
+.gz-caption{font-size:var(--gz-fs-caption);font-weight:var(--gz-fw-medium)}
+.gz-button-text{font-size:var(--gz-fs-body-lg);font-weight:var(--gz-fw-bold)}
+.gz-num{font-variant-numeric:tabular-nums;font-weight:var(--gz-fw-heavy);line-height:1.1;direction:ltr;unicode-bidi:isolate}
+.gz-num-sm{font-size:var(--gz-fs-num-sm)}.gz-num-md{font-size:var(--gz-fs-num-md)}.gz-num-xl{font-size:var(--gz-fs-num-xl)}
+.gz-ltr{direction:ltr;unicode-bidi:isolate}
+/* Arabic rules: never add letter-spacing; keep line-height >= 1.45 */

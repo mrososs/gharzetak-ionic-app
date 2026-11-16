@@ -1,0 +1,38 @@
+import { Injectable, inject } from '@angular/core';
+import { AlertController, ToastController } from '@ionic/angular';
+import { I18nService } from '../../../core/i18n/i18n.service';
+
+/** Design-styled toasts and confirmation alerts. */
+@Injectable({ providedIn: 'root' })
+export class UiFeedback {
+  private readonly toasts = inject(ToastController);
+  private readonly alerts = inject(AlertController);
+  private readonly i18n = inject(I18nService);
+
+  async toast(message: string): Promise<void> {
+    // Float above the tab bar when it is visible (design: toast sits 96px from the bottom).
+    const bar = typeof document !== 'undefined' ? document.querySelector<HTMLElement>('ion-tab-bar:not([hidden])') : null;
+    const t = await this.toasts.create({ message, duration: 2600, position: 'bottom', cssClass: 'gz-toast', positionAnchor: bar ?? undefined });
+    await t.present();
+  }
+
+  say(ar: string, en: string): Promise<void> {
+    return this.toast(this.i18n.q(ar, en));
+  }
+
+  async confirm(header: string, message: string, confirmText: string, destructive = true): Promise<boolean> {
+    const t = this.i18n.t();
+    const a = await this.alerts.create({
+      header,
+      message,
+      cssClass: 'gz-alert',
+      buttons: [
+        { text: t.cancel, role: 'cancel' },
+        { text: confirmText, role: destructive ? 'destructive' : 'confirm' },
+      ],
+    });
+    await a.present();
+    const { role } = await a.onDidDismiss();
+    return role === 'destructive' || role === 'confirm';
+  }
+}

@@ -1,0 +1,171 @@
+// Design-system styling for scrollbars, inputs and dropdowns (native + Ionic).
+// Tokens only — no new colours.
+
+/* ===================== Scrollbars ===================== */
+/* Standard properties (Chromium 121+, Firefox) — also reach Ionic's shadow scroll host. */
+:root {
+  scrollbar-color: var(--gz-lavender) transparent;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gz-lavender) transparent;
+}
+ion-content::part(scroll) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gz-lavender) transparent;
+  overscroll-behavior: contain;
+}
+/* WebKit fallback (older Android WebView / Safari) for light-DOM scrollers */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--gz-lavender); border-radius: var(--gz-r-pill); border: 1px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--gz-primary); }
+::-webkit-scrollbar-corner { background: transparent; }
+/* Horizontal chip rows: hairline bar so it never competes with the chips */
+.gz-hs { scrollbar-width: thin; scrollbar-color: var(--gz-lavender-200) transparent; }
+.gz-hs::-webkit-scrollbar { display: block; height: 3px; }
+.gz-hs::-webkit-scrollbar-thumb { background: var(--gz-lavender-200); }
+
+/* ===================== Text inputs ===================== */
+.gz-in > input,
+.gz-ta,
+.gz-select,
+.gz-in > ion-input {
+  caret-color: var(--gz-primary);
+}
+.gz-in > input::placeholder,
+.gz-ta::placeholder { color: var(--gz-text-3); opacity: 1; }
+.gz-in > svg.gz-ic { color: var(--gz-text-3); transition: color 0.15s; }
+.gz-in:focus-within > svg.gz-ic { color: var(--gz-primary); }
+.gz-in:focus-within,
+.gz-ta:focus,
+.gz-select:focus,
+ion-select.gz-select.has-focus { border-color: var(--gz-primary); box-shadow: 0 0 0 3px var(--gz-primary-tint); }
+.gz-in.invalid,
+.gz-ta.invalid,
+.gz-select.invalid { border-color: var(--gz-error); box-shadow: 0 0 0 3px var(--gz-error-bg); }
+.gz-in:has(input:disabled),
+.gz-ta:disabled,
+.gz-select:disabled { background: var(--gz-disabled-bg); color: var(--gz-disabled-fg); border-color: var(--gz-disabled-bg); cursor: not-allowed; }
+/* search inputs: no browser chrome */
+.gz-in > input[type='search']::-webkit-search-decoration,
+.gz-in > input[type='search']::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+/* autofill: keep the cream/white surface instead of browser yellow */
+.gz-in > input:-webkit-autofill,
+.gz-in input:-webkit-autofill {
+  -webkit-text-fill-color: var(--gz-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--gz-surface) inset;
+  transition: background-color 9999s ease-out 0s;
+}
+.gz-ta { transition: border-color 0.15s, box-shadow 0.15s; }
+.gz-in { transition: border-color 0.15s, box-shadow 0.15s; }
+/* numbers & codes typed into inputs keep LTR */
+.gz-in > input[type='email'],
+.gz-in > input[type='url'],
+.gz-in > input[inputmode='numeric'] { direction: ltr; text-align: start; }
+
+/* Ionic inputs used outside .gz-in (ion-input / ion-textarea with fill="outline") */
+ion-input.gz-field,
+ion-textarea.gz-field {
+  --background: var(--gz-surface);
+  --color: var(--gz-text);
+  --placeholder-color: var(--gz-text-3);
+  --placeholder-opacity: 1;
+  --border-color: var(--gz-border);
+  --border-radius: var(--gz-r-sm);
+  --border-width: 1.5px;
+  --highlight-color-focused: var(--gz-primary);
+  --highlight-color-valid: var(--gz-success);
+  --highlight-color-invalid: var(--gz-error);
+  --padding-start: 14px;
+  --padding-end: 14px;
+  min-height: 52px;
+  font-size: var(--gz-fs-body);
+}
+
+/* ===================== Dropdowns (DDL) ===================== */
+/* Native <select class="gz-select"> — same box as .gz-in, purple chevron, RTL-aware */
+.gz-select {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-height: 52px;
+  border-radius: var(--gz-r-sm);
+  border: 1.5px solid var(--gz-border);
+  background-color: var(--gz-surface);
+  color: var(--gz-text);
+  font: inherit;
+  font-size: var(--gz-fs-body);
+  font-weight: var(--gz-fw-medium);
+  padding-block: 0;
+  unicode-bidi: plaintext;
+  padding-inline: 14px 44px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23813DB5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 20px 20px;
+  background-position: right 14px center;
+}
+[dir='rtl'] .gz-select { background-position: left 14px center; }
+.gz-select option { color: var(--gz-text); background: var(--gz-surface); }
+
+/* Ionic <ion-select class="gz-select"> — field look identical to the native one */
+ion-select.gz-select {
+  --background: var(--gz-surface);
+  --border-color: var(--gz-border);
+  --border-radius: var(--gz-r-sm);
+  --border-width: 1.5px;
+  --highlight-color-focused: var(--gz-primary);
+  --placeholder-color: var(--gz-text-3);
+  --placeholder-opacity: 1;
+  --padding-start: 14px;
+  --padding-end: 14px;
+  background-image: none;
+  padding: 0;
+  min-height: 52px;
+  color: var(--gz-text);
+}
+ion-select.gz-select::part(icon) { color: var(--gz-primary); opacity: 1; width: 20px; height: 20px; }
+ion-select.gz-select::part(label) { color: var(--gz-text); font-weight: var(--gz-fw-bold); }
+ion-select.gz-select::part(placeholder) { color: var(--gz-text-3); opacity: 1; }
+ion-select.gz-select::part(text) { unicode-bidi: plaintext; font-weight: var(--gz-fw-medium); }
+ion-select.gz-select.select-expanded::part(icon) { transform: rotate(180deg); transition: transform 0.2s; }
+
+/* Option lists opened by ion-select (popover / action sheet / alert / modal) */
+ion-popover.select-popover {
+  --background: var(--gz-surface);
+  --border-radius: var(--gz-r-md);
+  --box-shadow: var(--gz-shadow-card);
+  --width: min(320px, calc(100vw - 40px));
+}
+ion-popover.select-popover ion-list { background: transparent; padding: 6px; }
+ion-popover.select-popover ion-item {
+  --background: transparent;
+  --background-hover: var(--gz-primary-tint);
+  --background-activated: var(--gz-lavender-200);
+  --color: var(--gz-text);
+  --border-radius: var(--gz-r-xs);
+  --inner-border-width: 0;
+  --min-height: 44px;
+  font-weight: var(--gz-fw-semibold);
+}
+ion-popover.select-popover ion-radio,
+ion-popover.select-popover ion-checkbox { --color-checked: var(--gz-primary); --checkbox-background-checked: var(--gz-primary); --border-color-checked: var(--gz-primary); }
+ion-action-sheet.select-action-sheet {
+  --background: var(--gz-bg);
+  --color: var(--gz-text);
+  --button-color: var(--gz-text);
+  --button-color-selected: var(--gz-primary);
+  --button-background-selected: var(--gz-primary-tint);
+}
+ion-action-sheet.select-action-sheet .action-sheet-group { border-radius: 28px 28px 0 0; }
+ion-action-sheet.select-action-sheet .action-sheet-title { color: var(--gz-text-2); font-weight: var(--gz-fw-bold); }
+ion-alert.select-alert { --background: var(--gz-bg); }
+ion-alert.select-alert .alert-radio-label { color: var(--gz-text); }
+ion-alert.select-alert [aria-checked='true'] .alert-radio-label { color: var(--gz-primary); font-weight: var(--gz-fw-bold); }
+ion-alert.select-alert .alert-radio-icon { border-color: var(--gz-border-strong); }
+ion-alert.select-alert [aria-checked='true'] .alert-radio-icon { border-color: var(--gz-primary); }
+ion-alert.select-alert .alert-radio-inner { background-color: var(--gz-primary); }
+ion-alert.select-alert .alert-button { color: var(--gz-primary); font-weight: var(--gz-fw-bold); text-transform: none; }

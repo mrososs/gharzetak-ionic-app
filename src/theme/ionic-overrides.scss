@@ -1,0 +1,141 @@
+// Ionic integration: CSS variables + shadow parts only (no ::ng-deep).
+
+ion-content {
+  --background: var(--gz-bg);
+  --color: var(--gz-text);
+}
+ion-content.gz-scroll::part(scroll) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gz-lavender) transparent;
+}
+ion-header.gz-header {
+  box-shadow: none;
+  background: var(--gz-bg);
+}
+ion-header.gz-header::after { display: none; }
+
+/* ion-button skinned as the design-system primary / secondary / tonal buttons */
+ion-button.gz-ion-btn {
+  --background: var(--gz-primary);
+  --background-hover: var(--gz-primary-hover);
+  --background-activated: var(--gz-primary-pressed);
+  --color: #fff;
+  --border-radius: var(--gz-r-md);
+  --box-shadow: var(--gz-shadow-raised);
+  --padding-start: 22px;
+  --padding-end: 22px;
+  min-height: 54px;
+  height: 54px;
+  margin: 0;
+  font-weight: 700;
+  font-size: 16px;
+  text-transform: none;
+  letter-spacing: 0;
+  width: 100%;
+}
+ion-button.gz-ion-btn[disabled],
+ion-button.gz-ion-btn.button-disabled {
+  --background: var(--gz-disabled-bg);
+  --color: var(--gz-disabled-fg);
+  --box-shadow: none;
+  opacity: 1;
+}
+
+/* Sheet modals: auto-height bottom sheets with the design radius */
+ion-modal.gz-sheet {
+  --height: auto;
+  --border-radius: 28px;
+  --background: var(--gz-bg);
+  --box-shadow: var(--gz-shadow-sheet);
+  --backdrop-opacity: 0.5;
+}
+ion-modal.gz-sheet .ion-page {
+  position: relative;
+  display: block;
+  contain: content;
+}
+ion-modal.gz-sheet .gz-sheet-scroll {
+  max-height: 86vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Toast in the design style */
+ion-toast.gz-toast {
+  --background: var(--gz-text);
+  --color: #fff;
+  --border-radius: 16px;
+  --box-shadow: 0 10px 24px rgba(53, 37, 62, 0.38);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Alerts */
+ion-alert.gz-alert {
+  --background: var(--gz-bg);
+  font-family: var(--gz-font);
+}
+ion-alert.gz-alert .alert-button { color: var(--gz-primary); font-weight: 700; text-transform: none; }
+
+/* Tab bar (custom design: raised pink tracker button in the middle) */
+ion-tab-bar.gz-tabbar {
+  --background: var(--gz-surface);
+  --border: 1px solid var(--gz-border);
+  height: calc(var(--gz-nav-h) + var(--gz-safe-bottom));
+  padding: 6px 6px calc(10px + var(--gz-safe-bottom));
+  box-shadow: var(--gz-shadow-sheet);
+  align-items: flex-end;
+  overflow: visible;
+  contain: none;
+}
+ion-tab-bar.gz-tabbar ion-tab-button {
+  --color: var(--gz-text-2);
+  --color-selected: var(--gz-primary);
+  --background: transparent;
+  --ripple-color: var(--gz-lavender);
+  --padding-start: 0;
+  --padding-end: 0;
+  overflow: visible;
+  max-width: none;
+}
+ion-tab-bar.gz-tabbar ion-tab-button::part(native) {
+  overflow: visible;
+  justify-content: flex-end;
+  padding-bottom: 2px;
+}
+.gz-nv-label { font-size: 11px; font-weight: 600; line-height: 1.3; text-align: center; margin-top: 2px; }
+.gz-nvi { width: 46px; height: 28px; border-radius: 16px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+ion-tab-button.tab-selected .gz-nvi { background: var(--gz-lavender-200); }
+ion-tab-button.gz-mid .gz-nvi {
+  width: 60px; height: 60px; border-radius: 50%; margin-top: -26px;
+  background: var(--gz-pink); color: var(--gz-text);
+  box-shadow: 0 8px 18px rgba(245, 111, 168, 0.42); border: 4px solid var(--gz-bg);
+}
+ion-tab-button.gz-mid.tab-selected .gz-nvi { background: var(--gz-primary); color: #fff; box-shadow: 0 8px 18px rgba(129, 61, 181, 0.36); }
+ion-tab-button.gz-mid .gz-ic { width: 26px; height: 26px; }
+
+/* Raised secondary tabs (Projects, Learn): same family as the tracker button, one step lower and smaller.
+   Tone at rest (lavender / mint), Primary Purple when selected, gentle lift + pop on selection. */
+ion-tab-button.gz-raise .gz-nvi {
+  width: 48px; height: 48px; border-radius: 50%; margin-top: -16px;
+  border: 3px solid var(--gz-bg);
+  box-shadow: 0 6px 14px rgba(53, 37, 62, 0.14);
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+ion-tab-button.gz-raise[data-tone='lav'] .gz-nvi { background: var(--gz-lavender-200); color: var(--gz-text); }
+ion-tab-button.gz-raise[data-tone='sage'] .gz-nvi { background: var(--gz-mint-200); color: var(--gz-mint-ink); }
+ion-tab-button.gz-raise.tab-selected .gz-nvi {
+  background: var(--gz-primary); color: #fff;
+  box-shadow: var(--gz-shadow-raised);
+  transform: translateY(-3px) scale(1.06);
+}
+ion-tab-button.gz-raise .gz-ic { width: 23px; height: 23px; }
+ion-tab-button.gz-mid .gz-nvi { transition: background 0.2s, box-shadow 0.2s, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+ion-tab-button.gz-mid.tab-selected .gz-nvi { transform: translateY(-2px) scale(1.04); }
+ion-tab-button.gz-raise:active .gz-nvi,
+ion-tab-button.gz-mid:active .gz-nvi { transform: scale(0.94); }
+ion-tab-button.tab-selected .gz-nv-label { font-weight: 700; }
+
+/* Refresher */
+ion-refresher-content { --color: var(--gz-primary); }
+ion-spinner { --color: var(--gz-primary); color: var(--gz-primary); }
