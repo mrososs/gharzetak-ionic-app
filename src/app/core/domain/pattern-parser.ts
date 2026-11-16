@@ -10,6 +10,9 @@
  *   R5: (3sc, inc) × 6 [30]
  *   R6: 30sc [30]
  *   Rnd 8. (3sc, dec) x 6 [24]
+ *   R4: 3hdc-inc, 2hdc [8]           stitch-specific shaping (hdc-inc, hdc-dec, dc-inc, ...)
+ *   R7: 5sc, 5sc in legs, 14sc [24]  worked into ANOTHER piece (joining): consumes nothing from this piece's previous round,
+ *                                    is kept as a reference and the round is flagged `joins` (never fully validated)
  *
  * Stitch accounting (input stitches consumed from the previous round → output produced):
  *   sc / hdc / dc / tr : 1 → 1
@@ -18,7 +21,11 @@
  *   anything "in MR"   : 0 → n   (worked into the magic ring)
  */
 
-export type StitchKind = 'sc' | 'hdc' | 'dc' | 'tr' | 'inc' | 'dec';
+/**
+ * Stitch kinds. The `*-inc` / `*-dec` kinds are stitch-specific shaping (an HDC increase is two hdc in one stitch, not an sc increase).
+ * Plain `inc` / `dec` remain the single-crochet shaping used by every existing pattern.
+ */
+export type StitchKind = 'sc' | 'hdc' | 'dc' | 'tr' | 'inc' | 'dec' | 'hdc-inc' | 'hdc-dec' | 'dc-inc' | 'dc-dec' | 'tr-inc' | 'tr-dec';
 
 /** [consumed, produced] for one action of each kind. */
 export const STITCH_IO: Readonly<Record<StitchKind, readonly [number, number]>> = {
@@ -28,12 +35,20 @@ export const STITCH_IO: Readonly<Record<StitchKind, readonly [number, number]>> 
   tr: [1, 1],
   inc: [1, 2],
   dec: [2, 1],
+  'hdc-inc': [1, 2],
+  'hdc-dec': [2, 1],
+  'dc-inc': [1, 2],
+  'dc-dec': [2, 1],
+  'tr-inc': [1, 2],
+  'tr-dec': [2, 1],
 };
 
 export interface UnitStep {
   readonly k: StitchKind;
   /** Worked into a magic ring: consumes nothing from a previous round. */
   readonly mr: boolean;
+  /** Worked into another piece of the design (joining), e.g. `5sc in legs`. null for ordinary stitches. */
+  readonly ref?: string | null;
 }
 
 /** One concrete action inside a round, after repeats are expanded. */
@@ -44,6 +59,8 @@ export interface RoundAction {
   /** Index inside the repeat unit. */
   readonly gi: number;
   readonly mr: boolean;
+  /** Joined piece this stitch is worked into (consumes nothing from this piece's previous round). */
+  readonly ref: string | null;
   readonly cons: number;
   readonly prod: number;
 }
@@ -67,6 +84,8 @@ export interface ParsedRound {
   readonly mismatch: boolean;
   /** Whether this round consumes what the previous round produced. */
   readonly chain: ChainStatus;
+  /** Distinct other pieces this round is joined to (assembly). Empty for ordinary rounds. */
+  readonly joins: readonly string[];
 }
 
 export interface ParsedPattern {
@@ -79,7 +98,7 @@ export interface ParsedPattern {
   readonly total: number;
 }
 
-const TOK_RE = /^(\d+)?\s*(sc|hdc|dc|tr|inc|dec)(\s+in\s+(?:mr|magic\s*ring|magic\s*circle))?$/i;
+const TOK_RE = /^(\d+)?\s*(hdc-inc|hdc-dec|dc-inc|dc-dec|tr-inc|tr-dec|sc|hdc|dc|tr|inc|dec)(?:\s+in\s+(?:(mr|magic\s*ring|magic\s*circle)|([A-Za-z؀-ۿ][A-Za-z؀-ۿ-]*)))?$/i;
 const MAX_TOKEN_COUNT = 200;
 const MAX_REPEATS = 99;
 
@@ -97,7 +116,8 @@ export function parseSequence(str: string): UnitStep[] | null {
     const n = m[1] ? parseInt(m[1], 10) : 1;
     if (n < 1 || n > MAX_TOKEN_COUNT) return null;
     const k = m[2].toLowerCase() as StitchKind;
-    for (let i = 0; i < n; i++) out.push({ k, mr: !!m[3] });
+    const ref = m[4] ? m[4].toLowerCase() : null;
+    for (let i = 0; i < n; i++) out.push({ k, mr: !!m[3], ref });
   }
   return out;
 }
@@ -134,19 +154,21 @@ export function parseRound(line: string, idx: number): Omit<ParsedRound, 'chain'
   }
 
   if (!unit || reps < 1 || reps > MAX_REPEATS) {
-    return { raw, n, ok: false, err: 'syntax', acts: [], unit: [], reps: 1, cons: 0, prod: 0, declared, mismatch: false };
+    return { raw, n, ok: false, err: 'syntax', acts: [], unit: [], reps: 1, cons: 0, prod: 0, declared, mismatch: false, joins: [] };
   }
 
   const acts: RoundAction[] = [];
   for (let rep = 0; rep < reps; rep++) {
     unit.forEach((u, gi) => {
       const io = STITCH_IO[u.k];
-      acts.push({ k: u.k, rep, gi, mr: u.mr, cons: u.mr ? 0 : io[0], prod: io[1] });
+      const ref = u.ref ?? null;
+      acts.push({ k: u.k, rep, gi, mr: u.mr, ref, cons: u.mr || ref ? 0 : io[0], prod: io[1] });
     });
   }
   const cons = acts.reduce((a, x) => a + x.cons, 0);
   const prod = acts.reduce((a, x) => a + x.prod, 0);
-  return { raw, n, ok: true, err: '', acts, unit, reps, cons, prod, declared, mismatch: declared !== null && declared !== prod };
+  const joins = [...new Set(acts.map((a) => a.ref).filter((r): r is string => !!r))];
+  return { raw, n, ok: true, err: '', acts, unit, reps, cons, prod, declared, mismatch: declared !== null && declared !== prod, joins };
 }
 
 const cache = new Map<string, ParsedPattern>();
@@ -166,7 +188,8 @@ export function parsePattern(text: string | null | undefined): ParsedPattern {
     const prev = base[i - 1];
     if (i > 0 && r.ok && prev.ok) {
       const anyMr = r.acts.some((a) => a.mr);
-      chain = anyMr || r.cons === prev.prod ? 'ok' : 'bad';
+      // A round worked into another piece cannot be checked against this piece's previous round.
+      chain = r.joins.length ? 'na' : anyMr || r.cons === prev.prod ? 'ok' : 'bad';
     }
     return { ...r, chain };
   });

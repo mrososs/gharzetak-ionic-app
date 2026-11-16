@@ -36,6 +36,9 @@ export function convertText(input: string, dir: ConvertDirection): ConvertResult
 /** Converts a single parsed stitch key between systems for display. */
 export function convertToken(k: string, from: TermSystem, to: TermSystem): string {
   if (from === to || k === 'inc' || k === 'dec') return k;
+  // Stitch-specific shaping: `hdc-inc` converts its stitch part only (hdc-inc -> htr-inc).
+  const dash = k.indexOf('-');
+  if (dash > 0) return convertToken(k.slice(0, dash), from, to) + k.slice(dash);
   return from === 'us' ? (US2UK[k] ?? k) : (UK2US[k] ?? k);
 }
 
