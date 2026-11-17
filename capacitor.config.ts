@@ -18,6 +18,11 @@ const config: CapacitorConfig = {
       resize: 'native',
       resizeOnFullScreen: true,
     },
+    // Crochet reminders: a flat white status-bar icon tinted with the brand purple. Scheduling is always inexact (see the manifest).
+    LocalNotifications: {
+      smallIcon: 'ic_stat_gharzetak',
+      iconColor: '#813db5',
+    },
     StatusBar: {
       style: 'LIGHT',
       backgroundColor: '#FFF9F5',

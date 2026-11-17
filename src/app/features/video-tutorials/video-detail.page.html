@@ -60,6 +60,8 @@
           <button type="button" class="gz-icb" style="width: 54px; height: 54px" (click)="undo()" [attr.aria-label]="t().undo"><svg gzIcon="undo" /></button>
           <button type="button" class="gz-btn" style="width: auto; min-width: 96px; min-height: 54px" (click)="tap()" [disabled]="c.disabled"><svg gzIcon="plus" /><span class="gz-ltr">{{ c.label }}</span></button>
         </div>
+        <!-- lightweight inline celebration: one reserved line inside the card, so it never covers or moves the video -->
+        <gz-joy-banner [inline]="true" class="mt-1.5" />
       </div>
     }
 

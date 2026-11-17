@@ -31,7 +31,10 @@ import {
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TrackerData } from '../../core/models/models';
 import { TimerService } from '../../core/services/timer.service';
-import { AppStore } from '../../core/state/app.store';
+import { AppStore, TrackerChange } from '../../core/state/app.store';
+import { ProjectFinishService } from '../../core/joy/project-finish.service';
+import { JoyBannerComponent } from '../../shared/ui/joy/joy-banner.component';
+import { JoyMilestoneComponent } from '../../shared/ui/joy/joy-milestone.component';
 import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
@@ -46,7 +49,7 @@ const fmtHMS = (s: number) => Math.floor(s / 3600) + ':' + pad2(Math.floor((s % 
 /** GZ-S14 simple · GZ-S15 pattern-aware · GZ-T03 round complete · GZ-T05 settings · GZ-T06 reset — and, for multi-part projects, the part switcher. */
 @Component({
   selector: 'gz-tracker',
-  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent],
+  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent, JoyBannerComponent, JoyMilestoneComponent],
   templateUrl: './tracker.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -56,6 +59,7 @@ export class TrackerPage {
   protected readonly nav = inject(NavController);
   protected readonly timer = inject(TimerService);
   private readonly ui = inject(UiFeedback);
+  private readonly finishSvc = inject(ProjectFinishService);
 
   protected readonly t = this.i18n.t;
   protected readonly sheet = signal<'picker' | 'cfg' | 'reset' | 'parts' | null>(null);
@@ -239,12 +243,12 @@ export class TrackerPage {
     return convertToken(k, terms, this.store.viewTerms());
   }
 
-  private update(fn: (t: TrackerLike) => TrackerLike): void {
+  private update(fn: (t: TrackerLike) => TrackerLike, change?: TrackerChange): void {
     const p = this.p();
     if (!p) return;
     const i = this.inst();
-    if (i) void this.store.updatePartTracker(p.id, i.id, fn);
-    else void this.store.updateTracker(p.id, fn as (t: TrackerData) => TrackerData);
+    if (i) void this.store.updatePartTracker(p.id, i.id, fn, change);
+    else void this.store.updateTracker(p.id, fn as (t: TrackerData) => TrackerData, change);
   }
 
   /* ---------------- actions ---------------- */
@@ -256,9 +260,10 @@ export class TrackerPage {
     if (!t) return;
     if (t.mode === 'pattern') {
       const parsed = this.parsed();
-      if (parsed) this.update((x) => ({ ...x, cursor: patternTap(parsed, x.cursor) }));
+      // `parsed` is the pinned pattern / part snapshot this tap really used: Crochet Joy needs the very same rounds to detect completion.
+      if (parsed) this.update((x) => ({ ...x, cursor: patternTap(parsed, x.cursor) }), { origin: 'tap', parsed });
     } else {
-      this.update((x) => ({ ...x, simple: simpleRoundComplete(x.simple) ? simpleNextRound(x.simple) : simpleTap(x.simple) }));
+      this.update((x) => ({ ...x, simple: simpleRoundComplete(x.simple) ? simpleNextRound(x.simple) : simpleTap(x.simple) }), { origin: 'tap' });
     }
   }
 
@@ -267,11 +272,11 @@ export class TrackerPage {
     if (!t) return;
     const empty = t.mode === 'pattern' ? !t.cursor.history.length : !t.simple.history.length;
     if (empty) return void this.ui.say('مفيش حاجة للتراجع عنها', 'Nothing to undo');
-    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternUndo(x.cursor) } : { ...x, simple: simpleUndo(x.simple) }));
+    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternUndo(x.cursor) } : { ...x, simple: simpleUndo(x.simple) }), { origin: 'undo' });
   }
 
   protected confirmReset(): void {
-    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternReset(x.cursor) } : { ...x, simple: simpleReset(x.simple) }));
+    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternReset(x.cursor) } : { ...x, simple: simpleReset(x.simple) }), { origin: 'reset' });
     this.sheet.set(null);
     void this.ui.say('تمت إعادة ضبط الدور', 'Round reset');
   }
@@ -302,9 +307,8 @@ export class TrackerPage {
   protected async finishProject(): Promise<void> {
     const p = this.p();
     if (!p) return;
-    await this.store.setStatus(p.id, 'done');
-    if (this.timerOn()) await this.timer.stop();
-    await this.ui.say('مبروك! المشروع اتحوّل إلى «مكتمل».', 'Congratulations! The project is now completed.');
+    // Timer stops first (so the recorded time is final), then the explicit finish. The celebration — or a plain confirmation — comes from JoyPresenter.
+    await this.finishSvc.finish(p.id);
   }
 
   /* ---- time ---- */

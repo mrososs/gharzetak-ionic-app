@@ -8,6 +8,9 @@ import { patternStats } from '../../core/domain/tracker-engine';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ProjectStatus } from '../../core/models/models';
 import { TimerService } from '../../core/services/timer.service';
+import { ProjectFinishService } from '../../core/joy/project-finish.service';
+import { ShareLauncher } from '../../core/joy/share-launcher.service';
+import { TrackerNavigator } from '../../core/services/tracker-navigator.service';
 import { AppStore } from '../../core/state/app.store';
 import { uuid } from '../../core/state/factories';
 import { LocalDb } from '../../core/storage/local-db';
@@ -41,6 +44,7 @@ import { DurationInputComponent } from '../../shared/ui/inputs/duration-input.co
             <div class="gz-sm gz-mute flex items-center gap-2.5" style="margin: 6px 0 8px"><span class="flex-1">{{ c.roundLabel }} · {{ c.lastText }}</span><span class="gz-b" style="color: var(--gz-primary); font-size: 16px">{{ c.pct }}%</span></div>
             <div class="gz-bar"><i [style.width.%]="c.pct"></i></div>
             <button type="button" class="gz-btn mt-4" (click)="resume()"><svg gzIcon="play" />{{ t().resumeProject }}</button>
+            <button type="button" class="gz-btn3 w mt-2" (click)="shareProgress()"><svg gzIcon="send" size="s" />{{ i18n.q('شاركي تقدّم المشروع', 'Share project progress') }}</button>
 
             <!-- a newer pattern / collection version exists: the project stays on its own version until the user updates -->
             @if (outdated()) {
@@ -212,6 +216,7 @@ export class ProjectDetailPage {
   protected readonly nav = inject(NavController);
   protected readonly timer = inject(TimerService);
   private readonly ui = inject(UiFeedback);
+  private readonly finishSvc = inject(ProjectFinishService);
   private readonly db = inject(LocalDb);
   readonly id = input.required<string>();
 
@@ -327,9 +332,17 @@ export class ProjectDetailPage {
 
   private notesTimer: ReturnType<typeof setTimeout> | null = null;
 
+  private readonly launcher = inject(ShareLauncher);
+  private readonly navigator = inject(TrackerNavigator);
+
+  protected shareProgress(): void {
+    this.launcher.progress(this.id());
+  }
+
   protected async setStatus(s: ProjectStatus): Promise<void> {
-    await this.store.setStatus(this.id(), s);
-    if (s === 'done') await this.ui.say('مبروك على المشروع المكتمل!', 'Congratulations on finishing!');
+    // "Done" is the explicit finish: the timer stops first, then JoyPresenter celebrates (or confirms quietly if it was already celebrated).
+    if (s === 'done') await this.finishSvc.finish(this.id());
+    else await this.store.setStatus(this.id(), s);
   }
 
   protected async resume(): Promise<void> {
@@ -339,15 +352,13 @@ export class ProjectDetailPage {
     await this.openTracker();
   }
 
-  protected async openTracker(): Promise<void> {
-    await this.store.setCurrentProject(this.id());
-    await this.nav.navigateRoot('/tabs/tracker');
+  /** The user chose this project / piece explicitly, so even a finished project opens (a reminder tap does not do that). */
+  protected openTracker(): Promise<unknown> {
+    return this.navigator.open(this.id(), null, true);
   }
 
-  protected async openPart(instanceId: string): Promise<void> {
-    await this.store.setActiveInstance(this.id(), instanceId);
-    await this.timer.switchInstance(this.id(), instanceId);
-    await this.openTracker();
+  protected openPart(instanceId: string): Promise<unknown> {
+    return this.navigator.open(this.id(), instanceId, true);
   }
 
   protected linkPattern(patternId: string): void {

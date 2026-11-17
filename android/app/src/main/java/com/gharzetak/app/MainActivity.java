@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ImmersivePlugin.class);
+        registerPlugin(SystemSettingsPlugin.class);
         super.onCreate(savedInstanceState);
         ImmersiveMode.apply(this); // before the WebView paints: no flash of the navigation bar at launch
     }

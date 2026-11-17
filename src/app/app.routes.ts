@@ -45,6 +45,7 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'home' },
       { path: 'home', loadComponent: () => import('./features/home/home.page').then((m) => m.HomePage) },
       { path: 'home/settings', loadComponent: () => import('./features/settings/settings.page').then((m) => m.SettingsPage) },
+      { path: 'home/achievements', loadComponent: () => import('./features/achievements/achievements.page').then((m) => m.AchievementsPage) },
       { path: 'home/store', loadComponent: () => import('./features/store/store.page').then((m) => m.StorePage) },
       { path: 'home/patterns', loadComponent: () => import('./features/patterns/pattern-library.page').then((m) => m.PatternLibraryPage) },
       { path: 'home/patterns/new', canDeactivate: [unsavedChangesGuard], loadComponent: () => import('./features/patterns/add-pattern.page').then((m) => m.AddPatternPage) },

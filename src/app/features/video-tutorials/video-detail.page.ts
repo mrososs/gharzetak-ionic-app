@@ -5,11 +5,14 @@ import { VCAT_N, VIDEOS, VLVL } from '../../core/data/catalog';
 import { photo } from '../../core/data/photos';
 import { parsePattern } from '../../core/domain/pattern-parser';
 import { convertToken } from '../../core/domain/terminology';
-import { patternContext, patternStats, patternTap, patternUndo, simpleNextAmount, simpleNextRound, simpleRoundComplete, simpleTap, simpleUndo } from '../../core/domain/tracker-engine';
+import { TrackerLike, patternContext, patternStats, patternTap, patternUndo, simpleNextAmount, simpleNextRound, simpleRoundComplete, simpleTap, simpleUndo } from '../../core/domain/tracker-engine';
 import { I18nService } from '../../core/i18n/i18n.service';
-import { AppStore } from '../../core/state/app.store';
+import { TrackerData } from '../../core/models/models';
+import { AppStore, TrackerChange } from '../../core/state/app.store';
 import { uuid } from '../../core/state/factories';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
+import { JoyPresenter } from '../../core/joy/joy-presenter.service';
+import { JoyBannerComponent } from '../../shared/ui/joy/joy-banner.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
 import { youtubeEmbedUrl, youtubeId, youtubeWatchUrl } from './youtube';
@@ -20,7 +23,7 @@ const fmtMS = (s: number) => pad2(Math.floor(s / 60)) + ':' + pad2(s % 60);
 /** GZ-S20 — tutorial detail: YouTube link/embed, creator credit, timestamps, notes, companion counter. */
 @Component({
   selector: 'gz-video-detail',
-  imports: [IonHeader, IonContent, IconComponent, PhotoComponent],
+  imports: [IonHeader, IonContent, IconComponent, PhotoComponent, JoyBannerComponent],
   templateUrl: './video-detail.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -30,6 +33,7 @@ export class VideoDetailPage implements OnDestroy {
   protected readonly nav = inject(NavController);
   private readonly ui = inject(UiFeedback);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly presenter = inject(JoyPresenter);
   readonly id = input.required<string>();
 
   protected readonly t = this.i18n.t;
@@ -68,22 +72,32 @@ export class VideoDetailPage implements OnDestroy {
   protected readonly stamps = computed(() => this.d().stamps.map((s) => ({ ...s, time: fmtMS(s.sec) })));
   protected readonly clockText = computed(() => fmtMS(this.clock()));
 
+  /**
+   * What the counter follows — the SAME view the main tracker uses: the active part instance, or the project's own tracker reading its
+   * PINNED pattern revision (never the live pattern text, which may have been edited since the project was pinned).
+   */
+  private readonly view = computed(() => this.store.trackerView(this.linkedProject()));
+  private readonly vparsed = computed(() => {
+    const s = this.view()?.source;
+    return s ? parsePattern(s.text) : null;
+  });
+
   protected readonly counter = computed(() => {
     const p = this.linkedProject();
-    if (!p) return null;
-    const t = p.tracker;
+    const v = this.view();
+    if (!p || !v) return null;
+    const t = v.tracker;
     if (t.mode === 'pattern') {
-      const pat = this.store.pattern(t.patternId);
-      const parsed = pat ? parsePattern(pat.text) : null;
+      const parsed = this.vparsed();
       const ctx = parsed ? patternContext(parsed, t.cursor) : null;
       const st = parsed ? patternStats(parsed, t.cursor) : null;
-      if (pat && parsed && ctx && st) {
+      if (v.source && parsed && ctx && st) {
         const next = parsed.rounds[ctx.roundIndex + 1];
         return {
           name: p.name,
           main: `${st.produced}/${st.roundProduced}`,
           sub: `R${st.roundNumber} · ${st.actionsDone}/${st.actionsTotal}`,
-          label: st.roundComplete ? (ctx.isLastRound ? '✓' : 'R' + (next?.n ?? '')) : convertToken(ctx.round.acts[ctx.ptr].k, pat.terms, this.store.viewTerms()),
+          label: st.roundComplete ? (ctx.isLastRound ? '✓' : 'R' + (next?.n ?? '')) : convertToken(ctx.round.acts[ctx.ptr].k, v.source.terms, this.store.viewTerms()),
           disabled: st.patternComplete,
         };
       }
@@ -99,8 +113,17 @@ export class VideoDetailPage implements OnDestroy {
     };
   });
 
+  /** The video must never be covered or interrupted: every Crochet Joy level becomes one inline line while this page is in front. */
+  ionViewWillEnter(): void {
+    this.presenter.surface.set('video');
+  }
+  ionViewWillLeave(): void {
+    this.presenter.surface.set('default');
+  }
+
   ngOnDestroy(): void {
     if (this.iv) clearInterval(this.iv);
+    this.presenter.surface.set('default');
   }
 
   protected toggleFav(): void {
@@ -130,23 +153,24 @@ export class VideoDetailPage implements OnDestroy {
     void this.store.updateTutorial(this.v().id, { projectId: id });
   }
 
-  protected tap(): void {
+  /** Same counting path as the main tracker: same pinned text, same part instance, same completion detection and ledger. */
+  private apply(fn: (t: TrackerLike) => TrackerLike, change: TrackerChange): void {
     const p = this.linkedProject();
-    if (!p) return;
-    const t = p.tracker;
-    if (t.mode === 'pattern') {
-      const pat = this.store.pattern(t.patternId);
-      if (pat) {
-        const parsed = parsePattern(pat.text);
-        void this.store.updateTracker(p.id, (x) => ({ ...x, cursor: patternTap(parsed, x.cursor) }));
-        return;
-      }
-    }
-    void this.store.updateTracker(p.id, (x) => ({ ...x, simple: simpleRoundComplete(x.simple) ? simpleNextRound(x.simple) : simpleTap(x.simple) }));
+    const v = this.view();
+    if (!p || !v) return;
+    if (v.instance) void this.store.updatePartTracker(p.id, v.instance.id, fn, change);
+    else void this.store.updateTracker(p.id, fn as (t: TrackerData) => TrackerData, change);
+  }
+
+  protected tap(): void {
+    const v = this.view();
+    if (!v) return;
+    const parsed = v.tracker.mode === 'pattern' ? this.vparsed() : null;
+    if (parsed) this.apply((x) => ({ ...x, cursor: patternTap(parsed, x.cursor) }), { origin: 'tap', parsed });
+    else this.apply((x) => ({ ...x, simple: simpleRoundComplete(x.simple) ? simpleNextRound(x.simple) : simpleTap(x.simple) }), { origin: 'tap' });
   }
   protected undo(): void {
-    const p = this.linkedProject();
-    if (p) void this.store.updateTracker(p.id, (x) => (x.mode === 'pattern' && x.patternId ? { ...x, cursor: patternUndo(x.cursor) } : { ...x, simple: simpleUndo(x.simple) }));
+    this.apply((x) => (x.mode === 'pattern' && this.vparsed() ? { ...x, cursor: patternUndo(x.cursor) } : { ...x, simple: simpleUndo(x.simple) }), { origin: 'undo' });
   }
 
   /* practice clock (manual — it does not read the YouTube player) */

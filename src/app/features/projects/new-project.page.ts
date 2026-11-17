@@ -254,7 +254,7 @@ export class NewProjectPage implements HasUnsavedChanges {
         }
         project = createProject({ ...base, patternId, totalRounds: parsed?.ok ? parsed.rounds.length : 0 });
       }
-      await this.store.addProject(project);
+      await this.store.addProject(project, true);
       this.saved = true;
       await this.nav.navigateRoot('/tabs/projects');
       await this.ui.say('تم حفظ المشروع وظهر في «مشاريعي»', 'Project saved and added to My projects');
