@@ -21,8 +21,10 @@ export async function sendMail(env: AppEnv, msg: MailMessage): Promise<void> {
   if (env.ENVIRONMENT !== 'production') {
     devOutbox.push(msg);
     if (devOutbox.length > OUTBOX_CAP) devOutbox.shift();
-    // Staging has no mail provider: the link is only visible in the Worker's own logs (`wrangler tail`), never to the requester.
-    console.log(`[mail:${env.ENVIRONMENT}] to=${msg.to} subject="${msg.subject}" link=${msg.link}`);
+    // The link is a live one-time token. It is printed ONLY for local development (wrangler dev) so a developer can click it; on any hosted
+    // environment (staging) it must never reach persistent Worker logs, and neither does the recipient address.
+    if (env.ENVIRONMENT === 'development') console.log(`[mail:development] to=${msg.to} subject="${msg.subject}" link=${msg.link}`);
+    else console.log(`[mail:${env.ENVIRONMENT}] message withheld (no mail provider); subject="${msg.subject}"`);
     return;
   }
   throw new Error('No email provider configured (see docs/cloudflare-migration/auth-strategy.md)');
