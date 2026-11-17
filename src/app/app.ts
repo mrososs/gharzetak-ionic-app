@@ -12,6 +12,7 @@ import { ImmersiveService } from './core/services/immersive.service';
 import { TimerService } from './core/services/timer.service';
 import { formatMinutes } from './core/domain/time';
 import { AppStore } from './core/state/app.store';
+import { JoyPresenter } from './core/joy/joy-presenter.service';
 import { JoyService } from './core/joy/joy.service';
 import { GuestImportService } from './core/sync/guest-import.service';
 import { SyncService } from './core/sync/sync.service';
@@ -54,6 +55,8 @@ export class App implements OnInit {
   private readonly importer = inject(GuestImportService);
   /** Instantiated at launch so the Crochet Joy hook is wired to the store before the first counting tap. */
   private readonly joy = inject(JoyService);
+  /** Instantiated at launch so celebrations keep their rate-limit window and rotation across screens. */
+  private readonly joyPresenter = inject(JoyPresenter);
   private readonly i18n = inject(I18nService);
   private readonly ui = inject(UiFeedback);
   private askedImportFor: string | null = null;

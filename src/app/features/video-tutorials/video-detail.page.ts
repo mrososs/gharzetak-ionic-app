@@ -11,6 +11,7 @@ import { TrackerData } from '../../core/models/models';
 import { AppStore, TrackerChange } from '../../core/state/app.store';
 import { uuid } from '../../core/state/factories';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
+import { JoyBannerComponent } from '../../shared/ui/joy/joy-banner.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
 import { youtubeEmbedUrl, youtubeId, youtubeWatchUrl } from './youtube';
@@ -21,7 +22,7 @@ const fmtMS = (s: number) => pad2(Math.floor(s / 60)) + ':' + pad2(s % 60);
 /** GZ-S20 — tutorial detail: YouTube link/embed, creator credit, timestamps, notes, companion counter. */
 @Component({
   selector: 'gz-video-detail',
-  imports: [IonHeader, IonContent, IconComponent, PhotoComponent],
+  imports: [IonHeader, IonContent, IconComponent, PhotoComponent, JoyBannerComponent],
   templateUrl: './video-detail.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

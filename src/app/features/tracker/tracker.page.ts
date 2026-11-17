@@ -32,6 +32,7 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { TrackerData } from '../../core/models/models';
 import { TimerService } from '../../core/services/timer.service';
 import { AppStore, TrackerChange } from '../../core/state/app.store';
+import { JoyBannerComponent } from '../../shared/ui/joy/joy-banner.component';
 import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
@@ -46,7 +47,7 @@ const fmtHMS = (s: number) => Math.floor(s / 3600) + ':' + pad2(Math.floor((s % 
 /** GZ-S14 simple · GZ-S15 pattern-aware · GZ-T03 round complete · GZ-T05 settings · GZ-T06 reset — and, for multi-part projects, the part switcher. */
 @Component({
   selector: 'gz-tracker',
-  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent],
+  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent, JoyBannerComponent],
   templateUrl: './tracker.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

@@ -5,6 +5,8 @@ import { BiometricAvailability, BiometricService } from '../../core/auth/biometr
 import { AvatarId } from '../../core/data/avatars';
 import { LVL, LVL_IDS } from '../../core/data/catalog';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { CelebrationMode, JoyPrefs, joyPrefsOf } from '../../core/joy/joy.models';
+import { HapticsService } from '../../core/services/haptics.service';
 import { ImmersiveService } from '../../core/services/immersive.service';
 import { TimerService } from '../../core/services/timer.service';
 import { AppStore } from '../../core/state/app.store';
@@ -89,6 +91,33 @@ import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.co
           </div>
           <p class="gz-xs gz-mute" style="margin: 6px 2px 0" role="status">{{ immersiveHint() }}</p>
         }
+        <!-- Crochet Joy: celebrations. Kept separate from reminders on purpose (different decisions, different permissions). -->
+        <div class="gz-sec"><h2 class="gz-h3 gz-hd">{{ i18n.q('الاحتفالات', 'Celebrations') }}</h2></div>
+        <span class="gz-lbl" id="se-cel-l">{{ i18n.q('احتفلي معايا بعد', 'Celebrate') }}</span>
+        <div class="gz-seg" role="group" aria-labelledby="se-cel-l">
+          @for (o of celebrateOptions(); track o.id) {
+            <button type="button" [class.on]="joyPrefs().celebrate === o.id" [attr.aria-pressed]="joyPrefs().celebrate === o.id" (click)="setJoy({ celebrate: o.id })">{{ o.label }}</button>
+          }
+        </div>
+        <span class="gz-lbl" id="se-msg-l">{{ i18n.q('رسائل تشجيع', 'Encouraging messages') }}</span>
+        <div class="gz-seg" role="group" aria-labelledby="se-msg-l">
+          <button type="button" [class.on]="joyPrefs().messages" [attr.aria-pressed]="joyPrefs().messages" (click)="setJoy({ messages: true })">{{ i18n.q('تشغيل', 'On') }}</button>
+          <button type="button" [class.on]="!joyPrefs().messages" [attr.aria-pressed]="!joyPrefs().messages" (click)="setJoy({ messages: false })">{{ i18n.q('إيقاف', 'Off') }}</button>
+        </div>
+        @if (haptics.supported) {
+          <span class="gz-lbl" id="se-hap-l">{{ i18n.q('اهتزاز خفيف', 'Haptic feedback') }}</span>
+          <div class="gz-seg" role="group" aria-labelledby="se-hap-l">
+            <button type="button" [class.on]="joyPrefs().haptics" [attr.aria-pressed]="joyPrefs().haptics" (click)="setJoy({ haptics: true })">{{ i18n.q('تشغيل', 'On') }}</button>
+            <button type="button" [class.on]="!joyPrefs().haptics" [attr.aria-pressed]="!joyPrefs().haptics" (click)="setJoy({ haptics: false })">{{ i18n.q('إيقاف', 'Off') }}</button>
+          </div>
+        }
+        <span class="gz-lbl" id="se-mot-l">{{ i18n.q('حركة أقل', 'Reduce motion') }}</span>
+        <div class="gz-seg" role="group" aria-labelledby="se-mot-l">
+          <button type="button" [class.on]="joyPrefs().motion === 'reduced'" [attr.aria-pressed]="joyPrefs().motion === 'reduced'" (click)="setJoy({ motion: 'reduced' })">{{ i18n.q('تشغيل', 'On') }}</button>
+          <button type="button" [class.on]="joyPrefs().motion === 'system'" [attr.aria-pressed]="joyPrefs().motion === 'system'" (click)="setJoy({ motion: 'system' })">{{ i18n.q('زي إعدادات الموبايل', 'Follow phone setting') }}</button>
+        </div>
+        <p class="gz-xs gz-mute" style="margin: 6px 2px 0">{{ i18n.q('الاحتفالات صغيرة وبتختفي لوحدها، ومش بتوقف العدّاد. لو الموبايل عنده «تقليل الحركة» بنحترمه دايمًا.', 'Celebrations are small, disappear on their own, and never block the counter. If your phone has "reduce motion" on, we always respect it.') }}</p>
+
         <button type="button" class="gz-btn3 w mt-4" (click)="sheet.set('tools')"><svg gzIcon="hook" size="s" />{{ t().editTools }}</button>
         <button type="button" class="gz-btn3 w mt-2" (click)="replayIntro()"><svg gzIcon="reset" size="s" />{{ t().replayIntro }}</button>
         <button type="button" class="gz-btn3 rose w mt-2" (click)="sheet.set('erase')"><svg gzIcon="trash" size="s" />{{ t().resetDemo }}</button>
@@ -155,6 +184,18 @@ export class SettingsPage {
   protected readonly bioBusy = signal(false);
   protected readonly bioAvailable = signal<BiometricAvailability>({ available: false });
   protected readonly immersive = inject(ImmersiveService);
+  protected readonly haptics = inject(HapticsService);
+
+  protected readonly joyPrefs = computed(() => joyPrefsOf(this.store.prefs()));
+  protected readonly celebrateOptions = computed<{ id: CelebrationMode; label: string }[]>(() => [
+    { id: 'every', label: this.i18n.q('كل دور', 'Every round') },
+    { id: 'milestones', label: this.i18n.q('المحطات بس', 'Milestones only') },
+    { id: 'off', label: this.i18n.q('إيقاف', 'Off') },
+  ]);
+
+  protected setJoy(patch: Partial<JoyPrefs>): void {
+    void this.store.updatePrefs({ joy: patch });
+  }
   protected readonly immersiveHint = computed(() => {
     const q = (a: string, e: string) => this.i18n.q(a, e);
     if (this.immersive.touchExploration()) return q('متوقف تلقائيًا طول ما قارئ الشاشة شغّال، علشان أزرار النظام تفضل ظاهرة.', 'Off automatically while a screen reader is running, so the system buttons stay visible.');
