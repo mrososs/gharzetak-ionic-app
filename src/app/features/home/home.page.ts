@@ -124,8 +124,8 @@ interface QuickTile {
       </div>
     </ion-content>
 
-    <gz-sheet [open]="sheet() === 'tools'" [label]="t().myTools" (closed)="sheet.set(null)"><gz-tools-sheet-body (done)="sheet.set(null)" /></gz-sheet>
-    <gz-sheet [open]="sheet() === 'notif'" [label]="t().notifs" (closed)="sheet.set(null)"><gz-notif-sheet-body (done)="sheet.set(null)" /></gz-sheet>
+    <gz-sheet [open]="sheet() === 'tools'" [title]="t().myTools" (closed)="sheet.set(null)"><gz-tools-sheet-body (done)="sheet.set(null)" /></gz-sheet>
+    <gz-sheet [open]="sheet() === 'notif'" [title]="t().notifs" (closed)="sheet.set(null)"><gz-notif-sheet-body (done)="sheet.set(null)" /></gz-sheet>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

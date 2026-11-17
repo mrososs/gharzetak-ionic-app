@@ -1,0 +1,1 @@
+ALTER TABLE `patterns` ADD `source_text` text DEFAULT '' NOT NULL;

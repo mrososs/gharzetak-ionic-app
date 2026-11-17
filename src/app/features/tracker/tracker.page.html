@@ -6,16 +6,41 @@
         <span class="truncate" style="max-width: 170px">{{ p()?.name ?? '—' }}</span><svg gzIcon="chevd" size="s" />
       </span>
     </button>
-    <button type="button" class="gz-chip sm" [class.on]="timerOn()" (click)="toggleTimer()" [disabled]="!p()" [attr.aria-label]="t().workTimer" [attr.aria-pressed]="timerOn()">
-      <svg [gzIcon]="timerOn() ? 'pause' : 'clock'" size="s" /><span class="gz-ltr">{{ timeText() }}</span>
+    <button type="button" class="gz-chip sm" [class.on]="timerOn()" (click)="toggleTimer()" [disabled]="!p()" [attr.aria-label]="t().workTimer + ': ' + timerLabel()" [attr.aria-pressed]="timerOn()">
+      <svg [gzIcon]="timerOn() ? 'pause' : timerState() === 'paused' ? 'play' : 'clock'" size="s" /><span class="gz-ltr">{{ timeText() }}</span>
     </button>
     <button type="button" class="gz-icb" (click)="p() && sheet.set('cfg')" [attr.aria-label]="t().trkSettings"><svg gzIcon="sliders" /></button>
   </div>
 </ion-header>
 
 <ion-content class="gz-scroll">
+  <!-- Level-1 round celebration: pointer-transparent overlay under the header — never covers the counter or the tap row -->
+  <gz-joy-banner slot="fixed" />
+  <gz-joy-milestone slot="fixed" />
   <div class="gz-pad">
     @if (p(); as project) {
+      @if (inst(); as cur) {
+        <!-- multi-part project: switch between pieces; each has its own position, undo history and time -->
+        @if (completion(); as c) {
+          <div class="flex items-center justify-between gap-2" style="margin: 2px 0 6px">
+            <span class="gz-sm gz-b">{{ i18n.q('اكتمال المشروع ', 'Project ') }}<span class="gz-ltr" style="color: var(--gz-primary)">{{ c.percent }}%</span> · <span class="gz-ltr">{{ c.doneCount }}/{{ c.total }}</span> {{ i18n.q('قطعة', 'pieces') }}</span>
+            @if (nextOpen(); as n) {
+              @if (n.id !== cur.id) {
+                <button type="button" class="gz-lnk gz-sm" (click)="continueUnfinished()">{{ i18n.q('كمّلي القطعة الجاية', 'Continue next piece') }}</button>
+              }
+            }
+          </div>
+          <div class="gz-bar thin" style="margin-bottom: 8px"><i [style.width.%]="c.percent"></i></div>
+        }
+        <div class="gz-hs" role="tablist" [attr.aria-label]="i18n.q('قطع المشروع', 'Project pieces')" style="margin-bottom: 4px">
+          @for (r of partRows(); track r.id) {
+            <button type="button" role="tab" class="gz-chip sm" [class.on]="r.active" [attr.aria-selected]="r.active" (click)="switchPart(r.id)">
+              @if (r.done) { <svg gzIcon="check" size="s" /> }<span>{{ r.label }}</span><span class="gz-ltr gz-xs">{{ r.pct }}%</span>
+            </button>
+          }
+        </div>
+        <div class="gz-xs gz-mute" style="margin-bottom: 8px">{{ i18n.q('وقت هذه القطعة: ', 'Time on this piece: ') }}<span class="gz-ltr">{{ instTime() }}</span></div>
+      }
       <div class="gz-seg" style="margin: 4px 0 10px" role="tablist">
         <button type="button" role="tab" [class.on]="!isPattern()" [attr.aria-selected]="!isPattern()" (click)="setMode('simple')">{{ t().simpleCounter }}</button>
         <button type="button" role="tab" [class.on]="isPattern()" [attr.aria-selected]="isPattern()" (click)="setMode('pattern')">{{ t().patternCounter }}</button>
@@ -57,7 +82,7 @@
           <div class="mb-2 flex items-center gap-2.5">
             <svg gzIcon="file" size="s" style="color: var(--gz-primary)" />
             <span class="gz-sm gz-b flex-1">{{ pt.name }}</span>
-            <button type="button" class="gz-lnk gz-sm" (click)="nav.navigateForward(['/tabs/home/patterns', pt.pat.id])">{{ t().openReader }}</button>
+            <button type="button" class="gz-lnk gz-sm" (click)="openSource()">{{ t().openReader }}</button>
           </div>
           <div class="gz-hs" style="margin-bottom: 2px">
             @for (r of pt.rounds; track r.i) {
@@ -68,6 +93,9 @@
             <div class="flex items-center justify-between"><span class="gz-badge dark">{{ t().roundWord }} {{ pt.n }}</span><span class="gz-badge {{ pt.okCls }}">{{ pt.okText }}</span></div>
             <div class="gz-code" style="margin: 8px 0 2px; font-size: 18px">{{ pt.code }}</div>
             <div class="gz-xs gz-mute"><span class="gz-ltr">{{ pt.sumText }}</span></div>
+            @if (pt.joins.length) {
+              <div class="gz-note peach mt-2"><svg gzIcon="info" size="s" /><span>{{ i18n.q('الدور ده بيشتغل داخل: ', 'This round is worked into: ') }}<b>{{ pt.joins.join(', ') }}</b></span></div>
+            }
           </div>
           <div class="flex items-center gap-3.5" style="margin: 12px 0">
             <gz-ring class="flex-none" [fraction]="pt.st.roundProduced ? pt.st.produced / pt.st.roundProduced : 0" [done]="pt.st.roundComplete" [size]="148" [stroke]="20">
@@ -111,6 +139,12 @@
           @if (pt.canFinish) {
             <button type="button" class="gz-btn3 sage w mt-3" (click)="finishProject()"><svg gzIcon="flag" size="s" />{{ t().markDone }}</button>
           }
+        } @else if (inst()) {
+          <div class="gz-card text-center" style="padding: 24px 18px">
+            <h2 class="gz-h3 gz-hd">{{ i18n.q('القطعة دي مش مدعومة بالعدّ بالباترن', 'This piece cannot use the pattern counter') }}</h2>
+            <p class="gz-mute gz-sm" style="margin: 4px 0 12px">{{ i18n.q('في تعليمات مش مفهومة للعدّاد. استخدمي العدّاد البسيط لها.', 'Some instructions are not understood by the pattern counter. Use the simple counter for it.') }}</p>
+            <button type="button" class="gz-btn3 w" (click)="setMode('simple')">{{ t().simpleCounter }}</button>
+          </div>
         } @else {
           <div class="gz-card text-center" style="padding: 24px 18px">
             <div class="gz-tile t-blush mx-auto mb-2.5" style="width: 60px; height: 60px; border-radius: 20px"><svg gzIcon="file" size="l" /></div>
@@ -137,8 +171,7 @@
 </ion-content>
 
 <!-- picker -->
-<gz-sheet [open]="sheet() === 'picker'" [label]="t().pickProject" (closed)="sheet.set(null)">
-  <h2 class="gz-h2 gz-hd mb-2.5">{{ t().pickProject }}</h2>
+<gz-sheet [open]="sheet() === 'picker'" [title]="t().pickProject" (closed)="sheet.set(null)">
   <div class="flex flex-col gap-2.5">
     @for (x of pickItems(); track x.id) {
       <button type="button" class="gz-rcard" [class.cur]="p()?.id === x.id" (click)="pick(x.id)">
@@ -157,13 +190,12 @@
 </gz-sheet>
 
 <!-- settings (GZ-T05) -->
-<gz-sheet [open]="sheet() === 'cfg'" [label]="t().trkSettings" (closed)="sheet.set(null)">
+<gz-sheet [open]="sheet() === 'cfg'" [title]="t().trkSettings" (closed)="sheet.set(null)">
   @if (p(); as project) {
-    <h2 class="gz-h2 gz-hd">{{ t().trkSettings }}</h2>
     <label class="gz-lbl" for="cf-name">{{ t().projName }}</label>
     <div class="gz-in"><input id="cf-name" type="text" maxlength="120" [value]="project.name" (input)="onName($event)" /></div>
     @if (!isPattern()) {
-      @let s = project.tracker.simple;
+      @let s = tr()!.simple;
       <div class="mt-3.5 flex items-center justify-between"><span class="gz-b flex-1">{{ t().currentRound }}</span>
         <gz-stepper [display]="s.round" [label]="t().currentRound" (dec)="setRound(s.round - 1)" (inc)="setRound(s.round + 1)" /></div>
       <div class="mt-3 flex items-center justify-between"><span class="gz-b flex-1">{{ t().targetStitches }}</span>
@@ -184,27 +216,36 @@
         <gz-stepper [display]="s.totalRounds > 0 ? s.totalRounds : '—'" [label]="t().totalRounds" (dec)="setTotal(s.totalRounds - 1)" (inc)="setTotal(s.totalRounds + 1)" /></div>
       <p class="gz-xs gz-mute mt-2.5">{{ t().cfgExample }}</p>
     } @else {
-      <span class="gz-lbl">{{ t().attachedPattern }}</span>
-      <div class="gz-chips">
-        @for (x of store.patterns(); track x.id) {
-          <button type="button" class="gz-chip sm" [class.on]="project.tracker.patternId === x.id" [attr.aria-pressed]="project.tracker.patternId === x.id" (click)="linkPattern(x.id)">{{ store.patternName(x) }}</button>
-        }
-      </div>
+      @if (!inst()) {
+        <span class="gz-lbl">{{ t().attachedPattern }}</span>
+        <div class="gz-chips">
+          @for (x of store.patterns(); track x.id) {
+            <button type="button" class="gz-chip sm" [class.on]="project.tracker.patternId === x.id" [attr.aria-pressed]="project.tracker.patternId === x.id" (click)="linkPattern(x.id)">{{ store.patternName(x) }}</button>
+          }
+        </div>
+      }
       <button type="button" class="gz-btn3 w mt-3" (click)="restartRound()"><svg gzIcon="reset" size="s" />{{ t().restartRound }}</button>
     }
+
+    <span class="gz-lbl" style="margin-top: 16px">{{ i18n.q('وقت العمل', 'Work time') }}</span>
+    <div class="gz-card soft" style="padding: 12px 14px">
+      <div class="flex items-center justify-between gap-2"><span class="gz-sm gz-mute">{{ t().recorded }}</span><span class="gz-b gz-ltr">{{ timeText() }}</span></div>
+      <div class="gz-xs gz-mute mt-1">{{ timeCmpText() }}</div>
+      <div class="mt-2.5 flex gap-2">
+        <button type="button" class="gz-btn3" style="flex: 1" (click)="toggleTimer()"><svg [gzIcon]="timerOn() ? 'pause' : 'play'" size="s" />{{ timerLabel() }}</button>
+        @if (timerState() !== 'idle') {
+          <button type="button" class="gz-btn3 rose" (click)="stopTimer()">{{ i18n.q('إنهاء الجلسة', 'Stop session') }}</button>
+        }
+      </div>
+    </div>
     <button type="button" class="gz-btn mt-[18px]" (click)="sheet.set(null)">{{ t().done }}</button>
   }
 </gz-sheet>
 
 <!-- reset confirmation (GZ-T06) -->
-<gz-sheet [open]="sheet() === 'reset'" [label]="t().resetTitle" (closed)="sheet.set(null)">
-  <div class="text-center" style="padding: 6px 0 4px">
-    <div class="gz-tile t-blush mx-auto mb-2.5" style="width: 60px; height: 60px; border-radius: 20px"><svg gzIcon="reset" size="l" /></div>
-    <h2 class="gz-h2 gz-hd">{{ t().resetTitle }}</h2>
-    <p class="gz-mute gz-sm" style="margin: 6px 0 16px">
-      {{ isPattern() ? i18n.q('الخطوات المنفّذة في الدور الحالي هترجع للصفر.', 'Steps done in the current round return to zero.') : i18n.q('عدّاد الدور الحالي هيرجع للصفر (رقم الدور مبيتغيرش).', 'The current round counter returns to zero (the round number stays).') }}
-    </p>
-  </div>
-  <button type="button" class="gz-btn danger" (click)="confirmReset()">{{ t().resetConfirm }}</button>
-  <button type="button" class="gz-btn2 mt-2" (click)="sheet.set(null)">{{ t().cancel }}</button>
+<gz-sheet [open]="sheet() === 'reset'" [title]="t().resetTitle" [description]="isPattern() ? i18n.q('الخطوات المنفّذة في الدور الحالي هترجع للصفر.', 'Steps done in the current round return to zero.') : i18n.q('عدّاد الدور الحالي هيرجع للصفر (رقم الدور مبيتغيرش).', 'The current round counter returns to zero (the round number stays).')" (closed)="sheet.set(null)">
+  <ng-container gzActions>
+    <button type="button" class="gz-btn danger" (click)="confirmReset()"><svg gzIcon="reset" size="s" />{{ t().resetConfirm }}</button>
+    <button type="button" class="gz-btn-text" (click)="sheet.set(null)">{{ t().cancel }}</button>
+  </ng-container>
 </gz-sheet>

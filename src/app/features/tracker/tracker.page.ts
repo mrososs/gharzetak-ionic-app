@@ -2,10 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { ACTN } from '../../core/data/catalog';
 import { IconName } from '../../core/data/icons';
+import { PartInstance, instanceLabel, instanceProgress, nextUnfinished, projectCompletion, siblingsOf } from '../../core/domain/collections';
 import { StitchKind, parsePattern } from '../../core/domain/pattern-parser';
-import { convertToken, displayInTerms } from '../../core/domain/terminology';
+import { TermSystem, convertToken, displayInTerms } from '../../core/domain/terminology';
+import { compareTime, formatMinutes } from '../../core/domain/time';
 import {
   CountMode,
+  TrackerLike,
   patternContext,
   patternJump,
   patternReset,
@@ -26,9 +29,12 @@ import {
   simpleUndo,
 } from '../../core/domain/tracker-engine';
 import { I18nService } from '../../core/i18n/i18n.service';
-import { Pattern, TrackerData } from '../../core/models/models';
+import { TrackerData } from '../../core/models/models';
 import { TimerService } from '../../core/services/timer.service';
-import { AppStore } from '../../core/state/app.store';
+import { AppStore, TrackerChange } from '../../core/state/app.store';
+import { ProjectFinishService } from '../../core/joy/project-finish.service';
+import { JoyBannerComponent } from '../../shared/ui/joy/joy-banner.component';
+import { JoyMilestoneComponent } from '../../shared/ui/joy/joy-milestone.component';
 import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
@@ -40,10 +46,10 @@ const TAP_GUARD_MS = 120;
 const pad2 = (n: number) => (n < 10 ? '0' + n : '' + n);
 const fmtHMS = (s: number) => Math.floor(s / 3600) + ':' + pad2(Math.floor((s % 3600) / 60)) + ':' + pad2(s % 60);
 
-/** GZ-S14 simple · GZ-S15 pattern-aware · GZ-T03 round complete · GZ-T05 settings · GZ-T06 reset. */
+/** GZ-S14 simple · GZ-S15 pattern-aware · GZ-T03 round complete · GZ-T05 settings · GZ-T06 reset — and, for multi-part projects, the part switcher. */
 @Component({
   selector: 'gz-tracker',
-  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent],
+  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent, JoyBannerComponent, JoyMilestoneComponent],
   templateUrl: './tracker.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -53,16 +59,52 @@ export class TrackerPage {
   protected readonly nav = inject(NavController);
   protected readonly timer = inject(TimerService);
   private readonly ui = inject(UiFeedback);
+  private readonly finishSvc = inject(ProjectFinishService);
 
   protected readonly t = this.i18n.t;
-  protected readonly sheet = signal<'picker' | 'cfg' | 'reset' | null>(null);
+  protected readonly sheet = signal<'picker' | 'cfg' | 'reset' | 'parts' | null>(null);
   protected readonly targetPresets = [12, 18, 24, 30, 36, 48];
   protected readonly perPresets = [1, 2, 3, 5, 6, 10];
   private lastTap = 0;
 
   protected readonly p = this.store.currentProject;
-  protected readonly tr = computed(() => this.p()?.tracker ?? null);
+  /** What the counter follows: the project's own tracker, or the active part instance (Arm 1/2). */
+  protected readonly view = computed(() => this.store.trackerView(this.p()));
+  protected readonly tr = computed<TrackerLike | null>(() => this.view()?.tracker ?? null);
+  protected readonly inst = computed<PartInstance | null>(() => this.view()?.instance ?? null);
   protected readonly isPattern = computed(() => this.tr()?.mode === 'pattern');
+
+  /* ---------------- multi-part ---------------- */
+  protected readonly completion = computed(() => {
+    const p = this.p();
+    return p?.parts?.length ? projectCompletion(p.parts, p.partSnapshots ?? []) : null;
+  });
+  protected readonly partRows = computed(() => {
+    const p = this.p();
+    const cur = this.inst();
+    if (!p?.parts?.length) return [];
+    return p.parts.map((i) => {
+      const snap = (p.partSnapshots ?? []).find((s) => s.partId === i.partId);
+      const pr = instanceProgress(i, snap);
+      return {
+        id: i.id,
+        label: instanceLabel(i, snap, siblingsOf(p.parts ?? [], i)) + (i.retired ? ' ·' + this.i18n.q(' إضافية', ' extra') : ''),
+        pct: Math.round(pr.fraction * 100),
+        done: pr.done,
+        active: i.id === cur?.id,
+        time: this.timer.elapsedForInstance(p.id, i.id, i.workedSeconds),
+      };
+    });
+  });
+  protected readonly nextOpen = computed(() => {
+    const p = this.p();
+    return p?.parts?.length ? nextUnfinished(p.parts, p.partSnapshots ?? [], this.inst()?.id ?? null) : null;
+  });
+  protected readonly instTime = computed(() => {
+    const p = this.p();
+    const i = this.inst();
+    return p && i ? fmtHMS(this.timer.elapsedForInstance(p.id, i.id, i.workedSeconds)) : '0:00:00';
+  });
 
   /* ---------------- simple ---------------- */
   protected readonly sm = computed(() => {
@@ -84,21 +126,29 @@ export class TrackerPage {
       doneMsg: q(`اكتمل الدور ${s.round}!` + (lastRound ? ' خلّصتي كل الأدوار.' : ''), `Round ${s.round} complete!` + (lastRound ? ' All rounds finished.' : '')),
       btnLabel: done ? (last ? q('اكتملت كل الأدوار', 'All rounds complete') : q('ابدئي الدور ', 'Start round ') + (s.round + 1)) : '+' + simpleNextAmount(s),
       btnIcon: (done ? (last ? 'check' : 'arrow') : 'plus') as IconName,
-      canFinish: last && this.p()?.status !== 'done',
+      canFinish: last && this.canFinishProject(),
     };
   });
 
+  /** A project is finished when its single tracker — or EVERY part — is complete. */
+  private canFinishProject(): boolean {
+    const p = this.p();
+    if (!p || p.status === 'done') return false;
+    if (p.parts?.length) return projectCompletion(p.parts, p.partSnapshots ?? []).doneCount >= p.parts.filter((i) => !i.retired).length;
+    return true;
+  }
+
   /* ---------------- pattern-aware ---------------- */
-  protected readonly pattern = computed<Pattern | null>(() => this.store.pattern(this.tr()?.patternId));
+  protected readonly src = computed(() => this.view()?.source ?? null);
   protected readonly parsed = computed(() => {
-    const pat = this.pattern();
-    return pat ? parsePattern(pat.text) : null;
+    const s = this.src();
+    return s ? parsePattern(s.text) : null;
   });
   protected readonly pt = computed(() => {
     const t = this.tr();
-    const pat = this.pattern();
+    const src = this.src();
     const parsed = this.parsed();
-    if (!t || !pat || !parsed) return null;
+    if (!t || !src || !parsed) return null;
     const ctx = patternContext(parsed, t.cursor);
     const st = patternStats(parsed, t.cursor);
     if (!ctx || !st) return null;
@@ -113,22 +163,23 @@ export class TrackerPage {
     const nextRound = parsed.rounds[ctx.roundIndex + 1];
     let next: string;
     if (pd) next = ctx.isLastRound ? q('الباترن خلص', 'Pattern finished') : q('الدور ', 'Round ') + nextRound.n;
-    else if (ptr + 1 < len) next = this.actLabel(r.acts[ptr + 1].k, pat);
+    else if (ptr + 1 < len) next = this.actLabel(r.acts[ptr + 1].k, src.terms);
     else next = ctx.isLastRound ? q('نهاية الباترن', 'End of pattern') : q('آخر خطوة — بعدها الدور ', 'Last step — then round ') + nextRound.n;
     const mode = t.cursor.mode;
     return {
-      pat,
-      name: this.store.patternName(pat),
+      pat: { id: src.id, terms: src.terms },
+      name: src.name,
       st,
       n: r.n,
-      code: displayInTerms(r.raw, pat.terms, this.store.viewTerms()),
+      code: displayInTerms(r.raw, src.terms, this.store.viewTerms()),
       sumText: `${r.cons} → ${r.prod}` + (r.declared !== null ? `  [${r.declared}]` : ''),
       okText: r.mismatch ? `[${r.declared}] ≠ ${r.prod}` : r.declared !== null ? `[${r.declared}] ✓` : q('بدون مجموع', 'No total'),
       okCls: r.mismatch ? 'rose' : 'sage',
+      joins: r.joins,
       rounds: parsed.rounds.map((x, i) => ({ n: x.n, i, cls: i === ctx.roundIndex ? 'cur' : i < ctx.roundIndex ? 'dn' : '' })),
-      curLabel: act ? this.actLabel(act.k, pat) : '',
-      curIO: act ? (act.mr ? '0 → 1 · MR' : `${act.cons} → ${act.prod}`) : '',
-      group: grp.map((a, i) => ({ label: this.abbr(a.k, pat), cls: gStart + i < ptr ? 'dn' : gStart + i === ptr ? 'cur' : '' })),
+      curLabel: act ? this.actLabel(act.k, src.terms) : '',
+      curIO: act ? (act.mr ? '0 → 1 · MR' : act.ref ? `0 → ${act.prod} · ${act.ref}` : `${act.cons} → ${act.prod}`) : '',
+      group: grp.map((a, i) => ({ label: this.abbr(a.k, src.terms), cls: gStart + i < ptr ? 'dn' : gStart + i === ptr ? 'cur' : '' })),
       next,
       doneMsg: ctx.isLastRound ? q('اكتمل الباترن كله!', 'The whole pattern is complete!') : q(`اكتمل الدور ${r.n}!`, `Round ${r.n} complete!`),
       mode,
@@ -137,13 +188,13 @@ export class TrackerPage {
           ? q('اكتمل الباترن', 'Pattern complete')
           : q('ابدئي الدور ', 'Start round ') + nextRound.n
         : mode === 'action'
-          ? this.actLabel(act!.k, pat)
+          ? this.actLabel(act!.k, src.terms)
           : mode === 'group'
             ? q('أنهيت التكرار ', 'Group done ') + st.currentGroup + '/' + st.totalGroups
             : q('أنهيت الدور ', 'Round done ') + r.n,
       btnIcon: (pd ? (ctx.isLastRound ? 'check' : 'arrow') : 'plus') as IconName,
       disabled: st.patternComplete,
-      canFinish: st.patternComplete && this.p()?.status !== 'done',
+      canFinish: st.patternComplete && this.canFinishProject(),
     };
   });
   protected readonly modes = computed(() => [
@@ -152,11 +203,32 @@ export class TrackerPage {
     { id: 'round' as CountMode, label: this.i18n.q('كل دور', 'Whole round') },
   ]);
 
+  /* ---------------- time ---------------- */
   protected readonly timeText = computed(() => {
     const p = this.p();
     return p ? fmtHMS(this.timer.elapsedFor(p.id, p.workedSeconds)) : '0:00:00';
   });
-  protected readonly timerOn = computed(() => !!this.p() && this.timer.running()?.projectId === this.p()!.id);
+  protected readonly timerState = computed(() => {
+    const p = this.p();
+    return p ? this.timer.stateFor(p.id) : 'idle';
+  });
+  protected readonly timerOn = computed(() => this.timerState() === 'running');
+  protected readonly timerLabel = computed(() => {
+    const s = this.timerState();
+    return s === 'running' ? this.i18n.q('إيقاف مؤقت', 'Pause') : s === 'paused' ? this.i18n.q('استئناف', 'Resume') : this.i18n.q('بدء', 'Start');
+  });
+  protected readonly timeCmp = computed(() => {
+    const p = this.p();
+    return p ? compareTime(p.estimatedHours, this.timer.elapsedFor(p.id, p.workedSeconds)) : null;
+  });
+  protected readonly timeCmpText = computed(() => {
+    const c = this.timeCmp();
+    if (!c || c.state === 'none') return this.i18n.q('لم يتم تحديد وقت متوقع', 'No estimated time set');
+    const lang = this.i18n.lang();
+    return c.state === 'over'
+      ? this.i18n.q('تجاوز الوقت المتوقع: ', 'Over the estimate by ') + formatMinutes(c.overMinutes, lang)
+      : this.i18n.q('المتبقي تقديريًا: ', 'Estimated remaining: ') + formatMinutes(c.remainingMinutes, lang);
+  });
   protected readonly pickItems = computed(() =>
     this.store
       .sortedProjects()
@@ -164,16 +236,19 @@ export class TrackerPage {
       .map((x) => ({ id: x.id, name: x.name, st: this.store.statusName(x.status), ...this.store.progress(x) })),
   );
 
-  private actLabel(k: StitchKind, pat: Pattern): string {
-    return ACTN[k][this.i18n.lang()] + ' (' + this.abbr(k, pat) + ')';
+  private actLabel(k: StitchKind, terms: TermSystem): string {
+    return ACTN[k][this.i18n.lang()] + ' (' + this.abbr(k, terms) + ')';
   }
-  private abbr(k: StitchKind, pat: Pattern): string {
-    return convertToken(k, pat.terms, this.store.viewTerms());
+  private abbr(k: StitchKind, terms: TermSystem): string {
+    return convertToken(k, terms, this.store.viewTerms());
   }
 
-  private update(fn: (t: TrackerData) => TrackerData): void {
+  private update(fn: (t: TrackerLike) => TrackerLike, change?: TrackerChange): void {
     const p = this.p();
-    if (p) void this.store.updateTracker(p.id, fn);
+    if (!p) return;
+    const i = this.inst();
+    if (i) void this.store.updatePartTracker(p.id, i.id, fn, change);
+    else void this.store.updateTracker(p.id, fn as (t: TrackerData) => TrackerData, change);
   }
 
   /* ---------------- actions ---------------- */
@@ -185,9 +260,10 @@ export class TrackerPage {
     if (!t) return;
     if (t.mode === 'pattern') {
       const parsed = this.parsed();
-      if (parsed) this.update((x) => ({ ...x, cursor: patternTap(parsed, x.cursor) }));
+      // `parsed` is the pinned pattern / part snapshot this tap really used: Crochet Joy needs the very same rounds to detect completion.
+      if (parsed) this.update((x) => ({ ...x, cursor: patternTap(parsed, x.cursor) }), { origin: 'tap', parsed });
     } else {
-      this.update((x) => ({ ...x, simple: simpleRoundComplete(x.simple) ? simpleNextRound(x.simple) : simpleTap(x.simple) }));
+      this.update((x) => ({ ...x, simple: simpleRoundComplete(x.simple) ? simpleNextRound(x.simple) : simpleTap(x.simple) }), { origin: 'tap' });
     }
   }
 
@@ -196,11 +272,11 @@ export class TrackerPage {
     if (!t) return;
     const empty = t.mode === 'pattern' ? !t.cursor.history.length : !t.simple.history.length;
     if (empty) return void this.ui.say('مفيش حاجة للتراجع عنها', 'Nothing to undo');
-    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternUndo(x.cursor) } : { ...x, simple: simpleUndo(x.simple) }));
+    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternUndo(x.cursor) } : { ...x, simple: simpleUndo(x.simple) }), { origin: 'undo' });
   }
 
   protected confirmReset(): void {
-    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternReset(x.cursor) } : { ...x, simple: simpleReset(x.simple) }));
+    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternReset(x.cursor) } : { ...x, simple: simpleReset(x.simple) }), { origin: 'reset' });
     this.sheet.set(null);
     void this.ui.say('تمت إعادة ضبط الدور', 'Round reset');
   }
@@ -231,14 +307,31 @@ export class TrackerPage {
   protected async finishProject(): Promise<void> {
     const p = this.p();
     if (!p) return;
-    await this.store.setStatus(p.id, 'done');
-    if (this.timerOn()) await this.timer.stop();
-    await this.ui.say('مبروك! المشروع اتحوّل إلى «مكتمل».', 'Congratulations! The project is now completed.');
+    // Timer stops first (so the recorded time is final), then the explicit finish. The celebration — or a plain confirmation — comes from JoyPresenter.
+    await this.finishSvc.finish(p.id);
   }
 
+  /* ---- time ---- */
   protected toggleTimer(): void {
     const p = this.p();
-    if (p) void this.timer.toggle(p.id);
+    if (p) void this.timer.toggle(p.id, this.inst()?.id ?? null);
+  }
+  protected stopTimer(): void {
+    void this.timer.stop();
+  }
+
+  /* ---- parts ---- */
+  /** Switch to another part: its own position is shown, nothing else moves, and a running timer carries over without losing a second. */
+  protected async switchPart(id: string): Promise<void> {
+    const p = this.p();
+    if (!p || id === this.inst()?.id) return this.sheet.set(null);
+    await this.store.setActiveInstance(p.id, id);
+    await this.timer.switchInstance(p.id, id);
+    this.sheet.set(null);
+  }
+  protected continueUnfinished(): void {
+    const n = this.nextOpen();
+    if (n) void this.switchPart(n.id);
   }
 
   protected async pick(id: string): Promise<void> {
@@ -276,5 +369,14 @@ export class TrackerPage {
   protected newProject(): void {
     this.sheet.set(null);
     void this.nav.navigateForward('/tabs/projects/new');
+  }
+  protected openSource(): void {
+    const s = this.src();
+    const p = this.p();
+    if (s?.id) void this.nav.navigateForward(['/tabs/home/patterns', s.id]);
+    else if (p?.collectionId) void this.nav.navigateForward(['/tabs/home/collections', p.collectionId]);
+  }
+  protected fmt(sec: number): string {
+    return fmtHMS(sec);
   }
 }
