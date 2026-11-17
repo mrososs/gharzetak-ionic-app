@@ -13,6 +13,8 @@ export interface ProgressPosition {
   count: number;
   patternRoundIndex: number;
   actionPtr: number;
+  /** Multi-part projects only: sum of every part instance's position (see `multiPosition`). */
+  multi?: number;
 }
 
 export interface ConflictCurrent {
@@ -61,6 +63,8 @@ export interface PullPattern {
   fileSize: number | null;
   fileMime: string | null;
   readingPosition: number;
+  contentRev?: number;
+  suggestedMinutes?: number;
   revision: number;
   clientUpdatedAt: number;
 }
@@ -73,6 +77,7 @@ export interface PullProject {
   yarnType: string;
   status: string;
   patternId: string | null;
+  collectionId?: string | null;
   coverPath: string | null;
   estimatedHours: number;
   workedSeconds: number;
@@ -96,8 +101,28 @@ export interface PullProgress {
   countMode: string;
   history: unknown[];
   patternHistory: unknown[];
+  multiState?: PullMultiState | null;
+  patternSnapshot?: { rev: number; name: string; text: string; terms: 'us' | 'uk' } | null;
   revision: number;
   clientUpdatedAt: number;
+}
+
+export interface PullMultiState {
+  collectionId: string;
+  collectionRev: number;
+  activeInstanceId: string | null;
+  snapshots: { partId: string; name: string; quantity: number; text: string; assemblyNotes: string; terms?: 'us' | 'uk' }[];
+  instances: {
+    id: string;
+    partId: string;
+    index: number;
+    mode: 'simple' | 'pattern';
+    simple: { round: number; target: number; perTap: number; count: number; totalRounds: number; history: unknown[] };
+    cursor: { roundIndex: number; ptr: number; mode: 'action' | 'group' | 'round'; history: unknown[] };
+    workedSeconds: number;
+    updatedAt: number;
+    retired?: boolean;
+  }[];
 }
 
 export interface PullNote {
@@ -126,6 +151,31 @@ export interface PullTutorial {
   stamps: { id: string; seconds: number; note: string }[];
 }
 
+export interface PullCollection {
+  id: string;
+  name: string;
+  description: string;
+  level: string;
+  terms: string;
+  coverData: string | null;
+  contentRev: number;
+  suggestedMinutes: number;
+  sourceText: string;
+  revision: number;
+  clientUpdatedAt: number;
+  createdAt: number;
+  parts: { id: string; name: string; quantity: number; rawText: string; assemblyNotes: string }[];
+}
+
+export interface PullRevision {
+  entityKind: 'pattern' | 'collection';
+  entityId: string;
+  rev: number;
+  name: string;
+  createdAt: number;
+  snapshot: { terms: 'us' | 'uk'; text?: string; parts?: { id: string; name: string; quantity: number; rawText: string; assemblyNotes: string }[] } | null;
+}
+
 export interface PullResponse {
   serverTime: number;
   profile: PullProfile | null;
@@ -138,4 +188,7 @@ export interface PullResponse {
   favorites: string[];
   tutorials: PullTutorial[];
   interest: string | null;
+  /** Absent when talking to an older Worker. */
+  collections?: PullCollection[];
+  revisions?: PullRevision[];
 }

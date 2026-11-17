@@ -1,12 +1,13 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ApiClient, ApiError } from '../api/api.client';
-import type { Accepted, ConflictCurrent, MediaStored, PullResponse } from '../api/api.types';
+import type { Accepted, ConflictCurrent, MediaStored, PullMultiState, PullProgress, PullResponse } from '../api/api.types';
 import { AuthService } from '../auth/auth.service';
 import { toAvatarId } from '../data/avatars';
 import { CategoryId, YarnId, AccessoryId, LevelId } from '../data/catalog';
+import { multiPosition } from '../domain/collections';
 import { parsePattern } from '../domain/pattern-parser';
 import { createPatternCursor, createSimpleCounter } from '../domain/tracker-engine';
-import { Pattern, Profile, Project, ProjectPhoto, TutorialData } from '../models/models';
+import { Pattern, PatternCollection, PatternRevision, Profile, Project, ProjectPhoto, TutorialData } from '../models/models';
 import { NetworkService } from '../services/network.service';
 import { AppStore } from '../state/app.store';
 import { uuid } from '../state/factories';
@@ -15,7 +16,7 @@ import { dataUrlToBlob } from '../utils/image';
 
 export type SyncState = 'local' | 'idle' | 'syncing' | 'offline' | 'error';
 
-const ORDER: OutboxKind[] = ['profile', 'tools', 'pattern', 'project', 'cover', 'progress', 'note', 'photo', 'session', 'favorite', 'tutorial', 'interest'];
+const ORDER: OutboxKind[] = ['profile', 'tools', 'pattern', 'collection', 'patternrev', 'project', 'cover', 'progress', 'note', 'photo', 'session', 'favorite', 'tutorial', 'interest'];
 const MAX_ATTEMPTS = 5;
 const MAX_REBASES = 3;
 const MAX_BACKUPS = 25;
@@ -30,7 +31,7 @@ export interface ConflictNotice {
   readonly at: number;
 }
 /** Entity kinds whose server revision we track (everything else is idempotent by id). */
-const VERSIONED = new Set(['profile', 'tools', 'pattern', 'project', 'progress', 'note', 'tutorial']);
+const VERSIONED = new Set(['profile', 'tools', 'pattern', 'collection', 'project', 'progress', 'note', 'tutorial']);
 
 /** The server could not be reached or asked us to back off: keep the outbox entry and retry later. */
 class NetworkFailure extends Error {}
@@ -202,6 +203,7 @@ export class SyncService {
       case 'project': case 'progress': case 'note': case 'cover': return this.store.project(e.id)?.name ?? '';
       case 'photo': return this.store.project((e.payload as { projectId?: string } | undefined)?.projectId)?.name ?? '';
       case 'pattern': return this.store.pattern(e.id)?.name ?? '';
+      case 'collection': return this.store.collection(e.id)?.name ?? '';
       default: return '';
     }
   }
@@ -210,9 +212,13 @@ export class SyncService {
   private snapshotFor(e: OutboxEntry): unknown {
     switch (e.kind) {
       case 'project': return this.store.project(e.id);
-      case 'progress': return this.store.project(e.id)?.tracker ?? null;
+      case 'progress': {
+        const p = this.store.project(e.id);
+        return p ? { tracker: p.tracker, parts: p.parts ?? null, activeInstanceId: p.activeInstanceId ?? null, patternPin: p.patternPin ?? null } : null;
+      }
       case 'note': return { notes: this.store.project(e.id)?.notes ?? '' };
       case 'pattern': return this.store.pattern(e.id);
+      case 'collection': return this.store.collection(e.id);
       case 'profile': case 'tools': return this.store.profile();
       case 'tutorial': return this.store.tutorial(e.id);
       default: return e.payload ?? null;
@@ -324,9 +330,35 @@ export class SyncService {
         await this.versioned(key, `/v1/patterns/${p.id}`, p.updatedAt, {
           name: p.name.slice(0, 120), level: p.level, terms: p.terms, sourceType: p.source === 'sample' ? 'text' : p.source,
           sourceUrl: p.sourceUrl ? p.sourceUrl.slice(0, 500) : null, attribution: p.attribution ? p.attribution.slice(0, 200) : null,
-          rawText: p.text.slice(0, 20000), readingPosition: Math.max(0, Math.trunc(p.position)),
+          rawText: p.text.slice(0, 20000), readingPosition: Math.max(0, Math.trunc(p.position)), contentRev: Math.max(1, p.rev ?? 1), suggestedMinutes: Math.max(0, Math.trunc(p.suggestedMinutes ?? 0)),
           rounds: parsed.rounds.slice(0, 500).map((r) => ({ n: r.n, raw: r.raw.slice(0, 500), ok: r.ok, cons: r.cons, prod: r.prod, declared: r.declared })),
         }, { kind: 'pattern', id: e.id, label: p.name });
+        return;
+      }
+      case 'collection': {
+        if (e.op === 'delete') {
+          await this.call(() => this.api.delete(`/v1/collections/${e.id}`));
+          await this.setRev(key, 0);
+          return;
+        }
+        const c = this.store.collection(e.id);
+        if (!c) return;
+        await this.versioned(key, `/v1/collections/${c.id}`, c.updatedAt, {
+          name: c.name.slice(0, 120), description: c.description.slice(0, 2000), level: c.level, terms: c.terms,
+          coverData: c.coverLocalUrl && c.coverLocalUrl.length <= 220_000 ? c.coverLocalUrl : null,
+          contentRev: Math.max(1, c.rev), suggestedMinutes: Math.max(0, Math.trunc(c.suggestedMinutes)), sourceText: c.sourceText.slice(0, 60000),
+          parts: c.parts.slice(0, 30).map((x) => ({ id: x.id, name: x.name.slice(0, 80), quantity: x.quantity, rawText: x.text.slice(0, 20000), assemblyNotes: x.assemblyNotes.slice(0, 4000) })),
+        }, { kind: 'collection', id: e.id, label: c.name });
+        return;
+      }
+      case 'patternrev': {
+        // Immutable and idempotent by (kind, entity, rev): the server keeps the first write, so a retry can never rewrite history.
+        const r = this.store.patternRevs().find((x) => x.id === e.id);
+        if (!r) return;
+        const snapshot = r.kind === 'pattern'
+          ? { terms: r.terms, text: (r.text ?? '').slice(0, 20000) }
+          : { terms: r.terms, parts: (r.parts ?? []).slice(0, 30).map((x) => ({ id: x.id, name: x.name.slice(0, 80), quantity: x.quantity, rawText: x.text.slice(0, 20000), assemblyNotes: x.assemblyNotes.slice(0, 4000) })) };
+        await this.call(() => this.api.put(`/v1/revisions/${r.kind}/${r.entityId}/${r.rev}`, { name: r.name.slice(0, 120), createdAt: r.at, snapshot }));
         return;
       }
       case 'project': {
@@ -338,7 +370,7 @@ export class SyncService {
         const p = project();
         if (!p) return;
         await this.versioned(key, `/v1/projects/${p.id}`, p.updatedAt, {
-          name: p.name.slice(0, 120), category: p.category, hookSize: p.hook, yarnType: p.yarn, status: p.status, patternId: p.tracker.patternId,
+          name: p.name.slice(0, 120), category: p.category, hookSize: p.hook, yarnType: p.yarn, status: p.status, patternId: p.tracker.patternId, collectionId: p.collectionId ?? null,
           estimatedHours: p.estimatedHours, workedSeconds: p.workedSeconds, lastWorkedAt: p.lastWorkedAt, createdAt: p.createdAt,
         }, { kind: 'project', id: e.id, label: p.name });
         return;
@@ -351,10 +383,16 @@ export class SyncService {
           mode: t.mode, round: t.simple.round, target: t.simple.target, perTap: t.simple.perTap, count: t.simple.count, totalRounds: t.simple.totalRounds,
           patternId: t.patternId, patternRoundIndex: t.cursor.roundIndex, actionPtr: t.cursor.ptr, countMode: t.cursor.mode,
           history: t.simple.history.slice(-100), patternHistory: t.cursor.history.slice(-100),
+          multiState: p.parts?.length && p.collectionId ? this.multiStateBody(p) : null,
+          patternSnapshot: p.patternPin ? { rev: p.patternPin.rev, name: p.patternPin.name.slice(0, 120), text: p.patternPin.text.slice(0, 20000), terms: p.patternPin.terms } : null,
         }, {
           kind: 'progress', id: e.id, label: p.name,
           ahead: (cur) => {
             const s = cur.state;
+            if (p.parts?.length && s?.multi != null) {
+              const mine = multiPosition(p.parts);
+              return mine > s.multi ? 'ahead' : mine === s.multi ? 'same' : 'behind';
+            }
             if (!s || s.mode !== t.mode) return 'behind'; // different counting modes are not comparable: fall back to the clock rule
             const mine = position(t.mode, t.simple.round, t.simple.count, t.cursor.roundIndex, t.cursor.ptr);
             const theirs = position(s.mode, s.round, s.count, s.patternRoundIndex, s.actionPtr);
@@ -392,9 +430,9 @@ export class SyncService {
         return;
       }
       case 'session': {
-        const s = e.payload as { projectId: string; startedAt: number; endedAt: number; seconds: number };
+        const s = e.payload as { projectId: string; startedAt: number; endedAt: number; seconds: number; partInstanceId?: string | null };
         if (!this.store.project(s.projectId)) return;
-        await this.call(() => this.api.put(`/v1/sessions/${e.id}`, { projectId: s.projectId, startedAt: s.startedAt, endedAt: s.endedAt, seconds: s.seconds }));
+        await this.call(() => this.api.put(`/v1/sessions/${e.id}`, { projectId: s.projectId, startedAt: s.startedAt, endedAt: s.endedAt, seconds: s.seconds, partInstanceId: s.partInstanceId ?? null }));
         return;
       }
       case 'favorite': {
@@ -472,11 +510,35 @@ export class SyncService {
         id: x.id, isSample: false, name: x.name, level: x.level as LevelId, terms: x.terms as 'us' | 'uk', source: x.sourceType as Pattern['source'],
         text: x.rawText, attribution: x.attribution ?? '', sourceUrl: x.sourceUrl ?? '', position: x.readingPosition,
         file: x.fileName ? { name: x.fileName, size: x.fileSize ?? 0, mime: x.fileMime ?? '', storagePath: x.filePath } : null,
+        rev: x.contentRev ?? 1, suggestedMinutes: x.suggestedMinutes ?? 0,
         updatedAt: x.clientUpdatedAt, deletedAt: null,
       };
       if (local) mergedPats.splice(mergedPats.indexOf(local), 1, pat);
       else mergedPats.push(pat);
     }
+
+    // collections (same merge rules as patterns: pending local changes win and are pushed; never-confirmed ones are kept)
+    const remoteCols = new Map((r.collections ?? []).map((x) => [x.id, x]));
+    const mergedCols: PatternCollection[] = this.store.collections().filter((c) => remoteCols.has(c.id) || dirty.has(`collection|${c.id}`) || this.rev(`collection|${c.id}`) === 0);
+    for (const x of remoteCols.values()) {
+      const local = mergedCols.find((c) => c.id === x.id);
+      if (local && (dirty.has(`collection|${x.id}`) || local.updatedAt >= x.clientUpdatedAt)) continue;
+      const col: PatternCollection = {
+        id: x.id, name: x.name, description: x.description, level: x.level as LevelId, terms: x.terms as 'us' | 'uk', coverLocalUrl: x.coverData,
+        parts: x.parts.map((pt) => ({ id: pt.id, name: pt.name, quantity: pt.quantity, text: pt.rawText, assemblyNotes: pt.assemblyNotes })),
+        rev: x.contentRev, suggestedMinutes: x.suggestedMinutes, sourceText: x.sourceText, createdAt: x.createdAt, updatedAt: x.clientUpdatedAt, deletedAt: null,
+      };
+      if (local) mergedCols.splice(mergedCols.indexOf(local), 1, col);
+      else mergedCols.push(col);
+    }
+    // revision history is append-only: adopt what the server has that this device lacks
+    const localRevIds = new Set(this.store.patternRevs().map((x) => x.id));
+    const newRevs: PatternRevision[] = (r.revisions ?? [])
+      .filter((x) => x.snapshot && !localRevIds.has(`${x.entityKind}:${x.entityId}:${x.rev}`))
+      .map((x) => ({
+        id: `${x.entityKind}:${x.entityId}:${x.rev}`, kind: x.entityKind, entityId: x.entityId, rev: x.rev, name: x.name, terms: x.snapshot!.terms, at: x.createdAt,
+        ...(x.entityKind === 'pattern' ? { text: x.snapshot!.text ?? '' } : { parts: (x.snapshot!.parts ?? []).map((pt) => ({ id: pt.id, name: pt.name, quantity: pt.quantity, text: pt.rawText, assemblyNotes: pt.assemblyNotes })) }),
+      }));
 
     // projects (+ progress, notes, photos)
     const progBy = new Map(r.progress.map((x) => [x.projectId, x]));
@@ -499,6 +561,7 @@ export class SyncService {
           ? { ...local, coverPath: x.coverPath ?? local.coverPath }
           : {
               id: x.id, name: x.name, category: x.category as CategoryId, hook: x.hookSize, yarn: x.yarnType as YarnId, status: x.status as Project['status'],
+              collectionId: x.collectionId ?? null,
               notes: local?.notes ?? '', coverLocalUrl: local && local.coverPath === x.coverPath ? local.coverLocalUrl : null, coverPath: x.coverPath,
               photos: [], workedSeconds: x.workedSeconds, estimatedHours: x.estimatedHours, lastWorkedAt: x.lastWorkedAt,
               createdAt: x.createdAt, updatedAt: x.clientUpdatedAt, deletedAt: null, tracker: local?.tracker ?? this.emptyTracker(),
@@ -514,7 +577,8 @@ export class SyncService {
             }
           : base.tracker;
       const notesText = note && !dirty.has(`note|${x.id}`) && (!local || note.clientUpdatedAt >= local.updatedAt || !projDirty) ? note.body : base.notes;
-      const next: Project = { ...base, tracker, notes: notesText, photos: [...remotePhotos, ...keepLocalPhotos] };
+      const multi = pr && !progDirty ? this.multiFromPull(pr) : local ? { parts: local.parts, partSnapshots: local.partSnapshots, activeInstanceId: local.activeInstanceId, collectionRev: local.collectionRev, patternPin: local.patternPin } : {};
+      const next: Project = { ...base, ...multi, tracker, notes: notesText, photos: [...remotePhotos, ...keepLocalPhotos] };
       if (local) merged.splice(merged.indexOf(local), 1, next);
       else merged.push(next);
     }
@@ -530,7 +594,7 @@ export class SyncService {
       };
     }
 
-    await this.applyMerged(scope, merged, mergedPats, favList, tutorials, dirty.has('interest|me') ? null : (r.interest ?? ''), profileAdopted);
+    await this.applyMerged(scope, merged, mergedPats, favList, tutorials, dirty.has('interest|me') ? null : (r.interest ?? ''), profileAdopted, mergedCols, newRevs);
   }
 
   /**
@@ -544,6 +608,7 @@ export class SyncService {
       if (r.profile.toolsRevision > 0) server.set('tools|me', r.profile.toolsRevision);
     }
     for (const x of r.patterns) server.set(`pattern|${x.id}`, x.revision);
+    for (const x of r.collections ?? []) server.set(`collection|${x.id}`, x.revision);
     for (const x of r.projects) server.set(`project|${x.id}`, x.revision);
     for (const x of r.progress) server.set(`progress|${x.projectId}`, x.revision);
     for (const x of r.notes) server.set(`note|${x.projectId}`, x.revision);
@@ -568,13 +633,18 @@ export class SyncService {
     tutorials: Record<string, TutorialData>,
     interestEmail: string | null,
     profileAdopted: boolean,
+    collections: PatternCollection[],
+    newRevs: PatternRevision[],
   ): Promise<void> {
     const s = scope as `user:${string}`;
     const oldProjects = this.store.projects();
     const oldPatterns = this.store.patterns();
+    const oldCollections = this.store.collections();
 
     this.store.projects.set(projects);
     this.store.patterns.set(patterns);
+    this.store.collections.set(collections);
+    if (newRevs.length) this.store.patternRevs.update((l) => [...l, ...newRevs]);
     this.store.favorites.set(favorites);
     this.store.tutorials.set(tutorials);
     if (interestEmail !== null) {
@@ -593,6 +663,12 @@ export class SyncService {
       const cur = this.store.pattern(p.id);
       if (same() && cur && !cur.isSample) await this.db.putPattern(s, cur);
     }
+    for (const c of oldCollections) if (same() && !collections.some((x) => x.id === c.id)) await this.db.removeCollection(s, c.id);
+    for (const c of collections) {
+      const cur = this.store.collection(c.id);
+      if (same() && cur) await this.db.putCollection(s, cur);
+    }
+    for (const rv of newRevs) if (same()) await this.db.putPatternRev(s, rv);
     if (!same()) return;
     await this.db.patchDocs(s, {
       favorites: this.store.favorites(),
@@ -601,6 +677,40 @@ export class SyncService {
       ...(profileAdopted ? { profile: this.store.profile() } : {}),
       ...(interestEmail !== null ? { storeEmail: this.store.storeEmail(), storeNotified: this.store.storeNotified() } : {}),
     });
+  }
+
+  /** Wire body of a multi-part project's state (history capped: the undo stack of each piece stays small on the wire). */
+  private multiStateBody(p: Project): Record<string, unknown> {
+    return {
+      collectionId: p.collectionId,
+      collectionRev: Math.max(1, p.collectionRev ?? 1),
+      activeInstanceId: p.activeInstanceId ?? null,
+      snapshots: (p.partSnapshots ?? []).map((s) => ({ partId: s.partId, name: s.name, quantity: s.quantity, text: s.text.slice(0, 20000), assemblyNotes: s.assemblyNotes.slice(0, 4000), terms: s.terms ?? 'us' })),
+      instances: (p.parts ?? []).map((i) => ({
+        id: i.id, partId: i.partId, index: i.index, mode: i.mode,
+        simple: { round: i.simple.round, target: i.simple.target, perTap: i.simple.perTap, count: i.simple.count, totalRounds: i.simple.totalRounds, history: i.simple.history.slice(-50) },
+        cursor: { roundIndex: i.cursor.roundIndex, ptr: i.cursor.ptr, mode: i.cursor.mode, history: i.cursor.history.slice(-50) },
+        workedSeconds: Math.max(0, Math.trunc(i.workedSeconds)), updatedAt: i.updatedAt, ...(i.retired ? { retired: true } : {}),
+      })),
+    };
+  }
+
+  private multiFromPull(pr: PullProgress): Partial<Project> {
+    const ms: PullMultiState | null | undefined = pr.multiState;
+    const patternPin = pr.patternSnapshot ?? null;
+    if (!ms) return { parts: undefined, partSnapshots: undefined, activeInstanceId: undefined, collectionRev: undefined, patternPin };
+    return {
+      collectionRev: ms.collectionRev,
+      activeInstanceId: ms.activeInstanceId,
+      partSnapshots: ms.snapshots.map((s) => ({ partId: s.partId, name: s.name, quantity: s.quantity, text: s.text, assemblyNotes: s.assemblyNotes, terms: s.terms })),
+      parts: ms.instances.map((i) => ({
+        id: i.id, partId: i.partId, index: i.index, mode: i.mode,
+        simple: createSimpleCounter({ round: i.simple.round, target: i.simple.target, perTap: i.simple.perTap, count: i.simple.count, totalRounds: i.simple.totalRounds, history: i.simple.history as never }),
+        cursor: createPatternCursor({ roundIndex: i.cursor.roundIndex, ptr: i.cursor.ptr, mode: i.cursor.mode, history: i.cursor.history as never }),
+        workedSeconds: i.workedSeconds, updatedAt: i.updatedAt, ...(i.retired ? { retired: true } : {}),
+      })),
+      patternPin,
+    };
   }
 
   private emptyTracker(): Project['tracker'] {

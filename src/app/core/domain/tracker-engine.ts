@@ -263,3 +263,12 @@ function clampInt(n: number, min: number, max: number): number {
   const v = Number.isFinite(n) ? Math.round(n) : min;
   return Math.max(min, Math.min(max, v));
 }
+
+/** Structural shape shared by a project's tracker and a part instance's tracker (both feed the same counter UI). */
+export interface TrackerLike {
+  readonly mode: 'simple' | 'pattern';
+  readonly simple: SimpleCounter;
+  readonly cursor: PatternCursor;
+  readonly patternId: string | null;
+  readonly updatedAt: number;
+}

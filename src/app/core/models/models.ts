@@ -2,6 +2,7 @@ import type { AvatarId } from '../data/avatars';
 import type { AccessoryId, CategoryId, LevelId, YarnId } from '../data/catalog';
 import type { TermSystem } from '../domain/terminology';
 import type { PatternCursor, SimpleCounter } from '../domain/tracker-engine';
+import type { PartInstance, PartSnapshot } from '../domain/collections';
 
 export type ProjectStatus = 'active' | 'paused' | 'done';
 export type TrackerMode = 'simple' | 'pattern';
@@ -43,6 +44,26 @@ export interface Project {
   readonly tracker: TrackerData;
   /** Soft delete tombstone so other devices learn about deletions. */
   readonly deletedAt: number | null;
+  /** Created from a pattern collection (absent on every project saved by an older build). */
+  readonly collectionId?: string | null;
+  /** The collection revision this project's part snapshots were taken from. */
+  readonly collectionRev?: number;
+  /** One independent tracker per physical piece (Arm 1/2, Arm 2/2, …). Absent = ordinary single-tracker project. */
+  readonly parts?: readonly PartInstance[];
+  /** Frozen copy of every part's instructions: later edits to the collection never change this project until the user updates it. */
+  readonly partSnapshots?: readonly PartSnapshot[];
+  /** The part instance the tracker is currently on (remembered across restarts). */
+  readonly activeInstanceId?: string | null;
+  /** Standalone pattern projects: the pattern content this project is pinned to once the pattern is edited. */
+  readonly patternPin?: PatternPin | null;
+}
+
+/** Immutable copy of a standalone pattern's content, so editing the pattern never silently moves an active project. */
+export interface PatternPin {
+  readonly rev: number;
+  readonly name: string;
+  readonly text: string;
+  readonly terms: TermSystem;
 }
 
 export type PatternSource = 'sample' | 'text' | 'pdf' | 'image' | 'youtube';
@@ -70,8 +91,56 @@ export interface Pattern {
   readonly sourceUrl: string;
   /** Saved reading position (round index). */
   readonly position: number;
+  /** Content revision (1 on creation; +1 whenever an edit changes the text). Absent on patterns saved by older builds = 1. */
+  readonly rev?: number;
+  /** Optional suggested project duration in minutes: only ever pre-fills a project's own optional estimate. */
+  readonly suggestedMinutes?: number;
   readonly updatedAt: number;
   readonly deletedAt: number | null;
+}
+
+/** One part definition of a collection. Its `quantity` physical pieces share these instructions but track progress separately. */
+export interface PatternPart {
+  /** Stable id: project part instances refer to it across edits and devices. */
+  readonly id: string;
+  readonly name: string;
+  readonly quantity: number;
+  /** Strict-notation instructions (what the tracker reads). */
+  readonly text: string;
+  readonly assemblyNotes: string;
+}
+
+/** A reusable complete design made of several parts (e.g. "Pink Teddy Bear"). */
+export interface PatternCollection {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly level: LevelId;
+  readonly terms: TermSystem;
+  readonly coverLocalUrl: string | null;
+  readonly parts: readonly PatternPart[];
+  /** Content revision (see Pattern.rev). */
+  readonly rev: number;
+  readonly suggestedMinutes: number;
+  /** The text the collection was converted from, kept so the original is always recoverable. */
+  readonly sourceText: string;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly deletedAt: number | null;
+}
+
+/** Immutable history entry: the content a pattern / collection had BEFORE an edit bumped its revision. */
+export interface PatternRevision {
+  /** `${kind}:${entityId}:${rev}` */
+  readonly id: string;
+  readonly kind: 'pattern' | 'collection';
+  readonly entityId: string;
+  readonly rev: number;
+  readonly name: string;
+  readonly terms: TermSystem;
+  readonly text?: string;
+  readonly parts?: readonly PatternPart[];
+  readonly at: number;
 }
 
 export interface Profile {

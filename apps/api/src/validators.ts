@@ -117,7 +117,7 @@ export const revisionBody = z.object({
 export const revisionKind = z.enum(['pattern', 'collection']);
 
 /** A project's pinned copy of a part's instructions (immutable until the user chooses to update). */
-const snapshotPart = z.object({ partId: id, name: z.string().min(1).max(80), quantity: z.number().int().min(1).max(30), text: str(20000), assemblyNotes: str(4000) });
+const snapshotPart = z.object({ partId: id, name: z.string().min(1).max(80), quantity: z.number().int().min(1).max(30), text: str(20000), assemblyNotes: str(4000), terms: terms.optional() });
 
 const instanceBody = z.object({
   id,
