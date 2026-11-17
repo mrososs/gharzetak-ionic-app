@@ -1,7 +1,7 @@
 # Crochet Joy — QA Report
 
 **Date:** 2026-11-17 · **Branch:** `feat/crochet-joy-implementation` · **Base:** `origin/development` @ `f616ee9`
-**Honest summary:** web/unit-level verification is done and evidenced. **No physical Android device was connected, so every hardware case is PENDING.** Emulators were not used (by instruction). iOS was not built or tested.
+**Honest summary:** web/unit-level verification is evidenced. A **physical phone (HONOR DNY-NX9, Android 16 / API 36) was connected late in the work**: the debug APK was installed over the existing app (data kept, nothing cleared or uninstalled) and a first on-device pass was done over USB. That pass found one real bug (fixed, see §4). Most hardware cases (notification delivery, share sheet, haptics feel, biometric/tap routing) are still PENDING because they need hands-on use of the phone. No emulator was used. iOS was not built or tested.
 
 Legend: ✅ verified with evidence · ⏳ pending (needs the phone) · 🚫 not tested · ⚠ known limitation
 
@@ -35,23 +35,37 @@ Still to verify in a real browser/device: ⏳ IndexedDB v3→v4 upgrade on an ex
 | Merged manifest has **no** `SCHEDULE_EXACT_ALARM` / `USE_EXACT_ALARM` | ✅ checked in `intermediates/merged_manifest/debug/.../AndroidManifest.xml` (0 matches) |
 | Permissions in the **merged** manifest | `INTERNET`, `ACCESS_NETWORK_STATE`, `USE_BIOMETRIC`/`USE_FINGERPRINT`/`USE_CREDENTIALS` (existing), plus from the new plugins `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED` (re-arm reminders after boot), `VIBRATE` (haptics), `WAKE_LOCK`. App manifest: `SCHEDULE_EXACT_ALARM` removed (`tools:node="remove"`). `POST_NOTIFICATIONS` comes from the plugin and is requested only after the soft-ask "Yes". |
 
-## 4. Physical Android — ALL PENDING ⏳
+## 4. Physical Android — HONOR DNY-NX9, Android 16 (API 36), real device
 
-No device was connected (`adb devices -l` listed none). Nothing below is claimed as working.
+### 4a. Verified on the phone ✅ (evidence: adb output, read-only DevTools queries, screenshots in `qa-evidence/`)
+
+| Check | Result |
+|---|---|
+| Device is physical | ✅ serial `AU3NVB5916001229`, `ro.kernel.qemu` empty, manufacturer HONOR |
+| APK installs over the existing app **keeping data** (`adb install -r`, no uninstall, no clear) | ✅ Success, twice |
+| App launches, Arabic RTL and fonts render | ✅ `qa-evidence/01-launch.png`, `02-after-fix.png` |
+| **IndexedDB v3→v4 upgrade on real data** | ✅ DB `gharzetak` is version 4 with the new `joy` store (empty, as expected before any tap); existing data intact: 8 projects, 36 revisions, 2 collections, 1 pattern, 8 docs, 2 outbox rows |
+| Notification permission is **not requested** at install / first launch | ✅ `POST_NOTIFICATIONS: granted=false` with no user-set flag; no notification channel created; **0** alarms registered for the app |
+| Merged manifest has no exact-alarm permission | ✅ (also §3) |
+| No crash and no app error on launch after the fix | ✅ logcat clean (only an unrelated `Keyboard.setResizeMode not implemented`, pre-existing) |
+
+### 4b. Bug found by the phone ✅ fixed (commit `70563a6`)
+
+First launch logged `"LocalNotifications.then()" is not implemented on android`. The reminder transport returned the native plugin proxy from an async function, so Android threw when the promise machinery looked up `.then`. Reminder permission/plan checks would have failed silently on a device while all unit tests passed. Fixed by wrapping the plugin in a plain object; the spec's mock now throws on `.then` like the real proxy. After reinstalling the fixed APK the error is gone from logcat. (Haptics/Share/Filesystem destructure from the module and were never affected.)
+
+### 4c. Still PENDING ⏳ (needs hands-on use of the phone; none of this is claimed)
 
 | Area | Cases pending |
 |---|---|
-| Install | Fresh debug APK installs over the existing app **without clearing data** |
-| Counting | Responsiveness feel on a real device; haptics strength; immersive mode with banner/card |
-| Celebrations | Banner/card/part sheet/finale on a real screen, AR RTL and EN |
-| Share | PNG share to WhatsApp (image + caption behaviour), cancel without error, text fallback; Arabic canvas shaping in the device's WebView; FileProvider cache file |
-| Reminders | Soft-ask → system permission dialog only after "Yes"; deny / re-deny / revoke later; a reminder delivered with the app closed; tap → counter; tap while biometric-locked; tap on a different account; tap for a deleted project; force-stop behaviour; reminder after the phone is rebooted (**needs explicit permission to reboot**); stale burst after power-off; OEM battery savers; notification small icon and colour; lock-screen generic text |
-| Guest import | Guest with real counts → sign in → badges, dates and counts preserved on a real device |
-| Update | APK upgrade keeps IndexedDB data (v3→v4) |
+| Counting | Responsiveness feel; haptics strength; banner/card/part sheet/finale on the real screen in immersive mode, AR and EN |
+| Share | PNG share to WhatsApp (image + caption behaviour), cancel without error, text fallback, Arabic canvas shaping in this WebView, FileProvider cache file |
+| Reminders | Soft-ask → system permission dialog only after "Yes"; deny / re-deny / revoke later; reminder delivered with the app closed; tap → counter; tap while biometric-locked; tap on a different account; tap for a deleted project; force-stop behaviour; lock-screen generic text; small icon; **reboot restore (needs explicit permission to reboot)**; stale burst after power-off; HONOR/MagicOS battery-saver behaviour |
+| Guest import | Guest with real counts → sign in → badges, dates and counts preserved on the phone |
+| Ledger | Real `putJoyIfAbsent` transaction under rapid taps (the store exists and is empty; no taps were made, to avoid changing the existing projects on the phone) |
 
 ## 5. Not tested 🚫
 
-iOS (no build, no device) · other OEMs (Samsung/Xiaomi/Huawei) · Android 10–12 · TalkBack · a remote account on a real Cloudflare backend (not needed: no sync of joy data exists) · very large projects (1000+ rows) on a slow device.
+iOS (no build, no device) · OEMs other than HONOR (Samsung/Xiaomi/Huawei) · Android 10–15 · TalkBack · a remote account on a real Cloudflare backend (not needed: no sync of joy data exists) · very large projects (1000+ rows) on a slow device.
 
 ## 6. Known limitations ⚠
 
@@ -63,7 +77,7 @@ iOS (no build, no device) · other OEMs (Samsung/Xiaomi/Huawei) · Android 10–
 
 ## 6b. Blocked
 
-Physical-device QA is blocked until a phone is connected by USB with USB debugging enabled. Reboot tests are further blocked until the user explicitly allows a reboot.
+Hands-on phone cases (§4c) need the user to operate the phone or to allow test taps on their data. Reboot tests are blocked until the user explicitly allows a reboot.
 
 ## 7. Cloudflare
 
