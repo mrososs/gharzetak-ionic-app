@@ -2,7 +2,7 @@
 
 Environment: Windows 11, Node 24.11 (the Angular CLI refuses < 24.15, so the CLI gate was bypassed via
 `node node_modules/@angular/cli/bin/bootstrap.js …`; `scripts/android-debug.ps1` uses the portable Node 24 instead), Chromium preview pane,
-local Wrangler Worker (simulated D1/R2). **No physical Android device was connected and no emulator was started (by request).**
+local Wrangler Worker (simulated D1/R2). Automated checks ran without a device; a real-phone USB pass was added afterwards (see the last section). No emulator was ever started (by request).
 
 ## Automated (all executed)
 
@@ -27,15 +27,39 @@ full-width layout; only 320 px was measured numerically.
 
 Bugs found by this run and fixed: unsaved-changes guard fired when opening Smart paste; editors did not hydrate on a cold start / deep link; RTL "× 2" label.
 
-## NOT verified (pending — needs the physical phone)
+## Superseded: native behaviour
 
-Pattern collection creation, editing, Smart paste, part switching, undo, estimate input, timer, **immersive navigation**, bottom-tab layout with the system bar
-hidden, dialogs, soft keyboard, RTL/LTR, offline persistence, force-stop/restart, Android Back, crashes/ANRs, gesture vs three-button navigation, background/
-resume, rotation. The APK builds; none of its native behaviour was run. Treat the immersive-mode behaviour as **unproven**.
+This section originally listed native behaviour as unverified. It has since been exercised on a real phone — see "Real Android device QA (USB)" at the end. Still untested: TalkBack, gesture navigation.
 
 ## Not done / limits
 
-* No real-device or emulator test; no screenshots of native screens.
+* Real-device coverage is limited to what the last section lists; no emulator test.
 * The originally supplied bunny pattern was not available: `src/app/core/domain/fixtures/bunny-dress.fixture.ts` is a reconstruction of the described features.
 * Dialogs were unified by migrating every `gz-sheet` / alert / confirm in the app; width checks at 360/390/412 were not repeated numerically.
 * Remote Cloudflare resources and remote D1 migrations: untouched. `development` was **not** merged or pushed (see report).
+
+## Real Android device QA (USB)
+
+Device: Honor DNY-NX9, Android 16, 1264×2736 @ 560 dpi, three-button navigation, WebView driven over `adb forward` + DevTools; real taps via `adb shell input`.
+Build under test: `development` @ `4f3b3b6` + the UI fixes below. Installed with `adb install -r` only (no uninstall, no data clearing). No emulator used.
+Screenshots and a filtered logcat (no crashes / ANRs) are in `docs/pattern-collections/device-qa/`.
+
+| Area | Result |
+|---|---|
+| Collections, parts, per-piece progress / undo / reset | **passed on real Android** |
+| Smart parser (joins, HDC, ranges, unsupported syntax, large paste) | **passed on real Android** (Arabic text injected via DevTools, not the Android IME) |
+| Edit-earlier-round protection + explicit update flow | **passed on real Android** |
+| Estimate (8h30), timers: start / pause / resume / switch / stop, force-stop recovery, restart | **passed on real Android** |
+| Immersive mode: toggle, edge-swipe reveal, auto-hide, Back/Home, rotation, background/resume, keyboard, dialogs | **passed on real Android** |
+| Sync of collections / parts / estimate / multi-state | **passed against the local Worker** (`adb reverse`), confirmed in local D1 |
+| Remote staging sync | **blocked — not deployed, not verified** |
+| TalkBack safeguard, gesture navigation, Android-IME Arabic paste, standalone-pattern edit on device | **not tested** |
+
+Bugs found on the device and fixed (all in CSS/templates, no data-model change):
+
+1. "Add part" sheet: primary button pushed below the fold → dialog actions are a sticky bar pinned to the bottom of the sheet.
+2. Dialog / alert buttons stacked in a column → one row (primary first), secondary = outlined `.gz-btn2` style (1.5px primary border), including alert cancel.
+3. Alert labels start-aligned instead of centred (Ionic specificity) → 4-class selector.
+4. Keyboard autocapitalised `MR` → `Mr` and the char counter reversed in RTL → `autocapitalize/autocorrect/spellcheck` off on pattern textareas, LTR counter.
+
+Incident: during device QA a scripted tap hit the "move guest data" prompt, which moved the on-device guest data into the local test account's scope. The data was not deleted (it is on the device under that scope and in the local D1); restoring it to the guest scope is left to the owner.

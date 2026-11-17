@@ -280,9 +280,28 @@ html[dir='ltr'] .gz-msg { line-height: 1.5; }
   &[disabled] { opacity: 0.45; cursor: not-allowed; }
 }
 /* Actions: one obvious primary first, then secondary, then a text action. Full width, stacked: never off-screen on 320px. */
-.gz-dlg-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+/* Sticky: when a sheet is taller than the screen the actions stay pinned to the bottom of the scroller (found on a real phone: the
+   primary button of the "Add part" sheet was pushed below the fold). Same geometry as .gz-sheet-foot. */
+/* Buttons sit side by side in ONE row (primary first = at the inline start), wrapping only when a third action needs its own row. */
+.gz-dlg-actions {
+  display: flex; flex-direction: row; flex-wrap: wrap; align-items: stretch; gap: 10px;
+  position: sticky; z-index: 2;
+  bottom: 0; /* flush with the scroller's bottom edge: the bar's own bottom padding (22px + inset) keeps the buttons fully on screen */
+  margin: 18px calc(-1 * var(--gz-screen-pad)) calc(-26px - var(--gz-safe-bottom));
+  padding: 12px var(--gz-screen-pad) calc(22px + var(--gz-safe-bottom));
+  background: linear-gradient(to bottom, rgba(255, 249, 245, 0), var(--gz-bg) 14px);
+}
 .gz-dlg-actions:empty { display: none; }
-.gz-dlg-actions > * { margin: 0; }
+.gz-dlg-actions > * { margin: 0; flex: 1 1 calc(50% - 5px); width: auto; min-width: 0; min-height: 50px; white-space: normal; text-align: center; }
+.gz-dlg-actions > :last-child:nth-child(odd):not(:first-child) { flex-basis: 100%; } /* an odd third action gets the full last row */
+.gz-dlg-actions > :only-child { flex-basis: 100%; }
+/* Secondary action in a dialog = the design system's outlined button (.gz-btn2: 1.5px primary border), never a bare text link. */
+.gz-dlg-actions > .gz-btn-text {
+  width: auto; min-height: 50px; padding: 0 18px; border: 1.5px solid var(--gz-primary); border-radius: var(--gz-r-sm);
+  color: var(--gz-primary); font-weight: 600; background: transparent;
+  &.danger { border-color: var(--gz-pink-ink); color: var(--gz-pink-ink); }
+  &[disabled] { border-color: var(--gz-disabled-bg); color: var(--gz-disabled-fg); }
+}
 .gz-btn-text {
   display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: var(--gz-touch);
   background: none; border: 0; color: var(--gz-text-2); font: inherit; font-weight: 600; cursor: pointer; border-radius: var(--gz-r-sm);
@@ -310,6 +329,7 @@ html[dir='ltr'] .gz-msg { line-height: 1.5; }
 /* Small screens (320–360px): tighter paddings, never clipped, long content scrolls inside the sheet. */
 @media (max-width: 360px) {
   .gz-sheet-body { padding-inline: 14px; }
+  .gz-dlg-actions { margin-inline: -14px; padding-inline: 14px; }
   .gz-dlg-title { font-size: 18px; }
   .gz-btn { min-height: 50px; padding-inline: 16px; font-size: 15px; }
 }

@@ -77,7 +77,7 @@ const MAX_FILE = 10 * 1024 * 1024;
 
           @if (src() === 'text' || editing()) {
             <label class="gz-lbl" for="ap-text">{{ t().pastePattern }}</label>
-            <textarea id="ap-text" class="gz-ta gz-ltr" [class.invalid]="textErr()" dir="ltr" style="min-height: 170px" formControlName="text" [placeholder]="placeholder" maxlength="20000" [attr.aria-invalid]="textErr()"></textarea>
+            <textarea id="ap-text" class="gz-ta gz-ltr" [class.invalid]="textErr()" dir="ltr" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" style="min-height: 170px" formControlName="text" [placeholder]="placeholder" maxlength="20000" [attr.aria-invalid]="textErr()"></textarea>
             @if (textErr()) {
               <div class="gz-field-err" role="alert">{{ i18n.q('الباترن أطول من 20000 حرف.', 'The pattern is longer than 20,000 characters.') }}</div>
             }

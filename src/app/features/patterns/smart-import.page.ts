@@ -53,8 +53,8 @@ R7: 5sc in body + 5sc in legs + 14sc in body + 5sc in legs + 7sc in body (36)`;
         <div class="gz-note lav" style="margin: 4px 0 12px"><svg gzIcon="info" size="s" /><span>{{ i18n.q('الصقي الباترن بالعربي أو الإنجليزي وهنحوّله لصيغة العدّاد. التحويل بقواعد ثابتة بدون ذكاء اصطناعي، ولازم تراجعيه وتأكديه قبل الحفظ.', 'Paste a pattern in Arabic or English and it is converted to the counter notation. Rule-based (no AI): you review and confirm it before anything is saved.') }}</span></div>
 
         <label class="gz-lbl" for="si-text">{{ i18n.q('نص الباترن', 'Pattern text') }}</label>
-        <textarea id="si-text" class="gz-ta" style="min-height: 170px" dir="auto" [value]="text()" (input)="onText($event)" [placeholder]="placeholder" maxlength="40000" [attr.aria-describedby]="'si-hint'"></textarea>
-        <div id="si-hint" class="gz-field-hint">{{ text().length }} / 40000</div>
+        <textarea id="si-text" class="gz-ta" style="min-height: 170px" dir="auto" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" [value]="text()" (input)="onText($event)" [placeholder]="placeholder" maxlength="40000" [attr.aria-describedby]="'si-hint'"></textarea>
+        <div id="si-hint" class="gz-field-hint gz-ltr" style="text-align: start">{{ text().length }} / 40000</div>
 
         <span class="gz-lbl">{{ i18n.q('نظام المصطلحات في النص', 'Terminology of the text') }}</span>
         <div class="gz-seg" role="radiogroup">

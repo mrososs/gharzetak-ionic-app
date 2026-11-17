@@ -216,11 +216,16 @@ ion-alert.gz-alert {
 ion-alert.gz-alert .alert-head { padding-block: 22px 6px; text-align: start; }
 ion-alert.gz-alert .alert-title { font-weight: 700; font-size: 18px; line-height: 1.4; color: var(--gz-text); }
 ion-alert.gz-alert .alert-message { padding-block: 4px 12px; color: var(--gz-text-2); font-size: 14px; line-height: 1.6; max-height: 40vh; overflow-wrap: anywhere; }
-ion-alert.gz-alert .alert-button-group { flex-direction: column-reverse; gap: 8px; padding: 6px 16px 16px; flex-wrap: nowrap; }
+/* DOM order is [cancel, confirm]; row-reverse puts the confirming action first (inline start) and both buttons in ONE row. */
+ion-alert.gz-alert .alert-button-group { flex-direction: row-reverse; gap: 10px; padding: 6px 16px 16px; flex-wrap: nowrap; }
 ion-alert.gz-alert .alert-button {
-  margin: 0; width: 100%; min-height: 48px; border-radius: 16px; border: 0; justify-content: center; font-family: var(--gz-font);
+  margin: 0; flex: 1 1 0; width: auto; min-width: 0; min-height: 48px; line-height: 1.3; padding-inline: 8px; border-radius: 16px; border: 0; justify-content: center; font-family: var(--gz-font);
   background: var(--gz-primary); color: #fff; font-weight: 700; font-size: 15px;
 }
 ion-alert.gz-alert .alert-button.alert-button-role-destructive { background: var(--gz-pink-ink); color: #fff; }
-ion-alert.gz-alert .alert-button.alert-button-role-cancel { background: transparent; color: var(--gz-text-2); font-weight: 600; }
+/* cancel = the design system's outlined secondary button (same 1.5px primary border as .gz-btn2) */
+ion-alert.gz-alert .alert-button.alert-button-role-cancel { background: transparent; color: var(--gz-primary); border: 1.5px solid var(--gz-primary); font-weight: 600; }
+/* the label sits in an inner span that Ionic start-aligns: centre it so confirm/cancel read the same in RTL and LTR (seen on a real phone) */
+/* (needs 4 classes: Ionic's own rule is .alert-button-group.sc .alert-button-inner.sc { justify-content: flex-end }) */
+ion-alert.gz-alert .alert-button-group .alert-button .alert-button-inner { width: 100%; justify-content: center; text-align: center; }
 ion-alert.gz-alert .alert-button:focus-visible { outline: 3px solid var(--gz-primary); outline-offset: 2px; }

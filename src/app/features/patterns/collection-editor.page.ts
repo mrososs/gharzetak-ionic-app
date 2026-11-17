@@ -163,7 +163,7 @@ const MAX_TEXT = 20000;
         <gz-stepper [display]="partForm().quantity" [label]="i18n.q('العدد', 'Quantity')" (dec)="setQuantity(partForm().quantity - 1)" (inc)="setQuantity(partForm().quantity + 1)" />
       </div>
       <label class="gz-lbl" for="pe-text">{{ i18n.q('التعليمات', 'Instructions') }}</label>
-      <textarea id="pe-text" class="gz-ta gz-ltr" dir="ltr" style="min-height: 150px" [maxLength]="MAX_TEXT" [value]="partForm().text" (input)="setPart('text', $event)" placeholder="R1: 6sc in MR [6]&#10;R2: inc x 6 [12]"></textarea>
+      <textarea id="pe-text" class="gz-ta gz-ltr" dir="ltr" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" style="min-height: 150px" [maxLength]="MAX_TEXT" [value]="partForm().text" (input)="setPart('text', $event)" placeholder="R1: 6sc in MR [6]&#10;R2: inc x 6 [12]"></textarea>
       @if (partMsg(); as m) {
         <div class="gz-note mt-2" [class.sage]="m.ok"><span style="white-space: pre-line">{{ m.text }}</span></div>
       }

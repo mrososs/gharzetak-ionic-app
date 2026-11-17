@@ -108,7 +108,7 @@ type Source = { kind: 'none' } | { kind: 'collection'; id: string } | { kind: 'p
           </div>
 
           <label class="gz-lbl" for="np-pat">{{ t().optPattern }}</label>
-          <textarea id="np-pat" class="gz-ta gz-ltr" style="min-height: 110px" dir="ltr" formControlName="pattern" [placeholder]="placeholder"></textarea>
+          <textarea id="np-pat" class="gz-ta gz-ltr" style="min-height: 110px" dir="ltr" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" formControlName="pattern" [placeholder]="placeholder"></textarea>
           @if (patMsg(); as m) {
             <div class="gz-note mt-2" [class.sage]="parsed()?.ok"><span>{{ m }}</span></div>
           }
