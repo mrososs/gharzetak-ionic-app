@@ -15,6 +15,13 @@
       "when": 1794845285457,
       "tag": "0001_profile_avatar",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794873633325,
+      "tag": "0002_collections_revisions_time",
+      "breakpoints": true
     }
   ]
 }

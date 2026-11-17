@@ -56,6 +56,9 @@ export const patternBody = z.object({
   attribution: str(200).nullable(),
   rawText: str(20000),
   readingPosition: z.number().int().min(0).max(100000),
+  /** Optional for older clients (which keep the stored value). */
+  contentRev: z.number().int().min(1).max(100000).optional(),
+  suggestedMinutes: z.number().int().min(0).max(6_000_000).optional(),
   /** Derived round table, replaced atomically with the pattern. */
   rounds: z
     .array(
@@ -71,6 +74,86 @@ export const patternBody = z.object({
     .max(500),
 });
 
+/** Larger body limit for the multi-part entities (a collection carries every part's text; a multi-part progress carries every instance). */
+export const MAX_MULTI_BYTES = 900 * 1024;
+
+const partBody = z.object({
+  id,
+  name: z.string().min(1).max(80),
+  quantity: z.number().int().min(1).max(30),
+  rawText: str(20000),
+  assemblyNotes: str(4000),
+});
+
+const coverData = z
+  .string()
+  .max(220_000)
+  .regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/, 'must be a base64 image data URL');
+
+export const collectionBody = z
+  .object({
+    ...versioned,
+    name: z.string().min(1).max(120),
+    description: str(2000),
+    level,
+    terms,
+    coverData: coverData.nullable(),
+    contentRev: z.number().int().min(1).max(100000),
+    suggestedMinutes: z.number().int().min(0).max(6_000_000),
+    sourceText: str(60000),
+    parts: z.array(partBody).max(30),
+  })
+  .superRefine((v, ctx) => {
+    if (new Set(v.parts.map((p) => p.id)).size !== v.parts.length) ctx.addIssue({ code: 'custom', path: ['parts'], message: 'part ids must be unique' });
+    if (v.parts.reduce((n, p) => n + p.rawText.length + p.assemblyNotes.length, 0) > 400_000) ctx.addIssue({ code: 'custom', path: ['parts'], message: 'collection text too large' });
+  });
+
+/** Immutable snapshot of the previous content of a pattern ({ text }) or a collection ({ parts }). */
+export const revisionBody = z.object({
+  name: z.string().min(1).max(120),
+  createdAt: z.number().int().min(0),
+  snapshot: z.object({ terms, text: str(20000).optional(), parts: z.array(partBody).max(30).optional() }),
+});
+export const revisionKind = z.enum(['pattern', 'collection']);
+
+/** A project's pinned copy of a part's instructions (immutable until the user chooses to update). */
+const snapshotPart = z.object({ partId: id, name: z.string().min(1).max(80), quantity: z.number().int().min(1).max(30), text: str(20000), assemblyNotes: str(4000) });
+
+const instanceBody = z.object({
+  id,
+  partId: id,
+  index: z.number().int().min(1).max(30),
+  mode: z.enum(['simple', 'pattern']),
+  simple: z.object({
+    round: z.number().int().min(1),
+    target: z.number().int().min(1).max(999),
+    perTap: z.number().int().min(1).max(99),
+    count: z.number().int().min(0),
+    totalRounds: z.number().int().min(0),
+    history: z.array(z.unknown()).max(100),
+  }),
+  cursor: z.object({
+    roundIndex: z.number().int().min(0),
+    ptr: z.number().int().min(0),
+    mode: z.enum(['action', 'group', 'round']),
+    history: z.array(z.unknown()).max(100),
+  }),
+  workedSeconds: z.number().int().min(0),
+  updatedAt: z.number().int().min(0),
+  retired: z.boolean().optional(),
+});
+
+/** Every part instance of a multi-part project, each with its own tracker (so Arm 1 and Arm 2 never share progress). */
+export const multiStateBody = z.object({
+  collectionId: id,
+  collectionRev: z.number().int().min(1),
+  activeInstanceId: id.nullable(),
+  snapshots: z.array(snapshotPart).max(30),
+  instances: z.array(instanceBody).max(120),
+});
+
+export const patternSnapshotBody = z.object({ rev: z.number().int().min(1), name: z.string().min(1).max(120), text: str(20000), terms });
+
 export const projectBody = z.object({
   ...versioned,
   name: z.string().min(1).max(120),
@@ -79,6 +162,8 @@ export const projectBody = z.object({
   yarnType: z.enum(['cotton', 'acrylic', 'wool', 'velvet', 'blend', 'milk']),
   status: z.enum(['active', 'paused', 'done']),
   patternId: id.nullable(),
+  /** Optional: older clients omit it and must never clear an existing link. */
+  collectionId: id.nullable().optional(),
   estimatedHours: z.number().min(0).max(100000),
   workedSeconds: z.number().int().min(0),
   lastWorkedAt: z.number().int().min(0),
@@ -99,6 +184,9 @@ export const progressBody = z.object({
   countMode: z.enum(['action', 'group', 'round']),
   history: z.array(z.unknown()).max(100),
   patternHistory: z.array(z.unknown()).max(100),
+  /** Optional: older clients omit them and must never clear what another device stored. null clears. */
+  multiState: multiStateBody.nullable().optional(),
+  patternSnapshot: patternSnapshotBody.nullable().optional(),
 });
 
 export const notesBody = z.object({ ...versioned, body: str(10000) });
@@ -108,6 +196,7 @@ export const sessionBody = z.object({
   startedAt: z.number().int().min(0),
   endedAt: z.number().int().min(0),
   seconds: z.number().int().min(0).max(86400),
+  partInstanceId: id.nullable().optional(),
 });
 
 export const tutorialBody = z.object({

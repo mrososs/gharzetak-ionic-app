@@ -3,9 +3,29 @@ import { Hono, type Context } from 'hono';
 import { schema } from '../db';
 import { ApiError, badRequest, notFound } from '../errors';
 import type { AppBindings } from '../env';
-import { clampClientTime, idParam, interestBody, notesBody, parseBody, patternBody, profileBody, progressBody, projectBody, sessionBody, toolsBody, tutorialBody } from '../validators';
+import {
+  MAX_MULTI_BYTES,
+  clampClientTime,
+  collectionBody,
+  idParam,
+  interestBody,
+  notesBody,
+  parseBody,
+  patternBody,
+  profileBody,
+  progressBody,
+  projectBody,
+  revisionBody,
+  revisionKind,
+  sessionBody,
+  toolsBody,
+  tutorialBody,
+} from '../validators';
 
-const { profiles, patterns, projects, projectProgress, projectNotes, projectPhotos, workSessions, favorites, tutorialBookmarks, tutorialTimestamps, storeInterest, userTools, mediaObjects } = schema;
+const {
+  profiles, patterns, patternCollections, patternParts, patternRevisions, projects, projectProgress, projectNotes, projectPhotos, workSessions, favorites,
+  tutorialBookmarks, tutorialTimestamps, storeInterest, userTools, mediaObjects,
+} = schema;
 
 /**
  * Optimistic concurrency contract (all versioned PUTs):
@@ -103,17 +123,18 @@ entities.put('/patterns/:id', async (c) => {
     b.baseRevision === 0
       ? d1
           .prepare(
-            `INSERT INTO patterns (id, owner_id, is_sample, name, level, terms, source_type, source_url, attribution, raw_text, reading_position, client_updated_at, revision, created_at, updated_at)
-             VALUES (?1, ?2, 0, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1, ?12, ?12) ON CONFLICT(id) DO NOTHING`,
+            `INSERT INTO patterns (id, owner_id, is_sample, name, level, terms, source_type, source_url, attribution, raw_text, reading_position, client_updated_at, revision, created_at, updated_at, content_rev, suggested_minutes)
+             VALUES (?1, ?2, 0, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1, ?12, ?12, COALESCE(?13, 1), COALESCE(?14, 0)) ON CONFLICT(id) DO NOTHING`,
           )
-          .bind(pid, userId, b.name, b.level, b.terms, b.sourceType, b.sourceUrl, b.attribution, b.rawText, b.readingPosition, cts, now)
+          .bind(pid, userId, b.name, b.level, b.terms, b.sourceType, b.sourceUrl, b.attribution, b.rawText, b.readingPosition, cts, now, b.contentRev ?? null, b.suggestedMinutes ?? null)
       : d1
           .prepare(
+            // content_rev / suggested_minutes: an older client omits them (NULL) and must never reset what a newer client stored.
             `UPDATE patterns SET name = ?3, level = ?4, terms = ?5, source_type = ?6, source_url = ?7, attribution = ?8, raw_text = ?9, reading_position = ?10,
-               client_updated_at = ?11, updated_at = ?12, revision = revision + 1
+               client_updated_at = ?11, updated_at = ?12, revision = revision + 1, content_rev = COALESCE(?14, content_rev), suggested_minutes = COALESCE(?15, suggested_minutes)
              WHERE id = ?1 AND owner_id = ?2 AND revision = ?13 AND deleted_at IS NULL`,
           )
-          .bind(pid, userId, b.name, b.level, b.terms, b.sourceType, b.sourceUrl, b.attribution, b.rawText, b.readingPosition, cts, now, b.baseRevision);
+          .bind(pid, userId, b.name, b.level, b.terms, b.sourceType, b.sourceUrl, b.attribution, b.rawText, b.readingPosition, cts, now, b.baseRevision, b.contentRev ?? null, b.suggestedMinutes ?? null);
 
   const res = await d1.batch([
     write,
@@ -151,8 +172,126 @@ entities.delete('/patterns/:id', async (c) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* pattern collections (multi-part designs)                            */
+/* ------------------------------------------------------------------ */
+
+/** Same compare-and-swap contract as patterns; the parts are replaced atomically with the parent row (one D1 batch). */
+entities.put('/collections/:id', async (c) => {
+  const cid = idParam(c.req.param('id'));
+  const b = await parseBody(c, collectionBody, MAX_MULTI_BYTES);
+  const db = c.get('db');
+  const d1 = c.env.DB;
+  const userId = c.get('userId');
+  const now = Date.now();
+  const cts = clampClientTime(b.clientUpdatedAt, now);
+  const next = b.baseRevision + 1;
+  const parts = JSON.stringify(b.parts);
+
+  const own = await db.select({ ownerId: patternCollections.ownerId }).from(patternCollections).where(eq(patternCollections.id, cid)).get();
+  if (own && own.ownerId !== userId) throw notFound('Collection'); // never reveal or touch another user's collection
+
+  const guard = `EXISTS (SELECT 1 FROM pattern_collections WHERE id = ?1 AND owner_id = ?2 AND revision = ?3 AND client_updated_at = ?4 AND deleted_at IS NULL)`;
+  const write =
+    b.baseRevision === 0
+      ? d1
+          .prepare(
+            `INSERT INTO pattern_collections (id, owner_id, name, description, level, terms, cover_data, content_rev, suggested_minutes, source_text, client_updated_at, revision, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1, ?12, ?12) ON CONFLICT(id) DO NOTHING`,
+          )
+          .bind(cid, userId, b.name, b.description, b.level, b.terms, b.coverData, b.contentRev, b.suggestedMinutes, b.sourceText, cts, now)
+      : d1
+          .prepare(
+            `UPDATE pattern_collections SET name = ?3, description = ?4, level = ?5, terms = ?6, cover_data = ?7, content_rev = ?8, suggested_minutes = ?9, source_text = ?10,
+               client_updated_at = ?11, updated_at = ?12, revision = revision + 1
+             WHERE id = ?1 AND owner_id = ?2 AND revision = ?13 AND deleted_at IS NULL`,
+          )
+          .bind(cid, userId, b.name, b.description, b.level, b.terms, b.coverData, b.contentRev, b.suggestedMinutes, b.sourceText, cts, now, b.baseRevision);
+
+  const res = await d1.batch([
+    write,
+    d1.prepare(`DELETE FROM pattern_parts WHERE collection_id = ?1 AND ${guard}`).bind(cid, userId, next, cts),
+    d1
+      .prepare(
+        `INSERT INTO pattern_parts (collection_id, part_id, position, name, quantity, raw_text, assembly_notes)
+         SELECT ?1, json_extract(j.value, '$.id'), CAST(j.key AS INTEGER), json_extract(j.value, '$.name'), json_extract(j.value, '$.quantity'),
+                json_extract(j.value, '$.rawText'), json_extract(j.value, '$.assemblyNotes')
+         FROM json_each(?5) AS j WHERE ${guard}`,
+      )
+      .bind(cid, userId, next, cts, parts),
+  ]);
+  if (res[0]?.meta.changes === 1) return accepted(c, next, cts, now, b.baseRevision === 0);
+
+  const cur = await db
+    .select({ revision: patternCollections.revision, clientUpdatedAt: patternCollections.clientUpdatedAt, deletedAt: patternCollections.deletedAt })
+    .from(patternCollections)
+    .where(and(eq(patternCollections.id, cid), eq(patternCollections.ownerId, userId)))
+    .get();
+  if (!cur) throw notFound('Collection');
+  return conflict({ revision: cur.revision, clientUpdatedAt: cur.clientUpdatedAt, deleted: cur.deletedAt !== null });
+});
+
+/**
+ * Soft delete. Projects created from the collection are NOT touched: they hold their own pinned copy of every part's
+ * instructions and keep working. The collection's revision history is kept.
+ */
+entities.delete('/collections/:id', async (c) => {
+  const cid = idParam(c.req.param('id'));
+  const db = c.get('db');
+  const userId = c.get('userId');
+  const now = Date.now();
+  const row = await db.select({ id: patternCollections.id }).from(patternCollections).where(and(eq(patternCollections.id, cid), eq(patternCollections.ownerId, userId), isNull(patternCollections.deletedAt))).get();
+  if (!row) return c.body(null, 204); // idempotent
+  await db.batch([
+    db.delete(patternParts).where(eq(patternParts.collectionId, cid)),
+    db
+      .update(patternCollections)
+      .set({ deletedAt: now, updatedAt: now, coverData: null, revision: sql`${patternCollections.revision} + 1` })
+      .where(and(eq(patternCollections.id, cid), eq(patternCollections.ownerId, userId))),
+  ]);
+  return c.body(null, 204);
+});
+
+/**
+ * Immutable revision history. PUT is idempotent by (kind, entity, rev): the first write wins and history can never be rewritten.
+ * The entity must belong to the caller (404 otherwise, no existence leak).
+ */
+entities.put('/revisions/:kind/:entityId/:rev', async (c) => {
+  const kind = revisionKind.safeParse(c.req.param('kind'));
+  if (!kind.success) throw badRequest('Invalid kind');
+  const entityId = idParam(c.req.param('entityId'), 'entityId');
+  const rev = Number(c.req.param('rev'));
+  if (!Number.isInteger(rev) || rev < 1 || rev > 100000) throw badRequest('Invalid rev');
+  const b = await parseBody(c, revisionBody, MAX_MULTI_BYTES);
+  const db = c.get('db');
+  const userId = c.get('userId');
+
+  if (kind.data === 'pattern') {
+    if (!b.snapshot.text && b.snapshot.text !== '') throw badRequest('A pattern revision needs snapshot.text');
+    const owned = await db.select({ id: patterns.id }).from(patterns).where(and(eq(patterns.id, entityId), eq(patterns.ownerId, userId))).get();
+    if (!owned) throw notFound('Pattern');
+  } else {
+    if (!b.snapshot.parts) throw badRequest('A collection revision needs snapshot.parts');
+    const owned = await db.select({ id: patternCollections.id }).from(patternCollections).where(and(eq(patternCollections.id, entityId), eq(patternCollections.ownerId, userId))).get();
+    if (!owned) throw notFound('Collection');
+  }
+  const ins = await db
+    .insert(patternRevisions)
+    .values({ ownerId: userId, entityKind: kind.data, entityId, rev, name: b.name, snapshot: JSON.stringify(b.snapshot), createdAt: Math.min(b.createdAt || Date.now(), Date.now()) })
+    .onConflictDoNothing()
+    .returning({ id: patternRevisions.id });
+  return c.json({ rev }, ins[0] ? 201 : 200);
+});
+
+/* ------------------------------------------------------------------ */
 /* projects                                                            */
 /* ------------------------------------------------------------------ */
+
+/** The collection must exist and belong to the caller (a soft-deleted one is fine: the project keeps its own pinned copy). */
+async function assertOwnCollection(db: AppBindings['Variables']['db'], collectionId: string | null | undefined, userId: string) {
+  if (!collectionId) return;
+  const row = await db.select({ id: patternCollections.id }).from(patternCollections).where(and(eq(patternCollections.id, collectionId), eq(patternCollections.ownerId, userId))).get();
+  if (!row) throw badRequest('Referenced collection is not accessible');
+}
 
 async function assertPatternReadable(db: AppBindings['Variables']['db'], patternId: string | null, userId: string) {
   if (!patternId) return;
@@ -178,9 +317,10 @@ entities.put('/projects/:id', async (c) => {
   const now = Date.now();
   const cts = clampClientTime(b.clientUpdatedAt, now);
   await assertPatternReadable(db, b.patternId, userId);
+  await assertOwnCollection(db, b.collectionId, userId);
 
   // cover_path is server-managed (set by the cover upload endpoint), never taken from this body.
-  const fields = { name: b.name, category: b.category, hookSize: b.hookSize, yarnType: b.yarnType, status: b.status, patternId: b.patternId, estimatedHours: b.estimatedHours, workedSeconds: b.workedSeconds, lastWorkedAt: b.lastWorkedAt };
+  const fields = { name: b.name, category: b.category, hookSize: b.hookSize, yarnType: b.yarnType, status: b.status, patternId: b.patternId, ...(b.collectionId !== undefined ? { collectionId: b.collectionId } : {}), estimatedHours: b.estimatedHours, workedSeconds: b.workedSeconds, lastWorkedAt: b.lastWorkedAt };
 
   if (b.baseRevision === 0) {
     const ins = await db
@@ -219,17 +359,21 @@ entities.delete('/projects/:id', async (c) => {
 
 entities.put('/projects/:id/progress', async (c) => {
   const pid = idParam(c.req.param('id'));
-  const b = await parseBody(c, progressBody);
+  const b = await parseBody(c, progressBody, MAX_MULTI_BYTES);
   if (b.count > b.target) throw badRequest('count cannot exceed target');
   const db = c.get('db');
   const userId = c.get('userId');
   await assertOwnProject(db, pid, userId);
   await assertPatternReadable(db, b.patternId, userId);
+  if (b.multiState) await assertOwnCollection(db, b.multiState.collectionId, userId);
   const now = Date.now();
   const cts = clampClientTime(b.clientUpdatedAt, now);
   const fields = {
     mode: b.mode, round: b.round, target: b.target, perTap: b.perTap, count: b.count, totalRounds: b.totalRounds, patternId: b.patternId,
     patternRoundIndex: b.patternRoundIndex, actionPtr: b.actionPtr, countMode: b.countMode, history: b.history, patternHistory: b.patternHistory,
+    // undefined = an older client that does not know these columns: leave what is stored untouched.
+    ...(b.multiState !== undefined ? { multiState: b.multiState } : {}),
+    ...(b.patternSnapshot !== undefined ? { patternSnapshot: b.patternSnapshot } : {}),
   };
 
   if (b.baseRevision === 0) {
@@ -246,15 +390,16 @@ entities.put('/projects/:id/progress', async (c) => {
   const cur = await db
     .select({
       revision: projectProgress.revision, clientUpdatedAt: projectProgress.clientUpdatedAt, mode: projectProgress.mode, round: projectProgress.round, count: projectProgress.count,
-      patternRoundIndex: projectProgress.patternRoundIndex, actionPtr: projectProgress.actionPtr,
+      patternRoundIndex: projectProgress.patternRoundIndex, actionPtr: projectProgress.actionPtr, multiState: projectProgress.multiState,
     })
     .from(projectProgress)
     .where(and(eq(projectProgress.projectId, pid), eq(projectProgress.ownerId, userId)))
     .get();
   if (!cur) throw notFound('Progress');
   // The 409 carries the server's position so a stale device can compare progress, not just clocks, before deciding what to do.
-  const { revision, clientUpdatedAt, ...state } = cur;
-  return conflict({ revision, clientUpdatedAt, state });
+  const { revision, clientUpdatedAt, multiState, ...state } = cur;
+  const multi = multiPosition(multiState);
+  return conflict({ revision, clientUpdatedAt, state: multi === null ? state : { ...state, multi } }); // `multi` only for multi-part projects (unchanged shape otherwise)
 });
 
 entities.put('/projects/:id/notes', async (c) => {
@@ -293,7 +438,7 @@ entities.put('/sessions/:id', async (c) => {
   const db = c.get('db');
   const userId = c.get('userId');
   await assertOwnProject(db, b.projectId, userId);
-  const ins = await db.insert(workSessions).values({ id: sid, projectId: b.projectId, ownerId: userId, startedAt: b.startedAt, endedAt: b.endedAt, seconds: b.seconds }).onConflictDoNothing().returning({ id: workSessions.id });
+  const ins = await db.insert(workSessions).values({ id: sid, projectId: b.projectId, ownerId: userId, startedAt: b.startedAt, endedAt: b.endedAt, seconds: b.seconds, partInstanceId: b.partInstanceId ?? null }).onConflictDoNothing().returning({ id: workSessions.id });
   if (!ins[0]) {
     const existing = await db.select({ id: workSessions.id }).from(workSessions).where(and(eq(workSessions.id, sid), eq(workSessions.ownerId, userId))).get();
     if (!existing) throw notFound('Session');
@@ -388,7 +533,7 @@ entities.delete('/interest', async (c) => {
 entities.get('/sync/pull', async (c) => {
   const db = c.get('db');
   const userId = c.get('userId');
-  const [profile, tools, pats, projs, progs, notes, photos, favs, bms, stamps, interest] = await Promise.all([
+  const [profile, tools, pats, projs, progs, notes, photos, favs, bms, stamps, interest, cols, colParts, revs] = await Promise.all([
     db.select().from(profiles).where(eq(profiles.userId, userId)).get(),
     db.select({ kind: userTools.kind, value: userTools.value }).from(userTools).where(eq(userTools.userId, userId)),
     db.select().from(patterns).where(and(eq(patterns.ownerId, userId), isNull(patterns.deletedAt))),
@@ -400,6 +545,13 @@ entities.get('/sync/pull', async (c) => {
     db.select().from(tutorialBookmarks).where(eq(tutorialBookmarks.userId, userId)),
     db.select().from(tutorialTimestamps).where(eq(tutorialTimestamps.userId, userId)),
     db.select({ email: storeInterest.email }).from(storeInterest).where(eq(storeInterest.userId, userId)).get(),
+    db.select().from(patternCollections).where(and(eq(patternCollections.ownerId, userId), isNull(patternCollections.deletedAt))),
+    db
+      .select({ collectionId: patternParts.collectionId, partId: patternParts.partId, position: patternParts.position, name: patternParts.name, quantity: patternParts.quantity, rawText: patternParts.rawText, assemblyNotes: patternParts.assemblyNotes })
+      .from(patternParts)
+      .innerJoin(patternCollections, eq(patternParts.collectionId, patternCollections.id))
+      .where(and(eq(patternCollections.ownerId, userId), isNull(patternCollections.deletedAt))),
+    db.select({ entityKind: patternRevisions.entityKind, entityId: patternRevisions.entityId, rev: patternRevisions.rev, name: patternRevisions.name, snapshot: patternRevisions.snapshot, createdAt: patternRevisions.createdAt }).from(patternRevisions).where(eq(patternRevisions.ownerId, userId)),
   ]);
   const live = new Set(projs.map((p) => p.id));
   return c.json({
@@ -414,8 +566,31 @@ entities.get('/sync/pull', async (c) => {
     favorites: favs.map((f) => f.itemId),
     tutorials: bms.map((b) => ({ ...b, stamps: stamps.filter((s) => s.bookmarkId === b.id).sort((a, z) => a.seconds - z.seconds) })),
     interest: interest?.email ?? null,
+    collections: cols.map((col) => ({
+      ...col,
+      parts: colParts.filter((p) => p.collectionId === col.id).sort((a, z) => a.position - z.position).map(({ collectionId: _c, position: _p, partId, ...rest }) => ({ id: partId, ...rest })),
+    })),
+    revisions: revs.map((r) => ({ ...r, snapshot: safeJson(r.snapshot) })),
   });
 });
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One comparable number for a multi-part progress blob: the sum of every part instance's position (same formula as the app's
+ * `position()` in sync.service.ts), so a stale device can tell whose multi-part progress is further along.
+ */
+function multiPosition(state: unknown): number | null {
+  const inst = (state as { instances?: Array<{ mode?: string; simple?: { round?: number; count?: number }; cursor?: { roundIndex?: number; ptr?: number } }> } | null)?.instances;
+  if (!Array.isArray(inst)) return null;
+  return inst.reduce((sum, i) => sum + (i.mode === 'pattern' ? (i.cursor?.roundIndex ?? 0) * 1_000_000 + (i.cursor?.ptr ?? 0) : (i.simple?.round ?? 0) * 1_000_000 + (i.simple?.count ?? 0)), 0);
+}
 
 /** Deletes R2 objects + registry rows matching a filter. R2 first: an orphan row is harmless, an orphan object is a leak. */
 export async function deleteMediaWhere(bucket: R2Bucket, db: AppBindings['Variables']['db'], where: ReturnType<typeof and>) {
