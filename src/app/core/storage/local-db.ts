@@ -1,5 +1,7 @@
 import { Injectable } from '@angular/core';
 import { DBSchema, IDBPDatabase, openDB } from 'idb';
+import type { JoyRow } from '../domain/joy';
+import type { ScopePrefs } from '../joy/joy.models';
 import type { ChatMessage, Pattern, PatternCollection, PatternRevision, Profile, Project, TutorialData } from '../models/models';
 
 /** A data scope: everything a guest or a signed-in user owns on this device. */
@@ -63,8 +65,15 @@ export interface ScopeDocs {
   currentProjectId: string | null;
   /** The work timer's running segment, persisted so an app kill / restart never loses recorded time. */
   timer: PersistedTimer | null;
-  /** Local display preferences (e.g. immersive Android navigation). */
-  prefs: { immersive?: boolean };
+  /** Local display preferences (immersive Android navigation) and Crochet Joy preferences (celebrations, reminders, share cards). */
+  prefs: ScopePrefs;
+  /**
+   * Guest → account import journal (stored in the GUEST scope while an import is in progress): guest project id → account project id.
+   * It makes the import resumable and idempotent even when an id had to be remapped.
+   */
+  importMap: Record<string, string>;
+  /** Crochet Joy ledger rows that could not be migrated safely from the guest scope. Kept so nothing is lost and no count is invented. */
+  joyRecovery: JoyRow[];
 }
 
 /** A running timer segment. `beat` is refreshed every few seconds; after a crash only time up to the last beat is credited. */
@@ -85,11 +94,13 @@ interface GzDb extends DBSchema {
   outbox: { key: string; value: OutboxEntry; indexes: { scope: string } };
   /** Server revision last seen per synced entity (optimistic-concurrency base). key = `${scope}|${kind}|${id}` */
   revisions: { key: string; value: { k: string; scope: Scope; rev: number }; indexes: { scope: string } };
+  /** Crochet Joy ledger: one row per celebrated event / unlocked achievement. key = `${scope}|${row.key}`. Insert-if-absent only. */
+  joy: { key: string; value: { k: string; scope: Scope; v: JoyRow }; indexes: { scope: string } };
 }
 
 const DB_NAME = 'gharzetak';
-/** v2 adds `revisions`; v3 adds `collections` and `patternRevs`. Upgrades are additive: existing stores and records are untouched. */
-const DB_VERSION = 3;
+/** v2 adds `revisions`; v3 adds `collections` and `patternRevs`; v4 adds `joy`. Upgrades are additive: existing stores and records are untouched. */
+const DB_VERSION = 4;
 
 /**
  * IndexedDB persistence for structured offline data (projects, patterns, tracker state,
@@ -120,6 +131,9 @@ export class LocalDb {
                 if (oldVersion < 3) {
                   db.createObjectStore('collections', { keyPath: 'k' }).createIndex('scope', 'scope');
                   db.createObjectStore('patternRevs', { keyPath: 'k' }).createIndex('scope', 'scope');
+                }
+                if (oldVersion < 4) {
+                  db.createObjectStore('joy', { keyPath: 'k' }).createIndex('scope', 'scope');
                 }
               },
             }).catch(() => null);
@@ -204,6 +218,64 @@ export class LocalDb {
     return true;
   }
 
+  /* ---- Crochet Joy ledger (insert-if-absent; achievements keep the EARLIEST unlock date) ---- */
+
+  async loadJoy(scope: Scope): Promise<JoyRow[]> {
+    const db = await this.db();
+    if (!db) return this.memList<JoyRow>(`joy|${scope}|`);
+    return (await db.getAllFromIndex('joy', 'scope', scope)).map((r) => r.v);
+  }
+
+  /** Returns true only when the row was newly inserted. An existing key is never overwritten (one event is stored once). */
+  async putJoyIfAbsent(scope: Scope, row: JoyRow): Promise<boolean> {
+    const k = `${scope}|${row.key}`;
+    const db = await this.db();
+    if (!db) {
+      if (this.mem.has(`joy|${k}`)) return false;
+      this.mem.set(`joy|${k}`, row);
+      return true;
+    }
+    // One readwrite transaction: the existence check and the insert cannot interleave with another writer.
+    const tx = db.transaction('joy', 'readwrite');
+    const exists = await tx.store.get(k);
+    if (!exists) await tx.store.put({ k, scope, v: row });
+    await tx.done;
+    return !exists;
+  }
+
+  /**
+   * Merge used by the guest → account import: inserts a missing row; for an achievement that already exists keeps whichever unlock
+   * date is EARLIER. Round / part / project rows are never touched when they already exist (no double counting).
+   */
+  async mergeJoyRow(scope: Scope, row: JoyRow): Promise<'inserted' | 'earlier' | 'exists'> {
+    const k = `${scope}|${row.key}`;
+    const db = await this.db();
+    if (!db) {
+      const cur = this.mem.get(`joy|${k}`) as JoyRow | undefined;
+      if (!cur) {
+        this.mem.set(`joy|${k}`, row);
+        return 'inserted';
+      }
+      if (row.kind === 'achievement' && row.at < cur.at) {
+        this.mem.set(`joy|${k}`, { ...cur, at: row.at, source: row.source === 'live' ? 'live' : cur.source });
+        return 'earlier';
+      }
+      return 'exists';
+    }
+    const tx = db.transaction('joy', 'readwrite');
+    const cur = await tx.store.get(k);
+    let result: 'inserted' | 'earlier' | 'exists' = 'exists';
+    if (!cur) {
+      await tx.store.put({ k, scope, v: row });
+      result = 'inserted';
+    } else if (row.kind === 'achievement' && row.at < cur.v.at) {
+      await tx.store.put({ k, scope, v: { ...cur.v, at: row.at, source: row.source === 'live' ? 'live' : cur.v.source } });
+      result = 'earlier';
+    }
+    await tx.done;
+    return result;
+  }
+
   async loadDocs(scope: Scope): Promise<Partial<ScopeDocs>> {
     const db = await this.db();
     if (!db) return (this.mem.get(`docs|${scope}`) as Partial<ScopeDocs>) ?? {};
@@ -276,8 +348,8 @@ export class LocalDb {
       for (const k of [...this.mem.keys()]) if (k.includes(`|${scope}`) || k.endsWith(scope)) this.mem.delete(k);
       return;
     }
-    const tx = db.transaction(['projects', 'patterns', 'collections', 'patternRevs', 'docs', 'outbox', 'revisions'], 'readwrite');
-    for (const store of ['projects', 'patterns', 'collections', 'patternRevs', 'outbox', 'revisions'] as const) {
+    const tx = db.transaction(['projects', 'patterns', 'collections', 'patternRevs', 'docs', 'outbox', 'revisions', 'joy'], 'readwrite');
+    for (const store of ['projects', 'patterns', 'collections', 'patternRevs', 'outbox', 'revisions', 'joy'] as const) {
       const keys = await tx.objectStore(store).index('scope').getAllKeys(scope);
       for (const k of keys) await tx.objectStore(store).delete(k);
     }

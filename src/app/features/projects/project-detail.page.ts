@@ -328,7 +328,7 @@ export class ProjectDetailPage {
   private notesTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected async setStatus(s: ProjectStatus): Promise<void> {
-    await this.store.setStatus(this.id(), s);
+    await this.store.setStatus(this.id(), s, s === 'done' ? 'finish' : 'edit');
     if (s === 'done') await this.ui.say('مبروك على المشروع المكتمل!', 'Congratulations on finishing!');
   }
 

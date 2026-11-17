@@ -31,7 +31,7 @@ import {
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TrackerData } from '../../core/models/models';
 import { TimerService } from '../../core/services/timer.service';
-import { AppStore } from '../../core/state/app.store';
+import { AppStore, TrackerChange } from '../../core/state/app.store';
 import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
@@ -239,12 +239,12 @@ export class TrackerPage {
     return convertToken(k, terms, this.store.viewTerms());
   }
 
-  private update(fn: (t: TrackerLike) => TrackerLike): void {
+  private update(fn: (t: TrackerLike) => TrackerLike, change?: TrackerChange): void {
     const p = this.p();
     if (!p) return;
     const i = this.inst();
-    if (i) void this.store.updatePartTracker(p.id, i.id, fn);
-    else void this.store.updateTracker(p.id, fn as (t: TrackerData) => TrackerData);
+    if (i) void this.store.updatePartTracker(p.id, i.id, fn, change);
+    else void this.store.updateTracker(p.id, fn as (t: TrackerData) => TrackerData, change);
   }
 
   /* ---------------- actions ---------------- */
@@ -256,9 +256,10 @@ export class TrackerPage {
     if (!t) return;
     if (t.mode === 'pattern') {
       const parsed = this.parsed();
-      if (parsed) this.update((x) => ({ ...x, cursor: patternTap(parsed, x.cursor) }));
+      // `parsed` is the pinned pattern / part snapshot this tap really used: Crochet Joy needs the very same rounds to detect completion.
+      if (parsed) this.update((x) => ({ ...x, cursor: patternTap(parsed, x.cursor) }), { origin: 'tap', parsed });
     } else {
-      this.update((x) => ({ ...x, simple: simpleRoundComplete(x.simple) ? simpleNextRound(x.simple) : simpleTap(x.simple) }));
+      this.update((x) => ({ ...x, simple: simpleRoundComplete(x.simple) ? simpleNextRound(x.simple) : simpleTap(x.simple) }), { origin: 'tap' });
     }
   }
 
@@ -267,11 +268,11 @@ export class TrackerPage {
     if (!t) return;
     const empty = t.mode === 'pattern' ? !t.cursor.history.length : !t.simple.history.length;
     if (empty) return void this.ui.say('مفيش حاجة للتراجع عنها', 'Nothing to undo');
-    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternUndo(x.cursor) } : { ...x, simple: simpleUndo(x.simple) }));
+    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternUndo(x.cursor) } : { ...x, simple: simpleUndo(x.simple) }), { origin: 'undo' });
   }
 
   protected confirmReset(): void {
-    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternReset(x.cursor) } : { ...x, simple: simpleReset(x.simple) }));
+    this.update((x) => (x.mode === 'pattern' ? { ...x, cursor: patternReset(x.cursor) } : { ...x, simple: simpleReset(x.simple) }), { origin: 'reset' });
     this.sheet.set(null);
     void this.ui.say('تمت إعادة ضبط الدور', 'Round reset');
   }
@@ -302,7 +303,7 @@ export class TrackerPage {
   protected async finishProject(): Promise<void> {
     const p = this.p();
     if (!p) return;
-    await this.store.setStatus(p.id, 'done');
+    await this.store.setStatus(p.id, 'done', 'finish');
     if (this.timerOn()) await this.timer.stop();
     await this.ui.say('مبروك! المشروع اتحوّل إلى «مكتمل».', 'Congratulations! The project is now completed.');
   }

@@ -12,6 +12,7 @@ import { ImmersiveService } from './core/services/immersive.service';
 import { TimerService } from './core/services/timer.service';
 import { formatMinutes } from './core/domain/time';
 import { AppStore } from './core/state/app.store';
+import { JoyService } from './core/joy/joy.service';
 import { GuestImportService } from './core/sync/guest-import.service';
 import { SyncService } from './core/sync/sync.service';
 import { LockScreenComponent } from './features/auth/lock-screen.component';
@@ -51,6 +52,8 @@ export class App implements OnInit {
   /** Instantiated at launch so the native immersive state is mirrored into the layout before the first screen. */
   private readonly immersive = inject(ImmersiveService);
   private readonly importer = inject(GuestImportService);
+  /** Instantiated at launch so the Crochet Joy hook is wired to the store before the first counting tap. */
+  private readonly joy = inject(JoyService);
   private readonly i18n = inject(I18nService);
   private readonly ui = inject(UiFeedback);
   private askedImportFor: string | null = null;
@@ -160,11 +163,14 @@ export class App implements OnInit {
   }
 
   private async offerGuestImport(): Promise<void> {
-    const n = await this.importer.refresh();
-    if (!n) return;
+    const { projects: n, joy } = await this.importer.refresh();
+    if (!n && !joy) return;
     const t = this.i18n.t();
-    if (!(await this.ui.confirm(t.importTitle, this.i18n.fmt(t.importBody, { n }), t.importYes, false, t.importLater))) return;
+    // Only Crochet Joy progress (no projects) is still worth moving: the body then says so instead of "0 projects".
+    const body = n ? this.i18n.fmt(t.importBody, { n }) : t.importJoyBody;
+    if (!(await this.ui.confirm(t.importTitle, body, t.importYes, false, t.importLater))) return;
     const r = await this.importer.importGuestData();
-    await this.ui.toast(this.i18n.fmt(t.importDone, { n: r.imported }));
+    if (r.incomplete) return void (await this.ui.toast(t.importJoyIncomplete));
+    await this.ui.toast(n ? this.i18n.fmt(t.importDone, { n: r.imported }) : t.importJoyDone);
   }
 }

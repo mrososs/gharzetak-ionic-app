@@ -3,10 +3,12 @@ import { AuthService } from '../auth/auth.service';
 import { AvatarId, DEFAULT_AVATAR, isAvatarId, toAvatarId } from '../data/avatars';
 import { CAT, LVL, YARN } from '../data/catalog';
 import { PartInstance, PartSnapshot, instanceLabel, instanceTracker, nextUnfinished, projectCompletion, siblingsOf } from '../domain/collections';
-import { parsePattern } from '../domain/pattern-parser';
+import { JoyEvent, JoyOrigin, detectJoy } from '../domain/joy';
+import { ParsedPattern, parsePattern } from '../domain/pattern-parser';
 import { TrackerLike, patternStats, simpleProgress } from '../domain/tracker-engine';
 import { TermSystem } from '../domain/terminology';
 import { I18nService } from '../i18n/i18n.service';
+import { JoyPrefs, ReminderPrefs, ScopePrefs, SharePrefs } from '../joy/joy.models';
 import { ChatMessage, DEFAULT_PROFILE, Pattern, PatternCollection, PatternRevision, Profile, Project, ProjectStatus, TrackerData, TutorialData } from '../models/models';
 import { LocalDb, OutboxKind, Scope, ScopeDocs } from '../storage/local-db';
 import { samplePatterns } from './factories';
@@ -26,6 +28,16 @@ export interface ProjectProgress {
   /** 0..100 */
   readonly pct: number;
   readonly roundLabel: string;
+}
+
+/**
+ * Why a tracker is being changed. Only `tap` (a counting action) and `finish` (explicit "mark finished") can create Crochet Joy events;
+ * everything else — including every call that does not pass an origin — is silent. `parsed` is the pattern the tap actually used
+ * (the pinned revision / part snapshot), required to recognise pattern-mode rounds.
+ */
+export interface TrackerChange {
+  readonly origin?: JoyOrigin;
+  readonly parsed?: ParsedPattern | null;
 }
 
 /**
@@ -53,6 +65,8 @@ export class AppStore {
   readonly storeEmail = signal('');
   readonly storeNotified = signal(false);
   readonly currentProjectId = signal<string | null>(null);
+  /** Local display + Crochet Joy preferences of the current scope (celebrations, reminders, share cards). */
+  readonly prefs = signal<ScopePrefs>({});
 
   /** Pattern text a reader is viewing in, overrides the profile terminology. */
   readonly readerTerms = signal<'us' | 'uk' | null>(null);
@@ -72,6 +86,8 @@ export class AppStore {
 
   /** Called by SyncService whenever something needs pushing. */
   onQueued: (() => void) | null = null;
+  /** Called by JoyService with the events one explicit user command created (never from sync, load, import, undo, reset or edits). */
+  onJoy: ((scope: Scope, events: readonly JoyEvent[]) => void) | null = null;
 
   private writes: Promise<unknown> = Promise.resolve();
   private loadToken = 0;
@@ -112,6 +128,7 @@ export class AppStore {
     this.storeEmail.set(docs.storeEmail ?? '');
     this.storeNotified.set(!!docs.storeNotified);
     this.currentProjectId.set(docs.currentProjectId ?? null);
+    this.prefs.set(docs.prefs ?? {});
     this.loaded.set(true);
   }
 
@@ -184,13 +201,50 @@ export class AppStore {
     return result;
   }
 
-  /** Tracker change = one confirmed step: durable locally before resolving. */
-  updateTracker(id: string, fn: (t: TrackerData) => TrackerData): Promise<Project | null> {
-    return this.updateProject(id, (p) => ({ ...p, lastWorkedAt: Date.now(), tracker: { ...fn(p.tracker), updatedAt: Date.now() } }), ['progress']);
+  /**
+   * Tracker change = one confirmed step: durable locally before resolving.
+   * The visible counter updates synchronously; Crochet Joy detection (only for origin `tap`) is a cheap before/after comparison done
+   * right after that, never awaited, and can never make the change fail.
+   */
+  updateTracker(id: string, fn: (t: TrackerData) => TrackerData, change?: TrackerChange): Promise<Project | null> {
+    const before = this.joyBefore(id, change);
+    const done = this.updateProject(id, (p) => ({ ...p, lastWorkedAt: Date.now(), tracker: { ...fn(p.tracker), updatedAt: Date.now() } }), ['progress']);
+    this.emitJoy(before, id, null, change);
+    return done;
   }
 
-  setStatus(id: string, status: ProjectStatus): Promise<Project | null> {
-    return this.updateProject(id, (p) => ({ ...p, status }));
+  setStatus(id: string, status: ProjectStatus, origin: JoyOrigin = 'edit'): Promise<Project | null> {
+    const before = this.joyBefore(id, { origin });
+    const done = this.updateProject(id, (p) => ({ ...p, status }));
+    this.emitJoy(before, id, null, { origin });
+    return done;
+  }
+
+  /** The project as it was before a change — captured only when the origin could create an event (keeps every other path free). */
+  private joyBefore(id: string, change?: TrackerChange): Project | null {
+    if (!this.onJoy || (change?.origin !== 'tap' && change?.origin !== 'finish')) return null;
+    return this.project(id);
+  }
+
+  /** Detects events by comparing the captured `before` with the already-updated signal. Wrapped: a failure here never affects counting. */
+  private emitJoy(before: Project | null, id: string, instanceId: string | null, change?: TrackerChange): void {
+    if (!before || !change?.origin || !this.onJoy) return;
+    try {
+      const after = this.project(id);
+      if (!after) return;
+      const pick = (p: Project) => {
+        const inst = instanceId ? (p.parts ?? []).find((i) => i.id === instanceId) : null;
+        return inst ? instanceTracker(inst) : p.tracker;
+      };
+      const events = detectJoy(
+        { tracker: pick(before), status: before.status },
+        { tracker: pick(after), status: after.status },
+        { origin: change.origin, projectId: id, instanceId, parsed: change.parsed ?? null, partsAfter: after.parts ?? null, partSnapshots: after.partSnapshots ?? null },
+      );
+      if (events.length) this.onJoy(this.scope(), events);
+    } catch {
+      /* celebrations are optional: the tracker must keep working */
+    }
   }
 
   async deleteProject(id: string): Promise<void> {
@@ -394,8 +448,9 @@ export class AppStore {
   }
 
   /** One confirmed step on ONE part instance: durable locally before resolving. Other instances are never touched. */
-  updatePartTracker(projectId: string, instanceId: string, fn: (t: TrackerLike) => TrackerLike): Promise<Project | null> {
-    return this.updateProject(
+  updatePartTracker(projectId: string, instanceId: string, fn: (t: TrackerLike) => TrackerLike, change?: TrackerChange): Promise<Project | null> {
+    const before = this.joyBefore(projectId, change);
+    const done = this.updateProject(
       projectId,
       (p) => {
         const now = Date.now();
@@ -412,6 +467,8 @@ export class AppStore {
       },
       ['progress'],
     );
+    this.emitJoy(before, projectId, instanceId, change);
+    return done;
   }
 
   /**
@@ -449,6 +506,18 @@ export class AppStore {
   async setAvatar(id: AvatarId): Promise<void> {
     if (!isAvatarId(id) || this.profile().avatarId === id) return;
     await this.updateProfile({ avatarId: id });
+  }
+
+  /** Merges Crochet Joy / display preferences (per scope) and persists them immediately. Local only: never synced. */
+  async updatePrefs(patch: { immersive?: boolean; joy?: Partial<JoyPrefs>; reminders?: Partial<ReminderPrefs>; share?: Partial<SharePrefs> }): Promise<void> {
+    const cur = this.prefs();
+    const next: ScopePrefs = { ...cur };
+    if (patch.immersive !== undefined) next.immersive = patch.immersive;
+    if (patch.joy) next.joy = { ...cur.joy, ...patch.joy };
+    if (patch.reminders) next.reminders = { ...cur.reminders, ...patch.reminders };
+    if (patch.share) next.share = { ...cur.share, ...patch.share };
+    this.prefs.set(next);
+    await this.saveDocs({ prefs: next });
   }
 
   async updateProfile(patch: Partial<Profile>, toolsChanged = false): Promise<void> {
