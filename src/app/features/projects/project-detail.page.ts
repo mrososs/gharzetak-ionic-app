@@ -10,6 +10,7 @@ import { ProjectStatus } from '../../core/models/models';
 import { TimerService } from '../../core/services/timer.service';
 import { ProjectFinishService } from '../../core/joy/project-finish.service';
 import { ShareLauncher } from '../../core/joy/share-launcher.service';
+import { TrackerNavigator } from '../../core/services/tracker-navigator.service';
 import { AppStore } from '../../core/state/app.store';
 import { uuid } from '../../core/state/factories';
 import { LocalDb } from '../../core/storage/local-db';
@@ -332,6 +333,7 @@ export class ProjectDetailPage {
   private notesTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly launcher = inject(ShareLauncher);
+  private readonly navigator = inject(TrackerNavigator);
 
   protected shareProgress(): void {
     this.launcher.progress(this.id());
@@ -350,15 +352,13 @@ export class ProjectDetailPage {
     await this.openTracker();
   }
 
-  protected async openTracker(): Promise<void> {
-    await this.store.setCurrentProject(this.id());
-    await this.nav.navigateRoot('/tabs/tracker');
+  /** The user chose this project / piece explicitly, so even a finished project opens (a reminder tap does not do that). */
+  protected openTracker(): Promise<unknown> {
+    return this.navigator.open(this.id(), null, true);
   }
 
-  protected async openPart(instanceId: string): Promise<void> {
-    await this.store.setActiveInstance(this.id(), instanceId);
-    await this.timer.switchInstance(this.id(), instanceId);
-    await this.openTracker();
+  protected openPart(instanceId: string): Promise<unknown> {
+    return this.navigator.open(this.id(), instanceId, true);
   }
 
   protected linkPattern(patternId: string): void {

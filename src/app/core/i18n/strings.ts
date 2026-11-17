@@ -73,7 +73,6 @@ const ar = {
   totalRounds: 'عدد الأدوار (0 = غير محدد)', cfgExample: 'مثال: هدف 30 وغرز لكل ضغطة 5 → 5، 10، 15، 20، 25، 30.', restartRound: 'ابدئي الدور من أوله',
   resetTitle: 'إعادة ضبط الدور؟', resetConfirm: 'نعم، أعيدي الضبط',
   resetAllBody: 'هيتمسح كل اللي محفوظ على الجهاز ده (مشاريع الضيفة والإعدادات). البيانات المحفوظة في حسابك على السحابة مش هتتمسح.',
-  notifDemo: 'تذكيرات الشغل لسه مش متاحة — قريبًا.',
   // real:
   sending: 'جاري الإرسال…', loading: 'جاري التحميل…',
   errEmail: 'اكتبي بريد إلكتروني صحيح.', errPw: 'كلمة المرور لازم تكون 8 أحرف على الأقل.', errName: 'من فضلك اكتبي اسمك.',
@@ -186,7 +185,6 @@ const en: Strings = {
   totalRounds: 'Total rounds (0 = unset)', cfgExample: 'Example: target 30 and 5 per tap → 5, 10, 15, 20, 25, 30.', restartRound: 'Restart this round',
   resetTitle: 'Reset this round?', resetConfirm: 'Yes, reset',
   resetAllBody: 'Everything stored on this device (guest projects and settings) will be erased. Data saved in your cloud account is not deleted.',
-  notifDemo: 'Work reminders are not available yet — coming soon.',
   sending: 'Sending…', loading: 'Loading…',
   errEmail: 'Enter a valid email address.', errPw: 'Password must be at least 8 characters.', errName: 'Please enter your name.',
   errCreds: 'Email or password is incorrect.', errEmailTaken: 'This email is already registered — try signing in.',

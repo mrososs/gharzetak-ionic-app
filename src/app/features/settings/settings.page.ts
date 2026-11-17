@@ -13,6 +13,7 @@ import { TimerService } from '../../core/services/timer.service';
 import { AppStore } from '../../core/state/app.store';
 import { SyncService } from '../../core/sync/sync.service';
 import { ToolsSheetBody } from '../../shared/ui/dialogs/common-sheets';
+import { RemindersSettingsComponent } from './reminders-settings.component';
 import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
@@ -22,7 +23,7 @@ import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.co
 /** GZ-S25 settings · GZ-T07 tools sheet · GZ-T09 erase-data sheet. */
 @Component({
   selector: 'gz-settings',
-  imports: [IonHeader, IonContent, IconComponent, SheetComponent, ToolsSheetBody, AvatarPickerComponent, CrochetAvatarComponent],
+  imports: [IonHeader, IonContent, IconComponent, SheetComponent, ToolsSheetBody, AvatarPickerComponent, CrochetAvatarComponent, RemindersSettingsComponent],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top">
@@ -92,7 +93,10 @@ import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.co
           </div>
           <p class="gz-xs gz-mute" style="margin: 6px 2px 0" role="status">{{ immersiveHint() }}</p>
         }
-        <!-- Crochet Joy: celebrations. Kept separate from reminders on purpose (different decisions, different permissions). -->
+        <!-- Crochet Joy: reminders (opt-in, local notifications) and celebrations are separate on purpose: different decisions, different permissions. -->
+        <gz-reminders-settings />
+
+        <!-- Crochet Joy: celebrations. -->
         <div class="gz-sec"><h2 class="gz-h3 gz-hd">{{ i18n.q('الاحتفالات', 'Celebrations') }}</h2></div>
         <span class="gz-lbl" id="se-cel-l">{{ i18n.q('احتفلي معايا بعد', 'Celebrate') }}</span>
         <div class="gz-seg" role="group" aria-labelledby="se-cel-l">

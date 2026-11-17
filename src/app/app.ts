@@ -12,7 +12,10 @@ import { ImmersiveService } from './core/services/immersive.service';
 import { TimerService } from './core/services/timer.service';
 import { formatMinutes } from './core/domain/time';
 import { AppStore } from './core/state/app.store';
+import { AchievementsService } from './core/joy/achievements.service';
 import { JoyPresenter } from './core/joy/joy-presenter.service';
+import { NotificationRouter } from './core/reminders/notification-router.service';
+import { ReminderService } from './core/reminders/reminder.service';
 import { JoyService } from './core/joy/joy.service';
 import { GuestImportService } from './core/sync/guest-import.service';
 import { SyncService } from './core/sync/sync.service';
@@ -20,6 +23,7 @@ import { LockScreenComponent } from './features/auth/lock-screen.component';
 import { UiFeedback } from './shared/ui/feedback/toast.service';
 import { JoyFinaleComponent } from './shared/ui/joy/joy-finale.component';
 import { JoyPartSheetComponent } from './shared/ui/joy/joy-part-sheet.component';
+import { ReminderSoftAskComponent } from './shared/ui/joy/reminder-soft-ask.component';
 import { ShareCardSheetComponent } from './shared/ui/joy/share-card-sheet.component';
 
 /** A biometric-protected session locks again after the app spent this long in the background. */
@@ -27,7 +31,7 @@ const RELOCK_AFTER_MS = 30_000;
 
 @Component({
   selector: 'app-root',
-  imports: [IonApp, IonRouterOutlet, LockScreenComponent, JoyPartSheetComponent, JoyFinaleComponent, ShareCardSheetComponent],
+  imports: [IonApp, IonRouterOutlet, LockScreenComponent, JoyPartSheetComponent, JoyFinaleComponent, ShareCardSheetComponent, ReminderSoftAskComponent],
   template: `
     <ion-app>
       <!-- While locked (or covered in the task switcher) the content is inert: not focusable, not readable by assistive tech. -->
@@ -36,6 +40,7 @@ const RELOCK_AFTER_MS = 30_000;
         <gz-joy-part-sheet />
         <gz-joy-finale />
         <gz-share-card-sheet />
+        <gz-reminder-soft-ask />
       }
       @if (auth.locked()) {
         <gz-lock-screen />
@@ -65,6 +70,11 @@ export class App implements OnInit {
   private readonly joy = inject(JoyService);
   /** Instantiated at launch so celebrations keep their rate-limit window and rotation across screens. */
   private readonly joyPresenter = inject(JoyPresenter);
+  /** Local crochet reminders: re-planned on launch / resume / changes. Never asks for the notification permission by itself. */
+  private readonly reminders = inject(ReminderService);
+  /** Turns a tap on a reminder into Project → piece → counter, behind authentication and the biometric lock. */
+  private readonly notificationRouter = inject(NotificationRouter);
+  private readonly achievements = inject(AchievementsService);
   private readonly i18n = inject(I18nService);
   private readonly ui = inject(UiFeedback);
   private askedImportFor: string | null = null;
@@ -113,6 +123,8 @@ export class App implements OnInit {
   }
 
   ngOnInit(): void {
+    // Early, before the first navigation: the tap that LAUNCHED the app is kept by the plugin until a listener exists.
+    this.notificationRouter.start();
     if (Capacitor.isNativePlatform()) {
       StatusBar.setStyle({ style: Style.Light }).catch(() => undefined);
       if (Capacitor.getPlatform() === 'android') StatusBar.setBackgroundColor({ color: '#FFF9F5' }).catch(() => undefined);
@@ -146,6 +158,9 @@ export class App implements OnInit {
     CapApp.addListener('resume', () => {
       this.onForeground();
       if (!this.auth.locked()) this.sync.schedule(0, true);
+      // The permission or the time zone may have changed while away; sync may have brought projects from another device.
+      void this.reminders.onResume();
+      void this.achievements.backfill();
     }).catch(() => undefined);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') {

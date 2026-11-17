@@ -4,6 +4,7 @@ import { achievementDef } from '../../../core/joy/achievements';
 import { I18nService } from '../../../core/i18n/i18n.service';
 import { joyPrefsOf } from '../../../core/joy/joy.models';
 import { JoyPresenter } from '../../../core/joy/joy-presenter.service';
+import { ReminderService } from '../../../core/reminders/reminder.service';
 import { ShareLauncher } from '../../../core/joy/share-launcher.service';
 import { ShareSource } from '../../../core/joy/share-card';
 import { AppStore } from '../../../core/state/app.store';
@@ -83,7 +84,7 @@ const CONFETTI = Array.from({ length: 24 }, (_, i) => {
               @if (!v.photoUrl) {
                 <button type="button" class="gz-btn2" (click)="addPhoto(v.projectId)"><svg gzIcon="camera" size="s" />{{ i18n.q('ضيفي صورة لتحفتك', 'Add a photo of your creation') }}</button>
               }
-              <button type="button" class="gz-btn" (click)="presenter.dismissFinale()"><svg gzIcon="check" size="s" />{{ i18n.q('تمام', 'Done') }}</button>
+              <button type="button" class="gz-btn" (click)="close()"><svg gzIcon="check" size="s" />{{ i18n.q('تمام', 'Done') }}</button>
             </div>
           </div>
         }
@@ -118,6 +119,13 @@ export class JoyFinaleComponent {
   protected readonly still = computed(() => joyPrefsOf(this.store.prefs()).motion === 'reduced');
 
   private readonly launcher = inject(ShareLauncher);
+  private readonly reminders = inject(ReminderService);
+
+  /** Closing the celebration is a happy moment: the right time to (gently, rarely) offer reminders. */
+  protected close(): void {
+    this.presenter.dismissFinale();
+    this.reminders.maybeSoftAsk();
+  }
 
   protected shareCard(src: ShareSource): void {
     this.presenter.dismissFinale();

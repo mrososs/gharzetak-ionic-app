@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, inject, output } from '@angular/core';
+import { NavController } from '@ionic/angular';
 import { ACC, ACC_IDS, AccessoryId, HOOKS, YARN, YARN_IDS, YarnId } from '../../../core/data/catalog';
 import { I18nService } from '../../../core/i18n/i18n.service';
+import { ReminderService } from '../../../core/reminders/reminder.service';
 import { AppStore } from '../../../core/state/app.store';
 import { IconComponent } from '../icon/icon.component';
 
@@ -52,7 +54,7 @@ export class ToolsSheetBody {
   }
 }
 
-/** GZ-T08 — notifications sheet (reminders are honestly marked as not available yet). */
+/** GZ-T08 — notifications sheet: the entry point to Crochet Reminders (opt-in, local, private). */
 @Component({
   selector: 'gz-notif-sheet-body',
   imports: [IconComponent],
@@ -60,12 +62,15 @@ export class ToolsSheetBody {
     <div class="flex flex-col gap-2.5">
       <div class="gz-rcard">
         <div class="flex items-start gap-2.5">
-          <div class="gz-tile t-lav" style="width: 40px; height: 40px; border-radius: 12px"><svg gzIcon="counter" size="s" /></div>
+          <div class="gz-tile t-lav" style="width: 40px; height: 40px; border-radius: 12px"><svg gzIcon="bell" size="s" /></div>
           <div class="flex-1">
-            <div class="gz-b gz-sm">{{ i18n.q('كمّلي مشروعك', 'Keep going') }}</div>
-            <div class="gz-xs gz-mute">{{ i18n.q('مشروعك الحالي مستنيكي — الدور الجاي قريب!', 'Your current project is waiting — the next round is close!') }}</div>
+            <div class="gz-b gz-sm">{{ i18n.q('تذكيرات غرزتك', 'Crochet Reminders') }}</div>
+            <div class="gz-xs gz-mute">{{ reminderLine() }}</div>
           </div>
         </div>
+        @if (rem.supported) {
+          <button type="button" class="gz-btn3 w mt-2.5" (click)="openReminders()"><svg gzIcon="sliders" size="s" />{{ rem.prefs().enabled ? i18n.q('إعدادات التذكيرات', 'Reminder settings') : i18n.q('شغّلي التذكيرات', 'Set up reminders') }}</button>
+        }
       </div>
       <div class="gz-rcard">
         <div class="flex items-start gap-2.5">
@@ -77,13 +82,28 @@ export class ToolsSheetBody {
         </div>
       </div>
     </div>
-    <p class="gz-xs gz-mute mt-3 text-center">{{ t().notifDemo }}</p>
     <button type="button" class="gz-btn3 w mt-2.5" (click)="done.emit()">{{ t().close }}</button>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class NotificationsSheetBody {
   protected readonly i18n = inject(I18nService);
+  protected readonly rem = inject(ReminderService);
+  private readonly nav = inject(NavController);
   readonly done = output<void>();
   protected readonly t = this.i18n.t;
+
+  protected reminderLine(): string {
+    if (!this.rem.supported) return this.i18n.q('التذكيرات شغّالة في تطبيق غرزتك على الموبايل.', 'Reminders work in the Gharzetak app on your phone.');
+    return this.rem.prefs().enabled
+      ? this.i18n.q('التذكيرات شغّالة. تقدري تغيّري الوقت والأيام في أي وقت.', 'Reminders are on. You can change the time and days any time.')
+      : this.i18n.q('تذكيرات لطيفة بوقت الكروشيه، بإذنك بس. مقفولة دلوقتي.', 'Gentle reminders for your crochet time, only with your permission. Off for now.');
+  }
+
+  /** Off → the friendly explanation (the only road to the system dialog); on → the settings page. */
+  protected openReminders(): void {
+    this.done.emit();
+    if (this.rem.prefs().enabled) void this.nav.navigateForward('/tabs/home/settings');
+    else this.rem.openSoftAsk();
+  }
 }
