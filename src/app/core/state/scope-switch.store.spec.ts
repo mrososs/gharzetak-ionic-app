@@ -16,6 +16,8 @@ describe('AppStore scope switch after sign-in', () => {
     ]);
     const db = {
       loadProjects: async () => [],
+      loadCollections: async () => [],
+      loadPatternRevs: async () => [],
       loadPatterns: async () => [],
       // a real IndexedDB read takes a moment: that gap is where the old write went to the wrong scope
       loadDocs: async (s: string) => (await new Promise((r) => setTimeout(r, 15)), docs.get(s) ?? ({} as ScopeDocs)),

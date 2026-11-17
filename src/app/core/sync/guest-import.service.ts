@@ -37,7 +37,8 @@ export class GuestImportService {
 
   async importGuestData(): Promise<ImportReport> {
     if (!this.auth.signedIn()) return { imported: 0, duplicates: 0 };
-    const [projects, patterns] = await Promise.all([this.db.loadProjects('guest'), this.db.loadPatterns('guest')]);
+    const [projects, patterns, collections] = await Promise.all([this.db.loadProjects('guest'), this.db.loadPatterns('guest'), this.db.loadCollections('guest')]);
+    const collectionIdMap = new Map<string, string>();
     const report: ImportReport = { imported: 0, duplicates: 0 };
     const patternIdMap = new Map<string, string>();
 
@@ -53,6 +54,18 @@ export class GuestImportService {
       await this.store.addPattern(copy);
     }
 
+    // Collections next, so project → collection links stay valid (part ids are kept: part instances refer to them).
+    for (const col of collections.filter((c) => !c.deletedAt)) {
+      const existing = this.store.collection(col.id);
+      if (existing && existing.name === col.name && existing.rev === col.rev) {
+        collectionIdMap.set(col.id, col.id);
+        continue;
+      }
+      const id = existing ? uuid() : col.id;
+      collectionIdMap.set(col.id, id);
+      await this.store.addCollection({ ...col, id, updatedAt: Date.now() });
+    }
+
     for (const p of projects) {
       const existing = this.store.project(p.id);
       if (existing && sameProject(existing, p)) {
@@ -65,6 +78,7 @@ export class GuestImportService {
         ...p,
         id,
         coverPath: null,
+        collectionId: p.collectionId ? (collectionIdMap.get(p.collectionId) ?? p.collectionId) : p.collectionId,
         photos: p.photos.map((ph) => ({ ...ph, storagePath: null })),
         updatedAt: Date.now(),
         tracker: { ...p.tracker, patternId: pid, updatedAt: Date.now() },

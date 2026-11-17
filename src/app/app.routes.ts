@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
 import { AuthService } from './core/auth/auth.service';
 import { appGuard, signedOutGuard } from './core/auth/guards';
+import { unsavedChangesGuard } from './core/guards/unsaved-changes.guard';
 
 /** Screen ↔ route map: docs/design-handoff/screen-map.md */
 export const routes: Routes = [
@@ -46,11 +47,16 @@ export const routes: Routes = [
       { path: 'home/settings', loadComponent: () => import('./features/settings/settings.page').then((m) => m.SettingsPage) },
       { path: 'home/store', loadComponent: () => import('./features/store/store.page').then((m) => m.StorePage) },
       { path: 'home/patterns', loadComponent: () => import('./features/patterns/pattern-library.page').then((m) => m.PatternLibraryPage) },
-      { path: 'home/patterns/new', loadComponent: () => import('./features/patterns/add-pattern.page').then((m) => m.AddPatternPage) },
+      { path: 'home/patterns/new', canDeactivate: [unsavedChangesGuard], loadComponent: () => import('./features/patterns/add-pattern.page').then((m) => m.AddPatternPage) },
+      { path: 'home/patterns/import', loadComponent: () => import('./features/patterns/smart-import.page').then((m) => m.SmartImportPage) },
+      { path: 'home/patterns/:id/edit', canDeactivate: [unsavedChangesGuard], loadComponent: () => import('./features/patterns/add-pattern.page').then((m) => m.AddPatternPage) },
+      { path: 'home/collections/new', canDeactivate: [unsavedChangesGuard], loadComponent: () => import('./features/patterns/collection-editor.page').then((m) => m.CollectionEditorPage) },
+      { path: 'home/collections/:id/edit', canDeactivate: [unsavedChangesGuard], loadComponent: () => import('./features/patterns/collection-editor.page').then((m) => m.CollectionEditorPage) },
+      { path: 'home/collections/:id', loadComponent: () => import('./features/patterns/collection-detail.page').then((m) => m.CollectionDetailPage) },
       { path: 'home/patterns/:id', loadComponent: () => import('./features/patterns/pattern-reader.page').then((m) => m.PatternReaderPage) },
       { path: 'home/terms', loadComponent: () => import('./features/terminology/terminology.page').then((m) => m.TerminologyPage) },
       { path: 'projects', loadComponent: () => import('./features/projects/projects.page').then((m) => m.ProjectsPage) },
-      { path: 'projects/new', loadComponent: () => import('./features/projects/new-project.page').then((m) => m.NewProjectPage) },
+      { path: 'projects/new', canDeactivate: [unsavedChangesGuard], loadComponent: () => import('./features/projects/new-project.page').then((m) => m.NewProjectPage) },
       { path: 'projects/:id', loadComponent: () => import('./features/projects/project-detail.page').then((m) => m.ProjectDetailPage) },
       { path: 'tracker', loadComponent: () => import('./features/tracker/tracker.page').then((m) => m.TrackerPage) },
       { path: 'learn', loadComponent: () => import('./features/learning/learn.page').then((m) => m.LearnPage) },

@@ -259,3 +259,57 @@ html[dir='ltr'] .gz-msg { line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ======================================================================
+   Unified dialog system — one look for bottom sheets, confirmations and
+   form dialogs (title · description · close · fields · actions).
+   Button hierarchy: primary = .gz-btn (filled) · secondary = .gz-btn2
+   (outlined) · destructive = .gz-btn.danger (filled, explicit label) ·
+   low-priority = .gz-btn-text. Cancel and Delete are never equal.
+   ====================================================================== */
+:root { --gz-touch: 44px; }
+
+.gz-dlg-head { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 14px; }
+.gz-dlg-titles { flex: 1; min-width: 0; }
+.gz-dlg-title { margin: 0; font-size: 20px; line-height: 1.35; overflow-wrap: anywhere; }
+.gz-dlg-desc { margin: 4px 0 0; color: var(--gz-text-2); font-size: var(--gz-fs-body-sm); line-height: 1.6; overflow-wrap: anywhere; }
+.gz-dlg-x {
+  width: var(--gz-touch); height: var(--gz-touch); border-radius: 50%; flex: none; border: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; background: var(--gz-lavender-100); color: var(--gz-text);
+  &:focus-visible { outline: 3px solid var(--gz-primary); outline-offset: 2px; }
+  &[disabled] { opacity: 0.45; cursor: not-allowed; }
+}
+/* Actions: one obvious primary first, then secondary, then a text action. Full width, stacked: never off-screen on 320px. */
+.gz-dlg-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+.gz-dlg-actions:empty { display: none; }
+.gz-dlg-actions > * { margin: 0; }
+.gz-btn-text {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: var(--gz-touch);
+  background: none; border: 0; color: var(--gz-text-2); font: inherit; font-weight: 600; cursor: pointer; border-radius: var(--gz-r-sm);
+  &:focus-visible { outline: 3px solid var(--gz-primary); outline-offset: 2px; }
+  &[disabled] { color: var(--gz-disabled-fg); cursor: not-allowed; }
+  &.danger { color: var(--gz-pink-ink); }
+}
+.gz-btn2.danger { border-color: var(--gz-pink-ink); color: var(--gz-pink-ink); }
+.gz-btn:focus-visible, .gz-btn2:focus-visible, .gz-btn3:focus-visible, .gz-icb:focus-visible, .gz-chip:focus-visible { outline: 3px solid var(--gz-primary); outline-offset: 2px; }
+.gz-btn2[disabled], .gz-btn3[disabled] { opacity: 0.55; cursor: not-allowed; }
+/* Loading state: keeps the label, blocks repeat taps (duplicate submissions), shows a spinner. */
+.gz-btn.is-busy, .gz-btn2.is-busy { position: relative; pointer-events: none; opacity: 0.8; }
+.gz-btn.is-busy::after, .gz-btn2.is-busy::after {
+  content: ''; width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid currentColor; border-inline-end-color: transparent; animation: gzSpin 0.8s linear infinite; flex: none;
+}
+@keyframes gzSpin { to { transform: rotate(360deg); } }
+/* Inline validation sits right under its field. */
+.gz-field-err { margin-top: 6px; color: var(--gz-error); font-size: var(--gz-fs-small); line-height: 1.5; display: flex; gap: 6px; align-items: flex-start; }
+.gz-field-hint { margin-top: 6px; color: var(--gz-text-3); font-size: var(--gz-fs-small); line-height: 1.5; }
+.gz-in.invalid, .gz-ta.invalid { border-color: var(--gz-error); }
+/* Feedback banners (success / error) inside dialogs. */
+.gz-note.rose { background: var(--gz-error-bg); color: var(--gz-error); }
+.gz-note.peach { background: var(--gz-warning-bg); color: var(--gz-warning); }
+
+/* Small screens (320–360px): tighter paddings, never clipped, long content scrolls inside the sheet. */
+@media (max-width: 360px) {
+  .gz-sheet-body { padding-inline: 14px; }
+  .gz-dlg-title { font-size: 18px; }
+  .gz-btn { min-height: 50px; padding-inline: 16px; font-size: 15px; }
+}

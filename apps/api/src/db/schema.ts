@@ -163,6 +163,12 @@ export const patterns = sqliteTable(
     fileSize: integer('file_size'),
     fileMime: text('file_mime'),
     readingPosition: integer('reading_position').notNull().default(0),
+    /** Content revision counter (bumped when the pattern text/terms change); prior content is kept in pattern_revisions. */
+    contentRev: integer('content_rev').notNull().default(1),
+    /** Optional suggested project duration in minutes (0 = none). Only ever pre-fills a project's own optional estimate. */
+    suggestedMinutes: integer('suggested_minutes').notNull().default(0),
+    /** The pasted text a Smart-paste conversion started from (the original stays recoverable). */
+    sourceText: text('source_text').notNull().default(''),
     clientUpdatedAt: integer('client_updated_at').notNull().default(0),
     revision: integer('revision').notNull().default(1),
     createdAt: integer('created_at').notNull().default(now),
@@ -200,6 +206,95 @@ export const patternRounds = sqliteTable(
 );
 
 /* ------------------------------------------------------------------ */
+/* pattern collections (multi-part designs) + revision history          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A reusable complete design made of several parts (e.g. "Pink Teddy Bear": head, body, arms x2 ...).
+ * Synced exactly like a pattern: compare-and-swap on `revision`; the parts are replaced atomically with the parent.
+ * The cover is a small inline data URL (client-compressed) so no extra R2 object type / destructive CHECK change is needed.
+ */
+export const patternCollections = sqliteTable(
+  'pattern_collections',
+  {
+    id: text('id').primaryKey(),
+    ownerId: text('owner_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    level: text('level').notNull().default('beginner'),
+    terms: text('terms').notNull().default('us'),
+    coverData: text('cover_data'),
+    contentRev: integer('content_rev').notNull().default(1),
+    suggestedMinutes: integer('suggested_minutes').notNull().default(0),
+    /** The pasted text the collection was converted from (kept so the original is always recoverable). */
+    sourceText: text('source_text').notNull().default(''),
+    clientUpdatedAt: integer('client_updated_at').notNull().default(0),
+    revision: integer('revision').notNull().default(1),
+    createdAt: integer('created_at').notNull().default(now),
+    updatedAt: integer('updated_at').notNull().default(now),
+    deletedAt: integer('deleted_at'),
+  },
+  (t) => [
+    index('pattern_collections_owner_idx').on(t.ownerId),
+    check('pattern_collections_name_len', sql`length(name) between 1 and 120`),
+    check('pattern_collections_desc_len', sql`length(description) <= 2000`),
+    check('pattern_collections_level', sql`level in ('beginner','intermediate','advanced')`),
+    check('pattern_collections_terms', sql`terms in ('us','uk')`),
+    check('pattern_collections_content_rev', sql`content_rev >= 1`),
+    check('pattern_collections_minutes', sql`suggested_minutes >= 0`),
+  ],
+);
+
+/** One part definition of a collection (instructions shared by all its physical pieces; `quantity` pieces are instantiated per project). */
+export const patternParts = sqliteTable(
+  'pattern_parts',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    collectionId: text('collection_id').notNull().references(() => patternCollections.id, { onDelete: 'cascade' }),
+    /** Stable client-generated id: project part instances refer to it across edits and devices. */
+    partId: text('part_id').notNull(),
+    position: integer('position').notNull(),
+    name: text('name').notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    rawText: text('raw_text').notNull().default(''),
+    assemblyNotes: text('assembly_notes').notNull().default(''),
+  },
+  (t) => [
+    uniqueIndex('pattern_parts_part_unique').on(t.collectionId, t.partId),
+    uniqueIndex('pattern_parts_position_unique').on(t.collectionId, t.position),
+    check('pattern_parts_position', sql`position >= 0`),
+    check('pattern_parts_name_len', sql`length(name) between 1 and 80`),
+    check('pattern_parts_quantity', sql`quantity between 1 and 30`),
+  ],
+);
+
+/**
+ * Immutable snapshots of the PREVIOUS content of a pattern or collection, written when an edit changes it.
+ * Idempotent by (owner, kind, entity, rev): a retried upload can never create a duplicate or rewrite history.
+ */
+export const patternRevisions = sqliteTable(
+  'pattern_revisions',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    ownerId: text('owner_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+    entityKind: text('entity_kind').notNull(),
+    entityId: text('entity_id').notNull(),
+    rev: integer('rev').notNull(),
+    name: text('name').notNull(),
+    /** JSON: { text, terms } for a pattern, { parts, terms } for a collection. */
+    snapshot: text('snapshot').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('pattern_revisions_unique').on(t.ownerId, t.entityKind, t.entityId, t.rev),
+    index('pattern_revisions_entity_idx').on(t.entityId),
+    check('pattern_revisions_kind', sql`entity_kind in ('pattern','collection')`),
+    check('pattern_revisions_rev', sql`rev >= 1`),
+    check('pattern_revisions_snapshot_len', sql`length(snapshot) <= 600000`),
+  ],
+);
+
+/* ------------------------------------------------------------------ */
 /* projects & progress                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -214,6 +309,8 @@ export const projects = sqliteTable(
     yarnType: text('yarn_type').notNull().default('cotton'),
     status: text('status').notNull().default('active'),
     patternId: text('pattern_id').references(() => patterns.id, { onDelete: 'set null' }),
+    /** Set when the project was created from a pattern collection (its part instances live in project_progress.multi_state). */
+    collectionId: text('collection_id').references(() => patternCollections.id, { onDelete: 'set null' }),
     coverPath: text('cover_path'),
     estimatedHours: real('estimated_hours').notNull().default(0),
     workedSeconds: integer('worked_seconds').notNull().default(0),
@@ -271,6 +368,10 @@ export const projectProgress = sqliteTable(
     countMode: text('count_mode').notNull().default('action'),
     history: text('history', { mode: 'json' }).$type<unknown[]>().notNull().default(sql`'[]'`),
     patternHistory: text('pattern_history', { mode: 'json' }).$type<unknown[]>().notNull().default(sql`'[]'`),
+    /** Multi-part projects: collection ref, active part, pinned part snapshots and one independent tracker per part instance. NULL for ordinary projects. */
+    multiState: text('multi_state', { mode: 'json' }).$type<unknown>(),
+    /** Standalone pattern projects: the pattern content this project is pinned to (set when the pattern is edited under it). */
+    patternSnapshot: text('pattern_snapshot', { mode: 'json' }).$type<unknown>(),
     clientUpdatedAt: integer('client_updated_at').notNull().default(0),
     revision: integer('revision').notNull().default(1),
     updatedAt: integer('updated_at').notNull().default(now),
@@ -333,6 +434,8 @@ export const workSessions = sqliteTable(
     startedAt: integer('started_at').notNull(),
     endedAt: integer('ended_at').notNull(),
     seconds: integer('seconds').notNull(),
+    /** Which part instance was being worked on (NULL = whole project). Project totals stay the single source of truth: no double counting. */
+    partInstanceId: text('part_instance_id'),
     createdAt: integer('created_at').notNull().default(now),
   },
   (t) => [

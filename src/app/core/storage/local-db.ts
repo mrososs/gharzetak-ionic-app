@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { DBSchema, IDBPDatabase, openDB } from 'idb';
-import type { ChatMessage, Pattern, Profile, Project, TutorialData } from '../models/models';
+import type { ChatMessage, Pattern, PatternCollection, PatternRevision, Profile, Project, TutorialData } from '../models/models';
 
 /** A data scope: everything a guest or a signed-in user owns on this device. */
 export type Scope = 'guest' | `user:${string}`;
@@ -10,6 +10,8 @@ export type OutboxKind =
   | 'progress'
   | 'note'
   | 'pattern'
+  | 'collection'
+  | 'patternrev'
   | 'profile'
   | 'tools'
   | 'favorite'
@@ -59,11 +61,26 @@ export interface ScopeDocs {
   storeNotified: boolean;
   lastSyncAt: number;
   currentProjectId: string | null;
+  /** The work timer's running segment, persisted so an app kill / restart never loses recorded time. */
+  timer: PersistedTimer | null;
+  /** Local display preferences (e.g. immersive Android navigation). */
+  prefs: { immersive?: boolean };
+}
+
+/** A running timer segment. `beat` is refreshed every few seconds; after a crash only time up to the last beat is credited. */
+export interface PersistedTimer {
+  readonly projectId: string;
+  readonly instanceId: string | null;
+  readonly startedAt: number;
+  readonly beat: number;
 }
 
 interface GzDb extends DBSchema {
   projects: { key: string; value: { k: string; scope: Scope; v: Project }; indexes: { scope: string } };
   patterns: { key: string; value: { k: string; scope: Scope; v: Pattern }; indexes: { scope: string } };
+  collections: { key: string; value: { k: string; scope: Scope; v: PatternCollection }; indexes: { scope: string } };
+  /** Immutable history of earlier pattern / collection content. key = `${scope}|${revision.id}` */
+  patternRevs: { key: string; value: { k: string; scope: Scope; v: PatternRevision }; indexes: { scope: string } };
   docs: { key: string; value: { k: string; scope: Scope; v: Partial<ScopeDocs> } };
   outbox: { key: string; value: OutboxEntry; indexes: { scope: string } };
   /** Server revision last seen per synced entity (optimistic-concurrency base). key = `${scope}|${kind}|${id}` */
@@ -71,8 +88,8 @@ interface GzDb extends DBSchema {
 }
 
 const DB_NAME = 'gharzetak';
-/** v2 adds the `revisions` store. The upgrade is additive: existing stores and records are untouched. */
-const DB_VERSION = 2;
+/** v2 adds `revisions`; v3 adds `collections` and `patternRevs`. Upgrades are additive: existing stores and records are untouched. */
+const DB_VERSION = 3;
 
 /**
  * IndexedDB persistence for structured offline data (projects, patterns, tracker state,
@@ -99,6 +116,10 @@ export class LocalDb {
                 }
                 if (oldVersion < 2) {
                   db.createObjectStore('revisions', { keyPath: 'k' }).createIndex('scope', 'scope');
+                }
+                if (oldVersion < 3) {
+                  db.createObjectStore('collections', { keyPath: 'k' }).createIndex('scope', 'scope');
+                  db.createObjectStore('patternRevs', { keyPath: 'k' }).createIndex('scope', 'scope');
                 }
               },
             }).catch(() => null);
@@ -142,6 +163,45 @@ export class LocalDb {
     const db = await this.db();
     if (!db) return void this.mem.delete(`patterns|${scope}|${id}`);
     await db.delete('patterns', `${scope}|${id}`);
+  }
+
+  async loadCollections(scope: Scope): Promise<PatternCollection[]> {
+    const db = await this.db();
+    if (!db) return this.memList<PatternCollection>(`collections|${scope}|`);
+    return (await db.getAllFromIndex('collections', 'scope', scope)).map((r) => r.v);
+  }
+
+  async putCollection(scope: Scope, c: PatternCollection): Promise<void> {
+    const db = await this.db();
+    const k = `${scope}|${c.id}`;
+    if (!db) return void this.mem.set(`collections|${k}`, c);
+    await db.put('collections', { k, scope, v: c });
+  }
+
+  async removeCollection(scope: Scope, id: string): Promise<void> {
+    const db = await this.db();
+    if (!db) return void this.mem.delete(`collections|${scope}|${id}`);
+    await db.delete('collections', `${scope}|${id}`);
+  }
+
+  async loadPatternRevs(scope: Scope): Promise<PatternRevision[]> {
+    const db = await this.db();
+    if (!db) return this.memList<PatternRevision>(`patternRevs|${scope}|`);
+    return (await db.getAllFromIndex('patternRevs', 'scope', scope)).map((r) => r.v);
+  }
+
+  /** History is append-only: an existing revision id is never overwritten. */
+  async putPatternRev(scope: Scope, r: PatternRevision): Promise<boolean> {
+    const db = await this.db();
+    const k = `${scope}|${r.id}`;
+    if (!db) {
+      if (this.mem.has(`patternRevs|${k}`)) return false;
+      this.mem.set(`patternRevs|${k}`, r);
+      return true;
+    }
+    if (await db.get('patternRevs', k)) return false;
+    await db.put('patternRevs', { k, scope, v: r });
+    return true;
   }
 
   async loadDocs(scope: Scope): Promise<Partial<ScopeDocs>> {
@@ -216,8 +276,8 @@ export class LocalDb {
       for (const k of [...this.mem.keys()]) if (k.includes(`|${scope}`) || k.endsWith(scope)) this.mem.delete(k);
       return;
     }
-    const tx = db.transaction(['projects', 'patterns', 'docs', 'outbox', 'revisions'], 'readwrite');
-    for (const store of ['projects', 'patterns', 'outbox', 'revisions'] as const) {
+    const tx = db.transaction(['projects', 'patterns', 'collections', 'patternRevs', 'docs', 'outbox', 'revisions'], 'readwrite');
+    for (const store of ['projects', 'patterns', 'collections', 'patternRevs', 'outbox', 'revisions'] as const) {
       const keys = await tx.objectStore(store).index('scope').getAllKeys(scope);
       for (const k of keys) await tx.objectStore(store).delete(k);
     }

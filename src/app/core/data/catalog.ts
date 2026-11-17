@@ -47,13 +47,19 @@ export const LVL: Record<LevelId, Bi & { icon: IconName; tone: Tone; dAr: string
   advanced: { icon: 'crown', tone: 'lav', ar: 'متقدمة', en: 'Advanced', dAr: 'بقرأ أي باترن وبعدّل عليه', dEn: 'I read any pattern and adapt it' },
 };
 
-export const ACTN: Record<'sc' | 'hdc' | 'dc' | 'tr' | 'inc' | 'dec', Bi> = {
+export const ACTN: Record<'sc' | 'hdc' | 'dc' | 'tr' | 'inc' | 'dec' | 'hdc-inc' | 'hdc-dec' | 'dc-inc' | 'dc-dec' | 'tr-inc' | 'tr-dec', Bi> = {
   sc: { ar: 'غرزة قصيرة', en: 'Single crochet' },
   hdc: { ar: 'نص عمود', en: 'Half double crochet' },
   dc: { ar: 'عمود', en: 'Double crochet' },
   tr: { ar: 'عمود مزدوج', en: 'Treble crochet' },
   inc: { ar: 'زيادة', en: 'Increase' },
   dec: { ar: 'تنقيص', en: 'Decrease' },
+  'hdc-inc': { ar: 'زيادة نص عمود', en: 'Half double increase' },
+  'hdc-dec': { ar: 'تنقيص نص عمود', en: 'Half double decrease' },
+  'dc-inc': { ar: 'زيادة عمود', en: 'Double crochet increase' },
+  'dc-dec': { ar: 'تنقيص عمود', en: 'Double crochet decrease' },
+  'tr-inc': { ar: 'زيادة عمود مزدوج', en: 'Treble increase' },
+  'tr-dec': { ar: 'تنقيص عمود مزدوج', en: 'Treble decrease' },
 };
 
 export interface TermEntry {
