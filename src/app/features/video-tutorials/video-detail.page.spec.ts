@@ -33,7 +33,7 @@ describe('VideoDetailPage counter', () => {
     TestBed.configureTestingModule({
       providers: [
         AppStore, JoyService, JoyLedgerService, LocalDb,
-        { provide: AuthService, useValue: { scope: signal('user:test') } },
+        { provide: AuthService, useValue: { scope: signal('user:test'), signedIn: signal(false), guest: signal(false) } },
         { provide: NavController, useValue: { navigateBack: vi.fn(), navigateForward: vi.fn() } },
         { provide: UiFeedback, useValue: { say: vi.fn(), toast: vi.fn(), confirm: vi.fn() } },
       ],
