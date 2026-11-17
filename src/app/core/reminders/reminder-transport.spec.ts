@@ -10,6 +10,11 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@capacitor/local-notifications', () => ({
   LocalNotifications: {
+    // The real Capacitor proxy throws when anything awaits it / returns it from a promise (found on a real phone). Every test below
+    // therefore proves the transport never resolves a promise with the plugin object itself.
+    get then(): never {
+      throw new Error('"LocalNotifications.then()" is not implemented on android');
+    },
     checkPermissions: async () => (h.calls.push({ fn: 'checkPermissions' }), { display: h.perm }),
     requestPermissions: async () => (h.calls.push({ fn: 'requestPermissions' }), { display: h.perm }),
     createChannel: async (arg: unknown) => void h.calls.push({ fn: 'createChannel', arg }),

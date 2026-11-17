@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import type { LocalNotificationsPlugin } from '@capacitor/local-notifications';
 import { isNativePlatform } from '../utils/platform';
 import { CHANNEL_DETAILS, CHANNEL_PRIVATE, PlannedReminder } from './reminder-planner';
 
@@ -36,14 +37,20 @@ const mapPermission = (display: string): NotifPermission => (display === 'grante
 export class CapacitorReminderTransport extends ReminderTransport {
   readonly native = isNativePlatform();
 
-  private async plugin() {
-    return (await import('@capacitor/local-notifications')).LocalNotifications;
+  /**
+   * The native plugin object is a Capacitor proxy. It must NEVER be the resolved value of a promise or an async function:
+   * the promise machinery looks up `.then` on it and on Android that throws "LocalNotifications.then() is not implemented".
+   * Found on a real phone; so it is returned inside a plain wrapper object.
+   */
+  private async plugin(): Promise<{ ln: LocalNotificationsPlugin }> {
+    const m = await import('@capacitor/local-notifications');
+    return { ln: m.LocalNotifications };
   }
 
   async permission(): Promise<NotifPermission> {
     if (!this.native) return 'unsupported';
     try {
-      return mapPermission((await (await this.plugin()).checkPermissions()).display);
+      return mapPermission((await (await this.plugin()).ln.checkPermissions()).display);
     } catch {
       return 'unsupported';
     }
@@ -52,7 +59,7 @@ export class CapacitorReminderTransport extends ReminderTransport {
   async requestPermission(): Promise<NotifPermission> {
     if (!this.native) return 'unsupported';
     try {
-      return mapPermission((await (await this.plugin()).requestPermissions()).display);
+      return mapPermission((await (await this.plugin()).ln.requestPermissions()).display);
     } catch {
       return 'denied';
     }
@@ -60,7 +67,7 @@ export class CapacitorReminderTransport extends ReminderTransport {
 
   async ensureChannels(lang: 'ar' | 'en'): Promise<void> {
     if (!this.native) return;
-    const ln = await this.plugin();
+    const { ln } = await this.plugin();
     const ar = lang === 'ar';
     // importance 3 = default (sound, no heads-up interruption); visibility 0 = private (a locked screen hides the content), 1 = public.
     await ln.createChannel({ id: CHANNEL_PRIVATE, name: ar ? 'تذكيرات غرزتك' : 'Crochet reminders', description: ar ? 'تذكيرات لطيفة بوقت الكروشيه' : 'Gentle reminders for your crochet time', importance: 3, visibility: 0, vibration: true });
@@ -69,17 +76,17 @@ export class CapacitorReminderTransport extends ReminderTransport {
 
   async pendingIds(): Promise<number[]> {
     if (!this.native) return [];
-    return (await (await this.plugin()).getPending()).notifications.map((n) => n.id);
+    return (await (await this.plugin()).ln.getPending()).notifications.map((n) => n.id);
   }
 
   async cancel(ids: readonly number[]): Promise<void> {
     if (!this.native || !ids.length) return;
-    await (await this.plugin()).cancel({ notifications: ids.map((id) => ({ id })) });
+    await (await this.plugin()).ln.cancel({ notifications: ids.map((id) => ({ id })) });
   }
 
   async schedule(reminders: readonly PlannedReminder[]): Promise<void> {
     if (!this.native || !reminders.length) return;
-    await (await this.plugin()).schedule({
+    await (await this.plugin()).ln.schedule({
       notifications: reminders.map((r) => ({
         id: r.id,
         title: r.title,
@@ -96,7 +103,7 @@ export class CapacitorReminderTransport extends ReminderTransport {
 
   async onTap(cb: (extra: unknown) => void): Promise<() => void> {
     if (!this.native) return () => undefined;
-    const handle = await (await this.plugin()).addListener('localNotificationActionPerformed', (e) => cb(e.notification.extra));
+    const handle = await (await this.plugin()).ln.addListener('localNotificationActionPerformed', (e) => cb(e.notification.extra));
     return () => void handle.remove();
   }
 
