@@ -16,7 +16,10 @@ import { JoyLedgerService } from './joy-ledger.service';
 import { JoyPresenter } from './joy-presenter.service';
 import { JoyService } from './joy.service';
 
-const flush = () => new Promise((r) => setTimeout(r, 8));
+/** Lets the async persistence chain settle. A single short timer was flaky when the machine was busy, so wait several turns. */
+const flush = async () => {
+  for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 10));
+};
 const none: AchievementFacts = { rounds: 0, projects: 0, multipart: false, piece: false, finished: false, amigurumiDone: false };
 
 describe('metAchievements — pure rules', () => {

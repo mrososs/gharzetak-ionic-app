@@ -16,7 +16,10 @@ import { VideoDetailPage } from './video-detail.page';
 
 const PINNED = 'R1: 6sc in MR [6]\nR2: inc x 6 [12]\nR3: 12sc [12]';
 const LIVE_EDITED = 'R1: 6sc in MR [6]'; // the pattern was edited AFTER the project was pinned: it now has a single round
-const flush = () => new Promise((r) => setTimeout(r, 8));
+/** Lets the async persistence chain settle. A single short timer was flaky when the machine was busy, so wait several turns. */
+const flush = async () => {
+  for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 10));
+};
 
 describe('VideoDetailPage counter', () => {
   let store: AppStore;

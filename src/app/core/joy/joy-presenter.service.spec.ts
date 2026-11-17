@@ -15,7 +15,10 @@ import { JoyLedgerService } from './joy-ledger.service';
 import { BANNER_VISIBLE_MS, BANNER_WINDOW_MS, JoyPresenter } from './joy-presenter.service';
 import { JoyService } from './joy.service';
 
-const flush = () => new Promise((r) => setTimeout(r, 8));
+/** Lets the async persistence chain settle. A single short timer was flaky when the machine was busy, so wait several turns. */
+const flush = async () => {
+  for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 10));
+};
 const input = (name = 'Bunny') => ({ name, category: 'amigurumi' as const, hook: '3.0', yarn: 'cotton' as const, target: 1, coverLocalUrl: null, patternId: null as string | null });
 
 describe('JoyPresenter — Level 1 round banner', () => {

@@ -22,7 +22,10 @@ import { JoyFinaleComponent } from './joy-finale.component';
 import { JoyMilestoneComponent } from './joy-milestone.component';
 import { JoyPartSheetComponent } from './joy-part-sheet.component';
 
-const flush = () => new Promise((r) => setTimeout(r, 8));
+/** Lets the async persistence chain settle. A single short timer was flaky when the machine was busy, so wait several turns. */
+const flush = async () => {
+  for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 10));
+};
 const nav = { back: vi.fn(), navigateRoot: vi.fn(), navigateForward: vi.fn() };
 
 describe('Crochet Joy overlays, achievements screen and finish service', () => {

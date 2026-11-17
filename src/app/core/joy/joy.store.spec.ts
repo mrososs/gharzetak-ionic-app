@@ -15,7 +15,10 @@ import { DEFAULT_JOY_PREFS, joyPrefsOf } from './joy.models';
 
 const TEXT = 'R1: 6sc in MR [6]\nR2: inc x 6 [12]\nR3: (sc, inc) x 6 [18]\nR4: (2sc, inc) x 6 [24]\nR5: 24sc [24]';
 const parsed = parsePattern(TEXT);
-const flush = () => new Promise((r) => setTimeout(r, 8));
+/** Lets the async persistence chain settle. A single short timer was flaky when the machine was busy, so wait several turns. */
+const flush = async () => {
+  for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 10));
+};
 const input = (name = 'Bear', target = 3) => ({ name, category: 'amigurumi' as const, hook: '3.0', yarn: 'cotton' as const, target, coverLocalUrl: null, patternId: null as string | null });
 
 describe('Crochet Joy — events, ledger and presentation pipeline', () => {

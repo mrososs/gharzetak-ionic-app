@@ -13,7 +13,10 @@ import { LocalDb, Scope } from '../storage/local-db';
 import { GuestImportService } from './guest-import.service';
 import { SyncService } from './sync.service';
 
-const flush = () => new Promise((r) => setTimeout(r, 8));
+/** Lets the async persistence chain settle. A single short timer was flaky when the machine was busy, so wait several turns. */
+const flush = async () => {
+  for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 10));
+};
 const input = (name: string, target = 1) => ({ name, category: 'amigurumi' as const, hook: '3.0', yarn: 'cotton' as const, target, coverLocalUrl: null, patternId: null as string | null });
 
 describe('GuestImportService — Crochet Joy ledger and achievements', () => {

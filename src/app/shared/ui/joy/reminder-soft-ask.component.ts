@@ -16,7 +16,7 @@ import { IconComponent } from '../icon/icon.component';
   selector: 'gz-reminder-soft-ask',
   imports: [SheetComponent, AvatarReactionComponent, IconComponent],
   template: `
-    <gz-sheet [open]="svc.softAsk()" [title]="i18n.q('تحبي نفكرك بوقت الكروشيه؟ 🧶', 'Want a gentle crochet reminder? 🧶')" [busy]="busy()" (closed)="close()">
+    <gz-sheet [open]="svc.softAsk()" [title]="i18n.q('تحبي نفكرك بوقت الكروشيه؟ 🧶', 'Want a gentle crochet reminder? 🧶')" (closed)="close()">
       <div class="hero"><gz-avatar-reaction [id]="store.avatar()" mood="relaxed" [size]="84" /></div>
       <p class="gz-sm" style="text-align: center; margin: 12px 4px 0">{{ i18n.q('مرتين في الأسبوع بس، في الوقت اللي تختاريه. تقدري تقفليها في أي وقت.', 'Just twice a week, at a time you choose. You can turn it off any time.') }}</p>
       <ul class="pts gz-xs gz-mute">
@@ -63,6 +63,9 @@ export class ReminderSoftAskComponent {
     return t ? new Intl.DateTimeFormat(this.i18n.lang() === 'ar' ? 'ar-EG' : 'en-US', { weekday: 'long', hour: 'numeric', minute: '2-digit' }).format(t) : '';
   });
 
+  // NOTE: the sheet is deliberately NOT given [busy]. gz-sheet blocks dismissal while busy, and this component closes the sheet
+  // right after enable() resolves (still busy): ion-modal ignores that close and the sheet stayed open on a real phone.
+  // The buttons are disabled while the request runs instead.
   /** The ONLY path that can show the phone's permission dialog. */
   protected async yes(): Promise<void> {
     this.busy.set(true);
