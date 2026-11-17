@@ -102,6 +102,12 @@ const DAYS: readonly IsoWeekday[] = [1, 2, 3, 4, 5, 6, 7];
       }
     }
   `,
+  // Real-phone finding (HONOR, Android 16 WebView): <input type=time> has a wide intrinsic width, so with flex-1 the second quiet-hours
+  // field overflowed past the screen edge. min-width:0 lets the flex children shrink to half the row.
+  styles: `
+    .gz-in { min-width: 0; }
+    .gz-in input[type="time"] { width: 100%; min-width: 0; }
+  `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RemindersSettingsComponent {
