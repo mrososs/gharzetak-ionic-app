@@ -15,6 +15,8 @@ import { HapticsService } from '../../../core/services/haptics.service';
 import { TimerService } from '../../../core/services/timer.service';
 import { AppStore } from '../../../core/state/app.store';
 import { LocalDb } from '../../../core/storage/local-db';
+import { ShareLauncher } from '../../../core/joy/share-launcher.service';
+import { ShareSource } from '../../../core/joy/share-card';
 import { UiFeedback } from '../feedback/toast.service';
 import { JoyFinaleComponent } from './joy-finale.component';
 import { JoyMilestoneComponent } from './joy-milestone.component';
@@ -58,7 +60,7 @@ describe('Crochet Joy overlays, achievements screen and finish service', () => {
   });
 
   describe('<gz-joy-milestone>', () => {
-    const show = (badges: ('rounds_10' | 'first_round')[] = []) => presenter.card.set({ id: 1, title: 'Halfway there! 🎉', body: 'Ball · 3 of 5 rounds', pct: 50, badges, mood: 'celebrate' });
+    const show = (badges: ('rounds_10' | 'first_round')[] = []) => presenter.card.set({ id: 1, title: 'Halfway there! 🎉', body: 'Ball · 3 of 5 rounds', pct: 50, badges, share: null, mood: 'celebrate' });
 
     it('is a polite live region, shows title / project progress / a progress line, and never takes focus', () => {
       const f = TestBed.createComponent(JoyMilestoneComponent);
@@ -99,7 +101,7 @@ describe('Crochet Joy overlays, achievements screen and finish service', () => {
     });
 
     it('open-ended counting shows no progress line (no invented percentage); "Keep going" dismisses', () => {
-      presenter.card.set({ id: 2, title: '10 rounds! You are amazing 🧶', body: 'Scarf', pct: null, badges: [], mood: 'celebrate' });
+      presenter.card.set({ id: 2, title: '10 rounds! You are amazing 🧶', body: 'Scarf', pct: null, badges: [], share: null, mood: 'celebrate' });
       const f = TestBed.createComponent(JoyMilestoneComponent);
       f.detectChanges();
       expect(f.nativeElement.querySelector('.bar')).toBeNull();
@@ -113,7 +115,7 @@ describe('Crochet Joy overlays, achievements screen and finish service', () => {
       const spy = vi.spyOn(store, 'setActiveInstance').mockResolvedValue(null);
       const f = TestBed.createComponent(JoyPartSheetComponent);
       f.detectChanges();
-      presenter.part.set({ id: 1, projectId: 'p1', instanceId: 'a', title: 'Head is finished! 🎊', timeText: null, done: 1, total: 3, allDone: false, nextId: 'b', badges: [], mood: 'celebrate' });
+      presenter.part.set({ id: 1, projectId: 'p1', instanceId: 'a', title: 'Head is finished! 🎊', timeText: null, done: 1, total: 3, allDone: false, nextId: 'b', badges: [], share: null, mood: 'celebrate' });
       await (f.componentInstance as unknown as { nextPiece(p: string, i: string): Promise<void> }).nextPiece('p1', 'b');
       expect(spy).toHaveBeenCalledWith('p1', 'b');
       expect(timer.switchInstance).toHaveBeenCalledWith('p1', 'b');
@@ -123,7 +125,7 @@ describe('Crochet Joy overlays, achievements screen and finish service', () => {
     it('"Mark project as finished" goes through the explicit finish service — never silently', async () => {
       const f = TestBed.createComponent(JoyPartSheetComponent);
       f.detectChanges();
-      presenter.part.set({ id: 1, projectId: 'p1', instanceId: 'a', title: 'All the pieces are done! 🧸', timeText: null, done: 3, total: 3, allDone: true, nextId: null, badges: [], mood: 'celebrate' });
+      presenter.part.set({ id: 1, projectId: 'p1', instanceId: 'a', title: 'All the pieces are done! 🧸', timeText: null, done: 3, total: 3, allDone: true, nextId: null, badges: [], share: null, mood: 'celebrate' });
       await (f.componentInstance as unknown as { markFinished(p: string): Promise<void> }).markFinished('p1');
       expect(finishSvc.finish).toHaveBeenCalledWith('p1');
       expect(presenter.part()).toBeNull();
@@ -134,7 +136,7 @@ describe('Crochet Joy overlays, achievements screen and finish service', () => {
     it('"Add a photo" closes the finale and opens the project, where photos live', () => {
       const f = TestBed.createComponent(JoyFinaleComponent);
       f.detectChanges();
-      presenter.finale.set({ id: 1, projectId: 'p9', name: 'Bunny', title: 'x', photoUrl: null, timeText: null, pieces: null, rounds: 0, badges: [], mood: 'proud' });
+      presenter.finale.set({ id: 1, projectId: 'p9', name: 'Bunny', title: 'x', photoUrl: null, timeText: null, pieces: null, rounds: 0, badges: [], share: null, mood: 'proud' });
       (f.componentInstance as unknown as { addPhoto(id: string): void }).addPhoto('p9');
       expect(presenter.finale()).toBeNull();
       expect(nav.navigateForward).toHaveBeenCalledWith('/tabs/projects/p9');
@@ -189,6 +191,57 @@ describe('Crochet Joy overlays, achievements screen and finish service', () => {
       expect(el.querySelector('h1')?.textContent).toContain('إنجازاتي');
       expect(el.querySelector('.gz-note')?.textContent).toContain('الموبايل ده بس');
       for (const li of Array.from(el.querySelectorAll('li.tile'))) expect(li.getAttribute('aria-label')).toBeTruthy();
+    });
+  });
+
+  describe('Share entry points (always a user action)', () => {
+    const source: ShareSource = { kind: 'milestone', lang: 'en', avatarId: 'bunny', headline: 'Halfway there! 🎉', projectName: 'Ball', photoUrl: null, pct: 50, detail: '3 of 5 rounds', timeText: null, pieces: null, badge: null };
+
+    it('the milestone card shows a share button only when it has something to share, and pressing it opens the share sheet', () => {
+      const launcher = TestBed.inject(ShareLauncher);
+      presenter.card.set({ id: 1, title: 'Halfway there! 🎉', body: 'Ball', pct: 50, badges: [], share: null, mood: 'celebrate' });
+      const f = TestBed.createComponent(JoyMilestoneComponent);
+      f.detectChanges();
+      expect(f.nativeElement.querySelector('button.sh')).toBeNull();
+      presenter.card.set({ id: 2, title: 'Halfway there! 🎉', body: 'Ball', pct: 50, badges: [], share: source, mood: 'celebrate' });
+      f.detectChanges();
+      const btn = f.nativeElement.querySelector('button.sh') as HTMLButtonElement;
+      expect(btn.getAttribute('aria-label')).toBe('Share progress');
+      expect(launcher.source()).toBeNull(); // nothing opens by itself
+      btn.click();
+      expect(launcher.source()).toBe(source);
+      expect(presenter.card()).toBeNull();
+    });
+
+    it('the part sheet and the finale hand their card to the share sheet and close themselves', () => {
+      const launcher = TestBed.inject(ShareLauncher);
+      const part = TestBed.createComponent(JoyPartSheetComponent);
+      part.detectChanges();
+      presenter.part.set({ id: 1, projectId: 'p1', instanceId: 'a', title: 'x', timeText: null, done: 1, total: 3, allDone: false, nextId: 'b', badges: [], share: source, mood: 'celebrate' });
+      (part.componentInstance as unknown as { shareCard(s: ShareSource): void }).shareCard(source);
+      expect(launcher.source()).toBe(source);
+      expect(presenter.part()).toBeNull();
+      launcher.close();
+
+      const fin = TestBed.createComponent(JoyFinaleComponent);
+      fin.detectChanges();
+      presenter.finale.set({ id: 1, projectId: 'p1', name: 'Bunny', title: 'x', photoUrl: null, timeText: null, pieces: null, rounds: 0, badges: [], share: source, mood: 'proud' });
+      (fin.componentInstance as unknown as { shareCard(s: ShareSource): void }).shareCard(source);
+      expect(launcher.source()).toBe(source);
+      expect(presenter.finale()).toBeNull();
+    });
+
+    it('an unlocked achievement can be shared; a locked one has no share button', async () => {
+      await ledger.recordSilently('user:a', { key: joyKey({ kind: 'achievement', achievementId: 'first_round' }), kind: 'achievement', achievementId: 'first_round', at: 1, source: 'backfill' });
+      TestBed.tick();
+      const f = TestBed.createComponent(AchievementsPage);
+      f.detectChanges();
+      const el = f.nativeElement as HTMLElement;
+      expect(el.querySelectorAll('li.tile .share')).toHaveLength(1);
+      (el.querySelector('li.tile .share') as HTMLButtonElement).click();
+      const s = TestBed.inject(ShareLauncher).source()!;
+      expect(s).toMatchObject({ kind: 'achievement', projectName: null, photoUrl: null });
+      expect(s.badge?.name).toBe('First round');
     });
   });
 

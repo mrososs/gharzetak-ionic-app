@@ -50,6 +50,9 @@ export const MILESTONE_TITLE: Readonly<Record<25 | 50 | 75, Bilingual>> = {
 };
 /** Open-ended counting: `{x}` = the round count (an Arabic noun phrase such as "10 أدوار"). */
 export const MILESTONE_ROUNDS_TITLE: Bilingual = { ar: '{x}! إنتي جامدة 🧶', en: '{k} rounds! You are amazing 🧶' };
+/** Numbers only (no names): used on share cards, where the project name is a separate switch. */
+export const ROUNDS_DETAIL: Bilingual = { ar: '{done} من {total} دور', en: '{done} of {total} rounds' };
+export const ROUNDS_COUNTED_DETAIL: Bilingual = { ar: '{k} دور معدود', en: '{k} rounds counted' };
 export const MILESTONE_BODY: Bilingual = { ar: '{name} · {done} من {total} دور', en: '{name} · {done} of {total} rounds' };
 
 /* ---------------- Level 3 · a finished piece ---------------- */

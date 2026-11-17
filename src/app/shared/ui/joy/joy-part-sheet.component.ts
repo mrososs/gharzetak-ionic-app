@@ -3,6 +3,8 @@ import { achievementDef } from '../../../core/joy/achievements';
 import { I18nService } from '../../../core/i18n/i18n.service';
 import { JoyPresenter } from '../../../core/joy/joy-presenter.service';
 import { ProjectFinishService } from '../../../core/joy/project-finish.service';
+import { ShareLauncher } from '../../../core/joy/share-launcher.service';
+import { ShareSource } from '../../../core/joy/share-card';
 import { TimerService } from '../../../core/services/timer.service';
 import { AppStore } from '../../../core/state/app.store';
 import { AvatarReactionComponent } from '../avatar/avatar-reaction.component';
@@ -40,6 +42,9 @@ import { IconComponent } from '../icon/icon.component';
       }
       <ng-container gzActions>
         @if (presenter.part(); as v) {
+          @if (v.share) {
+            <button type="button" class="gz-btn-text" (click)="shareCard(v.share)"><svg gzIcon="send" size="s" />{{ i18n.q('شاركي', 'Share') }}</button>
+          }
           @if (v.allDone) {
             <button type="button" class="gz-btn" [disabled]="busy()" (click)="markFinished(v.projectId)"><svg gzIcon="flag" size="s" />{{ i18n.q('اعتبري المشروع مكتمل', 'Mark project as finished') }}</button>
             <button type="button" class="gz-btn2" (click)="presenter.dismissPart()">{{ i18n.q('لسه هجمّع', "I'm still assembling") }}</button>
@@ -68,6 +73,12 @@ export class JoyPartSheetComponent {
   private readonly finishSvc = inject(ProjectFinishService);
   protected readonly def = achievementDef;
   protected readonly busy = signal(false);
+  private readonly launcher = inject(ShareLauncher);
+
+  protected shareCard(src: ShareSource): void {
+    this.presenter.dismissPart();
+    this.launcher.open(src);
+  }
 
   /** Same hand-over as the counter's piece switcher: remember the piece, and move a running timer with it (no gap, no double counting). */
   protected async nextPiece(projectId: string, instanceId: string): Promise<void> {

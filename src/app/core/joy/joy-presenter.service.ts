@@ -21,6 +21,8 @@ import {
   PLAIN_ROUND,
   PLAIN_ROUNDS_IN_A_ROW,
   PROJECT_DONE_QUIET,
+  ROUNDS_COUNTED_DETAIL,
+  ROUNDS_DETAIL,
   ROUNDS_IN_A_ROW,
   ROUND_MESSAGES,
   arOrdinal,
@@ -30,6 +32,8 @@ import {
 import { AchievementId, JoyPrefs, joyPrefsOf } from './joy.models';
 import { JoyLedgerService } from './joy-ledger.service';
 import { CelebrationBatch, JoyService } from './joy.service';
+import { ShareSource } from './share-card';
+import { SHARE_HEADLINE, projectSource } from './share-source';
 
 export type AvatarMood = 'happy' | 'celebrate' | 'proud' | 'relaxed';
 
@@ -52,6 +56,8 @@ export interface MilestoneView {
   readonly pct: number | null;
   /** Achievements this milestone unlocked. */
   readonly badges: readonly AchievementId[];
+  /** What a share card for this moment may contain (a small whitelist; see share-source.ts). */
+  readonly share: ShareSource | null;
   readonly mood: AvatarMood;
 }
 
@@ -70,6 +76,7 @@ export interface PartView {
   readonly nextId: string | null;
   /** Achievements this piece unlocked. */
   readonly badges: readonly AchievementId[];
+  readonly share: ShareSource | null;
   readonly mood: AvatarMood;
 }
 
@@ -85,6 +92,7 @@ export interface FinaleView {
   /** Rounds counted with the Gharzetak counter for this project (real ledger rows only; 0 = not shown). */
   readonly rounds: number;
   readonly badges: readonly AchievementId[];
+  readonly share: ShareSource | null;
   readonly mood: AvatarMood;
 }
 
@@ -211,8 +219,21 @@ export class JoyPresenter {
     const name = inst && p ? instanceLabel(inst, snap, siblingsOf(p.parts ?? [], inst)) : (p?.name ?? '');
     const total = e.total ?? 0;
     const body = e.pct && total > 0 && prefs.messages ? this.fill(MILESTONE_BODY, { name, done: String(e.round ?? 0), total: String(total) }) : name;
+    const share = p
+      ? projectSource({
+          kind: 'milestone',
+          lang: this.i18n.lang(),
+          avatarId: this.store.avatar(),
+          headline: title,
+          project: p,
+          pieceLabel: inst ? instanceLabel(inst, snap, siblingsOf(p.parts ?? [], inst)) : null,
+          pct: e.pct ?? null,
+          detail: e.pct && total > 0 ? this.fill(ROUNDS_DETAIL, { done: String(e.round ?? 0), total: String(total) }) : null,
+          formatTime: (s) => this.duration(s),
+        })
+      : null;
     this.clearTransient();
-    this.card.set({ id: ++this.viewId, title, body, pct: e.pct ?? null, badges, mood: 'celebrate' });
+    this.card.set({ id: ++this.viewId, title, body, pct: e.pct ?? null, badges, share, mood: 'celebrate' });
     this.cardTimer = setTimeout(() => this.dismissCard(), CARD_VISIBLE_MS);
   }
 
@@ -247,6 +268,17 @@ export class JoyPresenter {
       allDone,
       nextId: next && next.id !== inst.id ? next.id : null,
       badges,
+      share: projectSource({
+        kind: 'part',
+        lang: this.i18n.lang(),
+        avatarId: this.store.avatar(),
+        headline: SHARE_HEADLINE[allDone ? 'allParts' : 'part'][this.i18n.lang()],
+        project: p,
+        pieceLabel: label,
+        pct: c.percent,
+        pieces: { done: c.doneCount, total: c.total },
+        formatTime: (s) => this.duration(s),
+      }),
       mood: 'celebrate',
     });
   }
@@ -269,6 +301,16 @@ export class JoyPresenter {
       pieces: c && c.total > 1 ? { done: c.doneCount, total: c.total } : null,
       rounds: this.ledger.projectRounds(p.id),
       badges: batch.badges,
+      share: projectSource({
+        kind: 'project',
+        lang: this.i18n.lang(),
+        avatarId: this.store.avatar(),
+        headline: SHARE_HEADLINE.project[this.i18n.lang()],
+        project: p,
+        detail: this.ledger.projectRounds(p.id) > 0 ? this.fill(ROUNDS_COUNTED_DETAIL, { k: String(this.ledger.projectRounds(p.id)) }) : null,
+        pieces: c && c.total > 1 ? { done: c.doneCount, total: c.total } : null,
+        formatTime: (s) => this.duration(s),
+      }),
       mood: 'proud',
     });
   }

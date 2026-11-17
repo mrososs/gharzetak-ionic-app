@@ -4,6 +4,8 @@ import { achievementDef } from '../../../core/joy/achievements';
 import { I18nService } from '../../../core/i18n/i18n.service';
 import { joyPrefsOf } from '../../../core/joy/joy.models';
 import { JoyPresenter } from '../../../core/joy/joy-presenter.service';
+import { ShareLauncher } from '../../../core/joy/share-launcher.service';
+import { ShareSource } from '../../../core/joy/share-card';
 import { AppStore } from '../../../core/state/app.store';
 import { AvatarReactionComponent } from '../avatar/avatar-reaction.component';
 import { IconComponent } from '../icon/icon.component';
@@ -75,6 +77,9 @@ const CONFETTI = Array.from({ length: 24 }, (_, i) => {
             }
 
             <div class="actions">
+              @if (v.share) {
+                <button type="button" class="gz-btn3" (click)="shareCard(v.share)"><svg gzIcon="send" size="s" />{{ i18n.q('اعملي كارت مشاركة', 'Create a share card') }}</button>
+              }
               @if (!v.photoUrl) {
                 <button type="button" class="gz-btn2" (click)="addPhoto(v.projectId)"><svg gzIcon="camera" size="s" />{{ i18n.q('ضيفي صورة لتحفتك', 'Add a photo of your creation') }}</button>
               }
@@ -111,6 +116,13 @@ export class JoyFinaleComponent {
   protected readonly confetti = CONFETTI;
   protected readonly def = achievementDef;
   protected readonly still = computed(() => joyPrefsOf(this.store.prefs()).motion === 'reduced');
+
+  private readonly launcher = inject(ShareLauncher);
+
+  protected shareCard(src: ShareSource): void {
+    this.presenter.dismissFinale();
+    this.launcher.open(src);
+  }
 
   protected addPhoto(projectId: string): void {
     this.presenter.dismissFinale();

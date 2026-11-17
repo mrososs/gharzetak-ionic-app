@@ -9,6 +9,7 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { ProjectStatus } from '../../core/models/models';
 import { TimerService } from '../../core/services/timer.service';
 import { ProjectFinishService } from '../../core/joy/project-finish.service';
+import { ShareLauncher } from '../../core/joy/share-launcher.service';
 import { AppStore } from '../../core/state/app.store';
 import { uuid } from '../../core/state/factories';
 import { LocalDb } from '../../core/storage/local-db';
@@ -42,6 +43,7 @@ import { DurationInputComponent } from '../../shared/ui/inputs/duration-input.co
             <div class="gz-sm gz-mute flex items-center gap-2.5" style="margin: 6px 0 8px"><span class="flex-1">{{ c.roundLabel }} · {{ c.lastText }}</span><span class="gz-b" style="color: var(--gz-primary); font-size: 16px">{{ c.pct }}%</span></div>
             <div class="gz-bar"><i [style.width.%]="c.pct"></i></div>
             <button type="button" class="gz-btn mt-4" (click)="resume()"><svg gzIcon="play" />{{ t().resumeProject }}</button>
+            <button type="button" class="gz-btn3 w mt-2" (click)="shareProgress()"><svg gzIcon="send" size="s" />{{ i18n.q('شاركي تقدّم المشروع', 'Share project progress') }}</button>
 
             <!-- a newer pattern / collection version exists: the project stays on its own version until the user updates -->
             @if (outdated()) {
@@ -328,6 +330,12 @@ export class ProjectDetailPage {
   });
 
   private notesTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private readonly launcher = inject(ShareLauncher);
+
+  protected shareProgress(): void {
+    this.launcher.progress(this.id());
+  }
 
   protected async setStatus(s: ProjectStatus): Promise<void> {
     // "Done" is the explicit finish: the timer stops first, then JoyPresenter celebrates (or confirms quietly if it was already celebrated).

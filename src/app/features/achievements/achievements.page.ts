@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { AchievementsService } from '../../core/joy/achievements.service';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { ShareLauncher } from '../../core/joy/share-launcher.service';
 import { AppStore } from '../../core/state/app.store';
 import { AvatarReactionComponent } from '../../shared/ui/avatar/avatar-reaction.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
@@ -46,6 +47,9 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
               @if (a.earlier) {
                 <span class="gz-xs earlier">{{ i18n.q('من مشاريعك السابقة', 'From your earlier projects') }}</span>
               }
+              @if (a.unlocked) {
+                <button type="button" class="gz-btn-text share" (click)="share(a.id)"><svg gzIcon="send" size="s" />{{ i18n.q('شاركي', 'Share') }}</button>
+              }
             </li>
           }
         </ul>
@@ -75,6 +79,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
     .name { font-size: 14px; overflow-wrap: anywhere; }
     .hint { overflow-wrap: anywhere; }
     .earlier { color: var(--gz-primary); font-weight: 700; }
+    .share { min-height: 44px; }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -85,6 +90,11 @@ export class AchievementsPage {
   protected readonly svc = inject(AchievementsService);
 
   protected readonly total = 8;
+  private readonly launcher = inject(ShareLauncher);
+
+  protected share(id: string): void {
+    this.launcher.achievement(id);
+  }
 
   protected readonly items = computed(() => {
     const lang = this.i18n.lang();

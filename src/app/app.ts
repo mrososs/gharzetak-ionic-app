@@ -20,13 +20,14 @@ import { LockScreenComponent } from './features/auth/lock-screen.component';
 import { UiFeedback } from './shared/ui/feedback/toast.service';
 import { JoyFinaleComponent } from './shared/ui/joy/joy-finale.component';
 import { JoyPartSheetComponent } from './shared/ui/joy/joy-part-sheet.component';
+import { ShareCardSheetComponent } from './shared/ui/joy/share-card-sheet.component';
 
 /** A biometric-protected session locks again after the app spent this long in the background. */
 const RELOCK_AFTER_MS = 30_000;
 
 @Component({
   selector: 'app-root',
-  imports: [IonApp, IonRouterOutlet, LockScreenComponent, JoyPartSheetComponent, JoyFinaleComponent],
+  imports: [IonApp, IonRouterOutlet, LockScreenComponent, JoyPartSheetComponent, JoyFinaleComponent, ShareCardSheetComponent],
   template: `
     <ion-app>
       <!-- While locked (or covered in the task switcher) the content is inert: not focusable, not readable by assistive tech. -->
@@ -34,6 +35,7 @@ const RELOCK_AFTER_MS = 30_000;
       @if (!shield()) {
         <gz-joy-part-sheet />
         <gz-joy-finale />
+        <gz-share-card-sheet />
       }
       @if (auth.locked()) {
         <gz-lock-screen />
