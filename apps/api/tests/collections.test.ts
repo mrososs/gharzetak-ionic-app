@@ -43,7 +43,7 @@ const multi = (collectionId: string, parts: Part[], over: Record<string, unknown
   return {
     collectionId,
     collectionRev: 1,
-    activeInstanceId: instances[0].id,
+    activeInstanceId: instances[0]!.id,
     snapshots: parts.map((p) => ({ partId: p.id, name: p.name, quantity: p.quantity, text: p.rawText, assemblyNotes: '' })),
     instances,
     ...over,
@@ -60,8 +60,8 @@ describe('pattern collections', () => {
     const state = await pull(u);
     expect(state.collections).toHaveLength(1);
     expect(state.collections[0]).toMatchObject({ id, name: 'Pink Teddy Bear', revision: 1, contentRev: 1 });
-    expect(state.collections[0].parts.map((p) => [p.name, p.quantity])).toEqual([['Head', 1], ['Body', 1], ['Arms', 2], ['Legs', 2]]);
-    expect(state.collections[0].parts[2].id).toBe(body.parts[2].id); // stable part ids survive the round trip
+    expect(state.collections[0]!.parts.map((p) => [p.name, p.quantity])).toEqual([['Head', 1], ['Body', 1], ['Arms', 2], ['Legs', 2]]);
+    expect(state.collections[0]!.parts[2]!.id).toBe(body.parts[2]!.id); // stable part ids survive the round trip
   });
 
   it('reordering / editing / removing parts replaces them atomically and bumps the revision', async () => {
@@ -72,10 +72,10 @@ describe('pattern collections', () => {
     const next = await json(u, 'PUT', `/v1/collections/${id}`, collectionBody({ baseRevision: 1, contentRev: 2, clientUpdatedAt: Date.now() + 5, parts: [parts[2], { ...parts[0], name: 'Head (round)' }] }));
     expect(next.status).toBe(200);
     expect(await next.json()).toMatchObject({ revision: 2 });
-    const c = (await pull(u)).collections[0];
+    const c = (await pull(u)).collections[0]!;
     expect(c.contentRev).toBe(2);
     expect(c.parts.map((p) => p.name)).toEqual(['Arms', 'Head (round)']);
-    expect(c.parts[0].id).toBe(parts[2].id);
+    expect(c.parts[0]!.id).toBe(parts[2]!.id);
   });
 
   it('rejects a stale write with 409 (nothing is overwritten) and answers retries idempotently', async () => {
@@ -91,7 +91,7 @@ describe('pattern collections', () => {
     const stale = await json(u, 'PUT', `/v1/collections/${id}`, collectionBody({ baseRevision: 1, name: 'Device B', clientUpdatedAt: Date.now() - 60_000 }));
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as { current: { revision: number } }).current.revision).toBe(2);
-    expect((await pull(u)).collections[0].name).toBe('Device A');
+    expect((await pull(u)).collections[0]!.name).toBe('Device A');
   });
 
   it("never lets one user read or modify another user's collection", async () => {
@@ -127,8 +127,8 @@ describe('pattern collections', () => {
     expect((await json(u, 'DELETE', `/v1/collections/${cid}`)).status).toBe(204);
     const state = await pull(u);
     expect(state.collections).toEqual([]);
-    expect(state.projects[0].collectionId).toBe(cid);
-    expect(state.progress[0].multiState?.instances).toHaveLength(3); // Head + Arm 1 + Arm 2 still there
+    expect(state.projects[0]!.collectionId).toBe(cid);
+    expect(state.progress[0]!.multiState?.instances).toHaveLength(3); // Head + Arm 1 + Arm 2 still there
     const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM pattern_parts WHERE collection_id = ?1').bind(cid).first<{ n: number }>();
     expect(row?.n).toBe(0);
   });
@@ -145,7 +145,7 @@ describe('revision history', () => {
     expect(again.status).toBe(200);
     const revs = (await pull(u)).revisions.filter((r) => r.entityId === pid);
     expect(revs).toHaveLength(1);
-    expect(revs[0]?.snapshot.text).toBe('R1: 6sc in MR [6]'); // history cannot be rewritten
+    expect(revs[0]!.snapshot.text).toBe('R1: 6sc in MR [6]'); // history cannot be rewritten
   });
 
   it('needs the right snapshot shape and an owned entity', async () => {
@@ -203,8 +203,8 @@ describe('projects from collections: independent progress', () => {
     const prog = await json(u, 'PUT', `/v1/projects/${pid}/progress`, progressBody({ baseRevision: 1, count: 3, clientUpdatedAt: Date.now() + 10 }));
     expect(prog.status).toBe(200);
     const state = await pull(u);
-    expect(state.projects[0]?.collectionId).toBe(cid);
-    expect(state.progress[0]?.multiState?.instances).toHaveLength(1);
+    expect(state.projects[0]!.collectionId).toBe(cid);
+    expect(state.progress[0]!.multiState?.instances).toHaveLength(1);
   });
 
   it('a progress conflict reports the multi-part position so the further-along device wins', async () => {
@@ -239,7 +239,7 @@ describe('projects from collections: independent progress', () => {
     expect((await json(u, 'PUT', `/v1/patterns/${pat}`, { ...body, baseRevision: 2, contentRev: 2, rawText: 'R1: 6sc in MR [6]\nR2: inc x 6 [12]', clientUpdatedAt: Date.now() + 9 })).status).toBe(200);
     const state = await pull(u);
     expect(state.patterns[0]).toMatchObject({ contentRev: 2, suggestedMinutes: 90 });
-    expect(state.progress[0]?.patternSnapshot?.text).toBe('R1: 6sc in MR [6]');
+    expect(state.progress[0]!.patternSnapshot?.text).toBe('R1: 6sc in MR [6]');
   });
 
   it('records which part instance a work session belonged to (project total stays the single source of truth)', async () => {
@@ -258,9 +258,9 @@ describe('projects from collections: independent progress', () => {
   it('keeps the optional estimate (estimatedHours) exactly as sent, including 0 = none', async () => {
     const u = await signUp('estimate');
     const pid = await createProject(u, { estimatedHours: 4.5 });
-    expect((await pull(u)).projects[0]?.estimatedHours).toBe(4.5);
+    expect((await pull(u)).projects[0]!.estimatedHours).toBe(4.5);
     expect((await json(u, 'PUT', `/v1/projects/${pid}`, projectBody({ baseRevision: 1, estimatedHours: 0, clientUpdatedAt: Date.now() + 10 }))).status).toBe(200);
-    expect((await pull(u)).projects[0]?.estimatedHours).toBe(0);
+    expect((await pull(u)).projects[0]!.estimatedHours).toBe(0);
   });
 });
 
