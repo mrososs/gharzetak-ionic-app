@@ -6,6 +6,7 @@ import { JoyLedgerService } from '../../../core/joy/joy-ledger.service';
 import { JoyPresenter } from '../../../core/joy/joy-presenter.service';
 import { JoyService } from '../../../core/joy/joy.service';
 import { HapticsService } from '../../../core/services/haptics.service';
+import { UiFeedback } from '../feedback/toast.service';
 import { AppStore } from '../../../core/state/app.store';
 import { LocalDb } from '../../../core/storage/local-db';
 import { AvatarReactionComponent } from '../avatar/avatar-reaction.component';
@@ -18,7 +19,7 @@ describe('Joy UI components', () => {
   beforeEach(async () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [AppStore, JoyService, JoyLedgerService, JoyPresenter, LocalDb, { provide: HapticsService, useValue: { supported: false, impact: vi.fn(), success: vi.fn() } }, { provide: AuthService, useValue: { scope: signal('user:a') } }],
+      providers: [AppStore, JoyService, JoyLedgerService, JoyPresenter, LocalDb, { provide: HapticsService, useValue: { supported: false, impact: vi.fn(), success: vi.fn() } }, { provide: UiFeedback, useValue: { say: vi.fn(), toast: vi.fn(), confirm: vi.fn() } }, { provide: AuthService, useValue: { scope: signal('user:a') } }],
     });
     store = TestBed.inject(AppStore);
     presenter = TestBed.inject(JoyPresenter);

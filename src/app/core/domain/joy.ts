@@ -186,7 +186,8 @@ export function detectJoy(before: JoySnapshot, after: JoySnapshot, ctx: JoyConte
   const events: JoyEvent[] = [{ ...base, kind: 'round', round: t.id, display: t.display, total: t.total }];
 
   const m = milestoneOf(t);
-  if (m) events.push({ ...base, kind: 'milestone', pct: m.pct, roundCount: m.roundCount, display: t.display, total: t.total });
+  // `round` = rounds completed so far (for "2 of 5 rounds"); it is not part of the milestone's ledger key.
+  if (m) events.push({ ...base, kind: 'milestone', pct: m.pct, roundCount: m.roundCount, round: t.id, display: t.display, total: t.total });
 
   if (ctx.instanceId && t.finishedAll) {
     events.push({ ...base, kind: 'part', display: t.display, total: t.total });

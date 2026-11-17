@@ -8,6 +8,7 @@ import { patternStats } from '../../core/domain/tracker-engine';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ProjectStatus } from '../../core/models/models';
 import { TimerService } from '../../core/services/timer.service';
+import { ProjectFinishService } from '../../core/joy/project-finish.service';
 import { AppStore } from '../../core/state/app.store';
 import { uuid } from '../../core/state/factories';
 import { LocalDb } from '../../core/storage/local-db';
@@ -212,6 +213,7 @@ export class ProjectDetailPage {
   protected readonly nav = inject(NavController);
   protected readonly timer = inject(TimerService);
   private readonly ui = inject(UiFeedback);
+  private readonly finishSvc = inject(ProjectFinishService);
   private readonly db = inject(LocalDb);
   readonly id = input.required<string>();
 
@@ -328,8 +330,9 @@ export class ProjectDetailPage {
   private notesTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected async setStatus(s: ProjectStatus): Promise<void> {
-    await this.store.setStatus(this.id(), s, s === 'done' ? 'finish' : 'edit');
-    if (s === 'done') await this.ui.say('مبروك على المشروع المكتمل!', 'Congratulations on finishing!');
+    // "Done" is the explicit finish: the timer stops first, then JoyPresenter celebrates (or confirms quietly if it was already celebrated).
+    if (s === 'done') await this.finishSvc.finish(this.id());
+    else await this.store.setStatus(this.id(), s);
   }
 
   protected async resume(): Promise<void> {

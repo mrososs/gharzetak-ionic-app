@@ -41,6 +41,35 @@ export const ROUNDS_IN_A_ROW: readonly Bilingual[] = [
 export const PLAIN_ROUND: Bilingual = { ar: '✓ الدور {n}', en: '✓ Round {n}' };
 export const PLAIN_ROUNDS_IN_A_ROW: Bilingual = { ar: '✓ {r}', en: '✓ {k} rounds' };
 
+/* ---------------- Level 2 · milestones ---------------- */
+
+export const MILESTONE_TITLE: Readonly<Record<25 | 50 | 75, Bilingual>> = {
+  25: { ar: 'ربع الطريق خلص 🌱', en: 'A quarter done 🌱' },
+  50: { ar: 'نص الطريق! 🎉', en: 'Halfway there! 🎉' },
+  75: { ar: 'فاضل حبة صغيرين! 💪', en: 'Nearly there! 💪' },
+};
+/** Open-ended counting: `{x}` = the round count (an Arabic noun phrase such as "10 أدوار"). */
+export const MILESTONE_ROUNDS_TITLE: Bilingual = { ar: '{x}! إنتي جامدة 🧶', en: '{k} rounds! You are amazing 🧶' };
+export const MILESTONE_BODY: Bilingual = { ar: '{name} · {done} من {total} دور', en: '{name} · {done} of {total} rounds' };
+
+/* ---------------- Level 3 · a finished piece ---------------- */
+
+export const PART_TITLE: Bilingual = { ar: 'خلصتي {part}! 🎊', en: '{part} is finished! 🎊' };
+export const ALL_PARTS_TITLE: Bilingual = { ar: 'كل القطع خلصت! 🧸', en: 'All the pieces are done! 🧸' };
+/** One line shown on the video page instead of a sheet (the video is never covered or interrupted). */
+export const PART_INLINE: Bilingual = { ar: '🎊 {part} خلصت — كمّلي من العدّاد', en: '🎊 {part} is finished — continue from the counter' };
+export const ALL_PARTS_INLINE: Bilingual = { ar: '🧸 كل القطع خلصت! اعتبري المشروع مكتمل من العدّاد', en: '🧸 All pieces are done! Mark the project finished from the counter' };
+
+/* ---------------- Level 4 · the project finale ---------------- */
+
+export const FINALE_TITLE: Bilingual = { ar: 'تحفة! خلصتي {name} 🏆', en: 'A masterpiece! You finished {name} 🏆' };
+/** Quiet confirmation when the finale is not shown (celebrations off, or this project was already celebrated once). */
+export const PROJECT_DONE_QUIET: Bilingual = { ar: 'المشروع اتحوّل إلى «مكتمل» ✓', en: 'Project marked as completed ✓' };
+
+/* ---------------- achievements ---------------- */
+
+export const BADGE_TOAST: Bilingual = { ar: '🏅 إنجاز جديد: {name}', en: '🏅 New achievement: {name}' };
+
 /** Picks the next message of a pool, never the same one twice in a row. */
 export function nextIndex(poolSize: number, last: number, random: () => number = Math.random): number {
   if (poolSize <= 1) return 0;

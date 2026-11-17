@@ -33,6 +33,8 @@ export class JoyLedgerService {
   private loadToken = 0;
   /** Bumped whenever the index changes, so computed counts update. */
   private readonly version = signal(0);
+  /** The scope the in-memory index currently holds (null until the first load finishes). */
+  readonly loadedScope = signal<Scope | null>(null);
 
   /** How many rows of each kind the current scope has. */
   readonly counts = computed<Record<JoyKind, number>>(() => {
@@ -62,6 +64,7 @@ export class JoyLedgerService {
     this.cache = new Map(rows.filter(isValidJoyRow).map((r) => [r.key, r]));
     this.cacheScope = scope;
     this.version.update((v) => v + 1);
+    this.loadedScope.set(scope);
   }
 
   has(key: string): boolean {

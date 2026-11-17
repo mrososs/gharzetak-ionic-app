@@ -11,6 +11,7 @@ import { TrackerData } from '../../core/models/models';
 import { AppStore, TrackerChange } from '../../core/state/app.store';
 import { uuid } from '../../core/state/factories';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
+import { JoyPresenter } from '../../core/joy/joy-presenter.service';
 import { JoyBannerComponent } from '../../shared/ui/joy/joy-banner.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
@@ -32,6 +33,7 @@ export class VideoDetailPage implements OnDestroy {
   protected readonly nav = inject(NavController);
   private readonly ui = inject(UiFeedback);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly presenter = inject(JoyPresenter);
   readonly id = input.required<string>();
 
   protected readonly t = this.i18n.t;
@@ -111,8 +113,17 @@ export class VideoDetailPage implements OnDestroy {
     };
   });
 
+  /** The video must never be covered or interrupted: every Crochet Joy level becomes one inline line while this page is in front. */
+  ionViewWillEnter(): void {
+    this.presenter.surface.set('video');
+  }
+  ionViewWillLeave(): void {
+    this.presenter.surface.set('default');
+  }
+
   ngOnDestroy(): void {
     if (this.iv) clearInterval(this.iv);
+    this.presenter.surface.set('default');
   }
 
   protected toggleFav(): void {

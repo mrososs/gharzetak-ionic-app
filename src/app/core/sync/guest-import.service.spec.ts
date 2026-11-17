@@ -73,21 +73,25 @@ describe('GuestImportService — Crochet Joy ledger and achievements', () => {
 
   it('moves recorded round counts and achievements to the account, keeps unlock dates, and never celebrates', async () => {
     const p = await guestProjectWithRounds('Bunny', 3);
-    await db.putJoyIfAbsent('guest', ach('first_round', 1_000));
+    // Real taps already earned "First round" live; "First masterpiece" cannot come from taps, so it carries the date under test.
+    await db.putJoyIfAbsent('guest', ach('first_finished', 1_000));
     expect(ledger.counts().round).toBe(3);
+    const guestFirstRound = ledger.row(ach('first_round', 0).key)!;
+    expect(guestFirstRound.source).toBe('live');
     await switchTo('user:a');
     expect(ledger.counts().round).toBe(0); // account starts empty
     const seqBefore = joy.batch()?.seq ?? 0;
 
-    expect(await importer.refresh()).toEqual({ projects: 1, joy: 4 });
+    expect(await importer.refresh()).toEqual({ projects: 1, joy: 5 });
     const report = await importer.importGuestData();
     await flush();
 
     expect(report.incomplete).toBe(false);
-    expect(report.joy).toMatchObject({ migrated: 4, merged: 0, duplicates: 0, recovered: 0, failed: 0 });
+    expect(report.joy).toMatchObject({ migrated: 5, merged: 0, duplicates: 0, recovered: 0, failed: 0 });
     expect(store.projects().map((x) => x.id)).toEqual([p.id]);
-    expect(ledger.counts()).toMatchObject({ round: 3, achievement: 1 });
-    expect(ledger.row(ach('first_round', 0).key)?.at).toBe(1_000); // original unlock date preserved
+    expect(ledger.counts()).toMatchObject({ round: 3, achievement: 2 });
+    expect(ledger.row(ach('first_finished', 0).key)?.at).toBe(1_000); // original unlock date preserved
+    expect(ledger.row(ach('first_round', 0).key)?.at).toBe(guestFirstRound.at); // ...for the live-earned badge too
     expect(ledger.has(joyKey({ kind: 'round', projectId: p.id, instanceId: null, round: 2 }))).toBe(true);
     expect(joy.batch()?.seq ?? 0).toBe(seqBefore); // import never celebrates
     // the guest copy is erased only after the account was confirmed to hold everything
@@ -113,21 +117,22 @@ describe('GuestImportService — Crochet Joy ledger and achievements', () => {
 
   it('never double-counts: rows the account already has are skipped; an earlier guest unlock date wins', async () => {
     const p = await guestProjectWithRounds('Bunny', 2);
-    await db.putJoyIfAbsent('guest', ach('first_round', 500));
+    await db.putJoyIfAbsent('guest', ach('first_finished', 500));
     await switchTo('user:a');
     // the same project already exists in the account (identical content) with the same ledger rows + a LATER achievement date
     const copy = { ...store.project(p.id)!, ...(await db.loadProjects('guest'))[0] };
     await store.addProject(copy);
     for (const r of (await db.loadJoy('guest')).filter((x) => x.kind === 'round')) await db.putJoyIfAbsent('user:a', r);
-    await db.putJoyIfAbsent('user:a', ach('first_round', 9_000));
+    await db.putJoyIfAbsent('user:a', ach('first_finished', 9_000));
     await ledger.load('user:a');
 
     const report = await importer.importGuestData();
     await flush();
 
-    expect(report.joy).toMatchObject({ migrated: 0, duplicates: 2, merged: 1, failed: 0 });
-    expect(ledger.counts()).toMatchObject({ round: 2, achievement: 1 });
-    expect(ledger.row(ach('first_round', 0).key)?.at).toBe(500);
+    // the 2 rounds already exist (duplicates); the guest's live "First round" is new to the account; "First masterpiece" keeps the EARLIER date
+    expect(report.joy).toMatchObject({ migrated: 1, duplicates: 2, merged: 1, failed: 0 });
+    expect(ledger.counts()).toMatchObject({ round: 2, achievement: 2 });
+    expect(ledger.row(ach('first_finished', 0).key)?.at).toBe(500);
     expect(store.projects()).toHaveLength(1);
   });
 

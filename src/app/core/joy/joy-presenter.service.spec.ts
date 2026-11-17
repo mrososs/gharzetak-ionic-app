@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../auth/auth.service';
 import { I18nService } from '../i18n/i18n.service';
 import { simpleNextRound, simpleReset, simpleTap, simpleUndo } from '../domain/tracker-engine';
+import { UiFeedback } from '../../shared/ui/feedback/toast.service';
+import { joyKey } from '../domain/joy';
 import { HapticsService } from '../services/haptics.service';
 import { AppStore } from '../state/app.store';
 import { createProject } from '../state/factories';
@@ -22,6 +24,7 @@ describe('JoyPresenter — Level 1 round banner', () => {
   let ledger: JoyLedgerService;
   let i18n: I18nService;
   const haptics = { supported: true, impact: vi.fn(async () => undefined), success: vi.fn(async () => undefined) };
+  const ui = { say: vi.fn(async () => undefined), toast: vi.fn(async () => undefined), confirm: vi.fn(async () => true) };
   const scope = signal<'user:a' | 'user:b'>('user:a');
   let now = 1_000_000;
 
@@ -33,7 +36,7 @@ describe('JoyPresenter — Level 1 round banner', () => {
     vi.spyOn(Date, 'now').mockImplementation(() => now);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [AppStore, JoyService, JoyLedgerService, JoyPresenter, LocalDb, I18nService, { provide: HapticsService, useValue: haptics }, { provide: AuthService, useValue: { scope } }],
+      providers: [AppStore, JoyService, JoyLedgerService, JoyPresenter, LocalDb, I18nService, { provide: HapticsService, useValue: haptics }, { provide: UiFeedback, useValue: ui }, { provide: AuthService, useValue: { scope } }],
     });
     store = TestBed.inject(AppStore);
     ledger = TestBed.inject(JoyLedgerService);
@@ -45,6 +48,8 @@ describe('JoyPresenter — Level 1 round banner', () => {
     await store.whenScopeLoaded('user:a');
     TestBed.tick();
     await flush();
+    // "First round" is already earned: the very first round of a fresh account would show that BADGE instead of the plain banner under test.
+    await ledger.recordSilently('user:a', { key: joyKey({ kind: 'achievement', achievementId: 'first_round' }), kind: 'achievement', achievementId: 'first_round', at: 1, source: 'backfill' });
   });
 
   afterEach(() => {

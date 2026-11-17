@@ -225,7 +225,9 @@ describe('Crochet Joy — events, ledger and presentation pipeline', () => {
       await store.setStatus(p.id, 'active', 'edit');
       await store.setStatus(p.id, 'done', 'finish');
       await flush();
-      expect(seq()).toBe(1);
+      // The repeat is reported (so the user gets a quiet confirmation) but it is NOT a celebration: no request, nothing new stored.
+      expect(joy.batch()!.requests).toEqual([]);
+      expect(joy.batch()!.repeats).toEqual(['project']);
       expect(ledger.counts().project).toBe(1);
     });
 
@@ -251,7 +253,8 @@ describe('Crochet Joy — events, ledger and presentation pipeline', () => {
       expect(ledger.counts().round).toBe(0);
       expect((await db.loadJoy('user:b')).length).toBe(0);
       expect((await db.loadJoy('guest')).length).toBe(0);
-      expect((await db.loadJoy('user:a')).length).toBe(1);
+      // the round and the "First round" badge it earned — and nothing else
+      expect((await db.loadJoy('user:a')).map((r) => r.kind).sort()).toEqual(['achievement', 'round']);
     });
 
     it('an event persisted for an account that was switched away from is recorded but not presented to the next account', async () => {

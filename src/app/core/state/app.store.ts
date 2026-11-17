@@ -88,6 +88,8 @@ export class AppStore {
   onQueued: (() => void) | null = null;
   /** Called by JoyService with the events one explicit user command created (never from sync, load, import, undo, reset or edits). */
   onJoy: ((scope: Scope, events: readonly JoyEvent[]) => void) | null = null;
+  /** Called when the USER created a project (`addProject(p, true)`) — the moment "First project / multi-part" may be celebrated. */
+  onProjectCreated: ((scope: Scope, project: Project) => void) | null = null;
 
   private writes: Promise<unknown> = Promise.resolve();
   private loadToken = 0;
@@ -170,9 +172,17 @@ export class AppStore {
     return id ? (this.projects().find((p) => p.id === id) ?? null) : null;
   }
 
-  async addProject(p: Project): Promise<void> {
+  /** `fresh` = the user just created it (new-project screen). Import, demo data and sync never pass it, so they never celebrate. */
+  async addProject(p: Project, fresh = false): Promise<void> {
     this.projects.update((list) => [...list, p]);
     const scope = this.scope();
+    if (fresh) {
+      try {
+        this.onProjectCreated?.(scope, p);
+      } catch {
+        /* celebrations are optional */
+      }
+    }
     await this.write(() => this.db.putProject(scope, p));
     this.queue('project', p.id);
     this.queue('progress', p.id);

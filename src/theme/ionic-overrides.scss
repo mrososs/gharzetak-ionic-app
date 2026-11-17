@@ -60,6 +60,21 @@ ion-modal.gz-sheet .gz-sheet-scroll {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Project finale: a full-screen modal (Level 4 celebration) */
+ion-modal.gz-finale {
+  --width: 100%;
+  --height: 100%;
+  --border-radius: 0;
+  --background: var(--gz-bg);
+  --box-shadow: none;
+}
+ion-modal.gz-finale .ion-page {
+  display: block;
+  position: relative;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Immersive display (Android): the system navigation bar is hidden, so the bottom inset is 0. Keep a small floor under the tab bar,
    sheets and footers so tappable content never sits in the system gesture area (swipe up reveals the bars / goes home). Class set by ImmersiveService. */
 html.gz-immersive {

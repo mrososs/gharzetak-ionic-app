@@ -5,6 +5,7 @@ import { BiometricAvailability, BiometricService } from '../../core/auth/biometr
 import { AvatarId } from '../../core/data/avatars';
 import { LVL, LVL_IDS } from '../../core/data/catalog';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { AchievementsService } from '../../core/joy/achievements.service';
 import { CelebrationMode, JoyPrefs, joyPrefsOf } from '../../core/joy/joy.models';
 import { HapticsService } from '../../core/services/haptics.service';
 import { ImmersiveService } from '../../core/services/immersive.service';
@@ -118,6 +119,8 @@ import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.co
         </div>
         <p class="gz-xs gz-mute" style="margin: 6px 2px 0">{{ i18n.q('الاحتفالات صغيرة وبتختفي لوحدها، ومش بتوقف العدّاد. لو الموبايل عنده «تقليل الحركة» بنحترمه دايمًا.', 'Celebrations are small, disappear on their own, and never block the counter. If your phone has "reduce motion" on, we always respect it.') }}</p>
 
+        <button type="button" class="gz-btn3 w mt-3" (click)="nav.navigateForward('/tabs/home/achievements')"><svg gzIcon="crown" size="s" />{{ i18n.q('إنجازاتي', 'My achievements') }} <span class="gz-badge pur"><span class="gz-ltr">{{ achievements.count() }}/8</span></span></button>
+
         <button type="button" class="gz-btn3 w mt-4" (click)="sheet.set('tools')"><svg gzIcon="hook" size="s" />{{ t().editTools }}</button>
         <button type="button" class="gz-btn3 w mt-2" (click)="replayIntro()"><svg gzIcon="reset" size="s" />{{ t().replayIntro }}</button>
         <button type="button" class="gz-btn3 rose w mt-2" (click)="sheet.set('erase')"><svg gzIcon="trash" size="s" />{{ t().resetDemo }}</button>
@@ -185,6 +188,7 @@ export class SettingsPage {
   protected readonly bioAvailable = signal<BiometricAvailability>({ available: false });
   protected readonly immersive = inject(ImmersiveService);
   protected readonly haptics = inject(HapticsService);
+  protected readonly achievements = inject(AchievementsService);
 
   protected readonly joyPrefs = computed(() => joyPrefsOf(this.store.prefs()));
   protected readonly celebrateOptions = computed<{ id: CelebrationMode; label: string }[]>(() => [

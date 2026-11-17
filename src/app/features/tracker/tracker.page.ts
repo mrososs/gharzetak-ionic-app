@@ -32,7 +32,9 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import { TrackerData } from '../../core/models/models';
 import { TimerService } from '../../core/services/timer.service';
 import { AppStore, TrackerChange } from '../../core/state/app.store';
+import { ProjectFinishService } from '../../core/joy/project-finish.service';
 import { JoyBannerComponent } from '../../shared/ui/joy/joy-banner.component';
+import { JoyMilestoneComponent } from '../../shared/ui/joy/joy-milestone.component';
 import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
@@ -47,7 +49,7 @@ const fmtHMS = (s: number) => Math.floor(s / 3600) + ':' + pad2(Math.floor((s % 
 /** GZ-S14 simple · GZ-S15 pattern-aware · GZ-T03 round complete · GZ-T05 settings · GZ-T06 reset — and, for multi-part projects, the part switcher. */
 @Component({
   selector: 'gz-tracker',
-  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent, JoyBannerComponent],
+  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent, JoyBannerComponent, JoyMilestoneComponent],
   templateUrl: './tracker.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -57,6 +59,7 @@ export class TrackerPage {
   protected readonly nav = inject(NavController);
   protected readonly timer = inject(TimerService);
   private readonly ui = inject(UiFeedback);
+  private readonly finishSvc = inject(ProjectFinishService);
 
   protected readonly t = this.i18n.t;
   protected readonly sheet = signal<'picker' | 'cfg' | 'reset' | 'parts' | null>(null);
@@ -304,9 +307,8 @@ export class TrackerPage {
   protected async finishProject(): Promise<void> {
     const p = this.p();
     if (!p) return;
-    await this.store.setStatus(p.id, 'done', 'finish');
-    if (this.timerOn()) await this.timer.stop();
-    await this.ui.say('مبروك! المشروع اتحوّل إلى «مكتمل».', 'Congratulations! The project is now completed.');
+    // Timer stops first (so the recorded time is final), then the explicit finish. The celebration — or a plain confirmation — comes from JoyPresenter.
+    await this.finishSvc.finish(p.id);
   }
 
   /* ---- time ---- */
