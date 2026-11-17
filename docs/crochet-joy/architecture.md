@@ -319,3 +319,43 @@ No other schema change. Nothing destructive.
 ## 9. Share-card pipeline (on device)
 
 `ShareCardService.render(spec) → Blob` using an offscreen `<canvas>` 1080×1350 (4:5, WhatsApp/Instagram friendly; scaled draw, `devicePixelRatio`-independent). Await `document.fonts.load('700 48px "Playpen Sans Arabic Variable"')` before drawing; `ctx.direction = dir`. Images: project photo (data:/blob:), avatar SVG (`assets/avatars/{id}.svg`), brand mark — all same-origin. `canvas.toBlob('image/png')` (fallback `image/jpeg` 0.9 if > 2.5 MB). Native: base64 → `Filesystem.writeFile({ directory: Directory.Cache, path: 'share/gz-card-<ts>.png' })` → `Share.share({ files: [uri], text, dialogTitle })`; clean old files in `share/` on next run. Web/dev: `navigator.share({ files })` if `canShare`, else download link.
+
+---
+
+## 10. As built (P0–P4, implemented 2026-11-17)
+
+This section records where the implementation differs from, or makes precise, the proposal above. The code is the source of truth.
+
+### 10.1 Detection and ledger
+- `core/domain/joy.ts` — pure `detectJoy(before, after, ctx)`. Only the origins `tap` and `finish` can produce events; `undo`, `reset`, `edit`, `sync`, `load`, `import` and `settings` produce none. This is defended twice: `AppStore` only captures the "before" state for `tap`/`finish`, and `detectJoy` independently returns `[]` for every other origin.
+- Pattern "round" mode jumps to the next round, so detection compares before/after positions rather than counting increments. An empty round never completes. "Advance from an already-complete round" is not an event.
+- Milestones carry the round count (`round`), and open-ended simple counting has a milestone every 10th round (`OPEN_ENDED_MILESTONE_EVERY`). 25/50/75 % needs at least 4 rounds.
+- IndexedDB **v4** adds the `joy` store (key `${scope}|${row.key}`, insert-if-absent in one readwrite transaction). Scopes are `guest` and `user:<id>`. Persist **before** presenting. Ledger failures are swallowed — counting is never affected.
+- Video counter: `VideoDetailPage` now counts through the same `AppStore` path and detection as the main tracker and reads the **pinned** pattern revision (`store.trackerView`) instead of the live pattern text (bug fixed). It only gets a lightweight inline line, never an interruption of playback.
+
+### 10.2 Presentation
+- `JoyService` turns store events into batches (`requests`, `badges`, `repeats`); `JoyPresenter` shows them. Level 1 is a banner (rate-limited: 20 s window, coalesced summary), level 2 a **compact one-row milestone card** (~53 px, 44 px targets, sits above the counter ring instead of covering it), level 3 the part sheet, level 4 the project finale. In "Off" mode a finished project still gets one plain confirmation.
+- A new badge **replaces** the plain round banner for that tap. Presentation is skipped when the store is not loaded or the scope changed.
+
+### 10.3 Achievements
+- Eight badges. Live evaluation is restricted to what the triggering action can actually earn (`EARNED_BY_EVENT`, `EARNED_BY_CREATION`) so a round tap can never celebrate an unrelated badge (e.g. "First project"). Everything else is back-filled **silently** on scope load and on app resume. Badges are never re-locked; round counts come only from real ledger rows.
+- Device-local and account-scoped. No Cloudflare sync (Q2); the UI says so.
+
+### 10.4 Guest → account import (Q3)
+- `GuestImportService` keeps a journal (`ScopeDocs.importMap`) so the import is resumable and never double-counts. `JoyLedgerService.importFromGuest` remaps project ids, merges with existing account rows (`mergeJoyRow`: earliest achievement date wins, existing rows are untouched) and never celebrates. Rows that cannot be mapped go to `ScopeDocs.joyRecovery` (a recoverable copy). The guest scope is cleared **only if nothing failed**. Counts are never fabricated from tracker positions. Guest joy/share preferences are carried over; **reminder settings are never carried**.
+
+### 10.5 Share cards (P3)
+- The pure model (`share-card.ts` + `share-source.ts`) is the privacy boundary: a whitelisted `ShareSource` with narrow input types plus five toggles (photo, avatar, time, parts, project name). Email, account id, notes, pattern instructions and auth data cannot reach the model.
+- Canvas renderer 1080×1350 against a minimal `Ctx2D` interface (RTL text, fit-to-width, wrapping). Images load through `onload` + timeout (**not** `img.decode()`, which never resolves in a hidden page). Render, image and encode timeouts exist; a failed render shows a retry state and the app keeps working.
+- Native: PNG written to the cache directory (the app's FileProvider already exposes `<cache-path>`), then `@capacitor/share`. Cancelling is silent. Fallback is a text share. Nothing is uploaded anywhere. No QR code and no store URL (Q5).
+
+### 10.6 Reminders (P4)
+- `planReminders` is pure and DST-safe (zone maths via `Intl`). A rolling **28-day** window of **one-shot** notifications is re-planned on launch, resume and any change, debounced and off the counting path. Weekly caps: twice 2 / thrice 3 / daily 7 / custom. Quiet hours support overnight wrap. Nothing within 6 h of a session. Nudges (almost done ≥ 85 % > inactive ≥ 3 days > photo) **replace** the first slot and never add one. Generic text unless "show details" is on. IDs live in the reserved range `[7_000_000, 8_000_000)`. Channels: `gz_reminders_v1` (private) and `gz_reminders_details_v1` (public).
+- Payload has five fields (`v`, `kind`, `scope` = one-way fingerprint of the owner, `projectId`, `instanceId`). It never holds the account id, names or pattern text.
+- `ReminderService` never prompts by itself: the only path to the system dialog is `enable()`, called after "Yes" in the soft-ask. Everything is cancelled on logout, account switch, "disable all", revoked permission and when there is nothing to continue.
+- **Plugin facts (verified from `@capacitor/local-notifications` 8.3.1 source):** `schedule()` auto-requests POST_NOTIFICATIONS if it is missing, so it is never called without a granted permission. `isExactNotification` defaults to **true** and would open the exact-alarm settings screen, so every reminder sets `isExactNotification: false` + `allowWhileIdle: true`. The plugin manifest declares `SCHEDULE_EXACT_ALARM`; the app removes it with `tools:node="remove"`. The plugin re-arms on BOOT_COMPLETED; one-shots whose time passed while the phone was off fire about 15 s after boot — a stale-burst limitation (see risks).
+- `NotificationRouter` (§8) is implemented in this order: validate payload → `auth.init()` → wait for the biometric unlock → signed-in user or guest → fingerprint equals the current scope → wait for that scope's data → validate project and piece → navigate. Navigation goes through `TrackerNavigator` (extracted from `ProjectDetailPage.openPart`). Outcomes: `ignored`, `superseded`, `blocked`, `wrong-account`, `opened`, `missing`, `done`, `projects`.
+
+### 10.7 Test infrastructure
+- Vitest through `@angular/build:unit-test`. `angular.json` sets `"isolate": true` — without it `vi.mock('@capacitor/core')` stopped applying when another spec evaluated the module first (order-dependent failures).
+- Unit tests use the in-memory LocalDb fallback, so the **real IndexedDB** path (v3→v4 upgrade, the insert-if-absent transaction) is covered only by browser/device verification, not by unit tests.

@@ -150,3 +150,18 @@ Documented in `cloudflare-readiness.md` §3.2. Start only if a requirement appea
 1. ~~Approve Option A (local notifications) and "no Cloudflare changes for MVP".~~ **Approved.**
 2. ~~Decide Q1, Q2, Q3.~~ **Decided** — see `risks-and-decisions.md` §0 (Q3 changed: guest ledger is preserved).
 3. Separately (not Crochet Joy): decide whether/when to redeploy staging from `development` and apply D1 migrations 0002/0003, and whether to move to Workers Paid for auth CPU and D1 writes.
+
+---
+
+## Implementation status (2026-11-17)
+
+| Phase | Commit | State |
+|---|---|---|
+| P0 event foundation (+ guest-ledger migration, video counter fix) | `8b6548d` | Done, unit-tested, mutation-checked |
+| P1 round celebrations, avatar reactions, haptics, Celebrations settings | `601b9d7` | Done |
+| P2 milestones, part sheet, finale, 8 achievements | `f08fd0e` | Done (P2b cancelled by Q2) |
+| P3 share cards | `96f0cc0` | Done on web; native share sheet **pending device** |
+| P4 local reminders | `422e687` | Done on web/unit level; native delivery **pending device** |
+| P5 hardening | this commit | Automated checks done; physical-device QA **pending** — see `qa-report.md` |
+
+All phases were built on one branch (`feat/crochet-joy-implementation`) with one commit per phase, instead of one branch per phase. Not part of this plan's scope and not changed: Cloudflare Worker, D1, R2.

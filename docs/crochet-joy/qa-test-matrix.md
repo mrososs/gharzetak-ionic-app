@@ -1,6 +1,6 @@
 # Crochet Joy — QA Test Matrix
 
-**Status: planned. None of these tests has been executed** — this is a planning branch with no feature code. Results go in a future `docs/crochet-joy/qa-report.md`; nothing may be marked passed without evidence (spec output, screenshot or screen recording).
+**Status: the automated (U/I) rows are implemented in `ng test` (541 tests). The device (D) rows are NOT executed yet.** Results and evidence are in [qa-report.md](qa-report.md); nothing is marked passed without evidence (spec output, screenshot or screen recording).
 
 Columns: **ID · Scenario · Steps · Expected · Type** (U = unit/spec in `ng test`, I = integration/store spec, A = API test in `apps/api/tests`, D = Android physical device, W = web/dev build).
 

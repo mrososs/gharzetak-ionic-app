@@ -1,6 +1,6 @@
 # Crochet Joy — Celebrations, Achievements, Sharing & Smart Reminders
 
-**Status:** architecture and product decisions **approved 2026-11-17**; full MVP (P0–P5) being implemented on `feat/crochet-joy-implementation`. The planning branch (`feat/crochet-joy-planning`, `d8f465f`) touched no application code. **No Cloudflare changes** are part of this work; achievements are device-local (cross-device sync deferred); guest achievements and round counts are migrated on guest → account import (see `risks-and-decisions.md` §0).
+**Status:** architecture and product decisions **approved 2026-11-17**; full MVP (P0–P4) implemented on `feat/crochet-joy-implementation`; P5 automated checks done, **physical-Android QA pending** (see `qa-report.md`). The planning branch (`feat/crochet-joy-planning`, `d8f465f`) touched no application code. **No Cloudflare changes** are part of this work; achievements are device-local (cross-device sync deferred); guest achievements and round counts are migrated on guest → account import (see `risks-and-decisions.md` §0).
 **Branch:** `feat/crochet-joy-planning` · **Base:** `origin/development` @ `f616ee9da19a994009b1b808749c22690e4ed36d` (2026-11-17, "fix(ui): real-device QA fixes …"), which includes Pattern Collections, multi-part tracker, durable timer, avatars and Android immersive navigation.
 
 ## Documents
@@ -11,7 +11,8 @@
 | [cloudflare-readiness.md](cloudflare-readiness.md) | Live Cloudflare audit, Local vs Remote push comparison, backend changes, cost estimates |
 | [ux-specification.md](ux-specification.md) | Celebration levels, avatar reactions, achievements, share cards, reminder settings & opt-in, AR/EN copy |
 | [implementation-plan.md](implementation-plan.md) | Phases P0–P6 with files, dependencies, acceptance criteria, tests, estimates |
-| [qa-test-matrix.md](qa-test-matrix.md) | Celebration, achievement, sharing, notification and regression tests (none executed yet) |
+| [qa-test-matrix.md](qa-test-matrix.md) | Celebration, achievement, sharing, notification and regression test plan |
+| [qa-report.md](qa-report.md) | What was actually verified (automated / browser / device), what is pending or blocked, known limitations |
 | [risks-and-decisions.md](risks-and-decisions.md) | Decisions, risk register, open questions, unverified items |
 
 ## Executive summary

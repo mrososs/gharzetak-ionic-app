@@ -84,3 +84,18 @@ Q1–Q8 were resolved by the approved decisions in §0. Only one item remains op
 - Cold-start delivery of `localNotificationActionPerformed` (retained until a listener registers?).
 - WhatsApp behaviour for image + caption in one share intent on current versions.
 - Canvas Arabic shaping in the Android System WebView versions on test devices.
+
+---
+
+## 5. Known limitations and new risks found during implementation
+
+| ID | Item | Status |
+|---|---|---|
+| R-29 | **Boot-restore stale burst.** `@capacitor/local-notifications` re-arms on BOOT_COMPLETED. One-shot reminders whose time passed while the phone was off fire about 15 s after boot. With the 2-per-week default this means at most a couple of late reminders after a long power-off. The planner re-plans on the next launch. | Documented, not fixable without a custom receiver. Needs device confirmation. |
+| R-30 | **Inexact delivery.** Reminders are scheduled with `isExactNotification:false` + `allowWhileIdle:true` (no exact-alarm permission, by decision). Android may deliver them a few minutes late. OEM battery savers (Xiaomi, Huawei, Samsung "sleeping apps") can delay or drop them; force-stop cancels alarms until the next launch. | Known OS limitation; not verified on any device yet. |
+| R-31 | **`schedule()` prompts by itself.** The plugin auto-requests POST_NOTIFICATIONS. The app therefore never calls it without a granted permission and the only path to the system dialog is `ReminderService.enable()` after the soft-ask "Yes". | Mitigated and mutation-tested. |
+| R-32 | **Real IndexedDB path unit-untested.** Unit tests run on the in-memory LocalDb fallback. The v3→v4 upgrade and the insert-if-absent transaction need browser/device verification. | Open — see `qa-report.md`. |
+| R-33 | **iOS not validated.** Code is written to be platform-neutral (Capacitor APIs only) but no iOS build or device test was done. | Not tested. |
+| R-34 | **Mid-pipe 1-per-tap guarantee depends on the store hook.** Celebrations are hooked into `AppStore` and swallow all errors; a bug there must never block counting. Tap-path cost measured at 0.04–0.05 ms mean in the web build. | Measured on web only. |
+
+Items from §4 now resolved by reading the plugin source / building: local-notifications restore (re-arms on boot, see R-29); cold-start tap delivery (the plugin retains the event until a listener attaches — the app registers its listener early in `ngOnInit`); permissions merge (the plugin's `SCHEDULE_EXACT_ALARM` is removed by the app manifest). Still unverified: WhatsApp image + caption behaviour, Arabic canvas shaping in older System WebViews, and everything that needs hardware.
