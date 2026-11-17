@@ -1,5 +1,23 @@
 # Staging readiness (`development` -> Cloudflare staging)
 
+> ## Update 2026-11-16 — DEPLOYED (test environment)
+> | Item | State |
+> |---|---|
+> | Worker | `gharzetak-api-staging` at **https://gharzetak-api-staging.gharzetak.workers.dev** (workers.dev subdomain `gharzetak`, account-wide) |
+> | D1 | `gharzetak-db-staging` (WEUR), id `23160160-69cf-4d4c-ad1e-38889b4eb351`; migrations `0000_init` + `0001_profile_avatar` applied, sample patterns seeded |
+> | R2 | existing private `gharzetak-media`, isolated by the `staging/` key prefix |
+> | Secrets (Worker secrets, never in git) | `BETTER_AUTH_SECRET` (fresh random), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_ANDROID_CLIENT_ID` |
+> | CORS / origins | exactly `https://localhost`, `capacitor://localhost`, `com.gharzetak.app://` |
+> | Rate limiting | on (hardened): sign-in 8/min, sign-up 5/min, social 10/min per IP |
+> | Email provider | **none** — verification and password-reset emails are NOT delivered; `REQUIRE_EMAIL_VERIFICATION=false`; the test app is built with password reset hidden (`GZ_PASSWORD_RESET` unset) |
+>
+> **Verified against the deployed Worker** (`apps/api/scripts/smoke-remote.mjs`, 29 checks): health, CORS allow/deny, sign-up/sign-in/session/sign-out, profile + avatar on D1, project + stitch progress + 409, R2 photo upload/download/delete with owner-only access, cross-user isolation, repeated sign-ins.
+>
+> **PBKDF2 CPU (wrangler tail, 11 warm requests):** sign-up 35–56 ms, sign-in 22–29 ms (cold start up to 141 ms). That is above the documented Workers Free limit (10 ms) but no request failed, so this account is not being held to it. The billing plan could not be read through the API (403), so **do not assume this works on a genuine Free plan**; confirm the plan in the dashboard. Hashing was not weakened.
+>
+> The sections below are the original pre-deployment plan, kept for reference.
+
+
 > **Status: PREPARED, NOT DEPLOYED.** Nothing in this file has been executed remotely. No D1 database, Worker, secret, subdomain or paid plan was created.
 > Everything below needs your explicit approval first.
 

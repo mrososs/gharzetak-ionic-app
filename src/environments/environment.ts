@@ -11,6 +11,8 @@ export interface AppEnvironment {
   readonly googleIosClientId: string;
   /** API path that answers assistant questions, e.g. '/v1/assistant' ('' = demo mode). */
   readonly aiEndpoint: string;
+  /** True only when the backend can deliver email (GZ_PASSWORD_RESET=1). False hides "Forgot password" so the app never promises an email that is not sent. */
+  readonly passwordResetEnabled: boolean;
 }
 
 export const environment: AppEnvironment = GENERATED_ENV;

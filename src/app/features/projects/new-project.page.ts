@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { IonContent, IonHeader, IonInput, NavController } from '@ionic/angular';
+import { IonContent, IonHeader, IonInput, NavController, ViewWillEnter } from '@ionic/angular';
 import { CAT, CAT_IDS, CategoryId, HOOKS, YARN, YARN_IDS, YarnId } from '../../core/data/catalog';
 import { HasUnsavedChanges } from '../../core/guards/unsaved-changes.guard';
 import { parsePattern } from '../../core/domain/pattern-parser';
@@ -121,7 +121,7 @@ type Source = { kind: 'none' } | { kind: 'collection'; id: string } | { kind: 'p
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class NewProjectPage implements HasUnsavedChanges {
+export class NewProjectPage implements HasUnsavedChanges, ViewWillEnter {
   protected readonly i18n = inject(I18nService);
   protected readonly nav = inject(NavController);
   protected readonly store = inject(AppStore);
@@ -214,6 +214,28 @@ export class NewProjectPage implements HasUnsavedChanges {
     this.minutes.set(Math.max(0, m));
   }
 
+  /**
+   * Ionic keeps routed pages cached inside the tab stack and re-activates the same instance when the URL is opened again, so a
+   * discarded draft (name, pattern and especially the chosen cover photo) used to reappear in the NEXT new project. Every entry
+   * starts from a blank form (and re-applies a `?collection=` preselection, which the reset would otherwise erase).
+   */
+  ionViewWillEnter(): void {
+    this.resetForm();
+    this.saved = false;
+    const id = this.collection();
+    if (id && this.store.collection(id)) this.choose({ kind: 'collection', id });
+  }
+
+  private resetForm(): void {
+    this.form.reset({ name: '', category: 'amigurumi', hook: '3.0', yarn: 'cotton', target: 0, pattern: '' });
+    this.cover.set(null);
+    this.submitted.set(false);
+    this.busy.set(false);
+    this.source.set({ kind: 'none' });
+    this.minutes.set(0);
+    this.minutesTouched = false;
+  }
+
   protected setTarget(n: number): void {
     this.form.controls.target.setValue(Math.max(0, Math.min(500, n)));
     this.form.markAsDirty();
@@ -256,6 +278,7 @@ export class NewProjectPage implements HasUnsavedChanges {
       }
       await this.store.addProject(project, true);
       this.saved = true;
+      this.resetForm(); // a cached page instance must not keep the saved project's cover/name (saved stays true until re-entry)
       await this.nav.navigateRoot('/tabs/projects');
       await this.ui.say('تم حفظ المشروع وظهر في «مشاريعي»', 'Project saved and added to My projects');
     } finally {
