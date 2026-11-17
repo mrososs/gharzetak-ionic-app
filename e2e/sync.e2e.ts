@@ -296,7 +296,7 @@ describe('guest mode and account isolation', () => {
     expect(await d.db.outbox('guest')).toHaveLength(0); // guest data never queues for the cloud
 
     await register(d, 'convert');
-    expect(await d.importer.refresh()).toBe(1);
+    expect(await d.importer.refresh()).toEqual({ projects: 1, joy: 0 });
     const report = await d.importer.importGuestData();
     expect(report.imported).toBe(1);
     await waitFor(async () => (await outbox(d)).length > 0, 'import to queue');
