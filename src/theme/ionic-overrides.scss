@@ -60,6 +60,12 @@ ion-modal.gz-sheet .gz-sheet-scroll {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Immersive display (Android): the system navigation bar is hidden, so the bottom inset is 0. Keep a small floor under the tab bar,
+   sheets and footers so tappable content never sits in the system gesture area (swipe up reveals the bars / goes home). Class set by ImmersiveService. */
+html.gz-immersive {
+  --gz-safe-bottom: max(var(--ion-safe-area-bottom, env(safe-area-inset-bottom, 0px)), 14px);
+}
+
 /* Toast in the design style */
 ion-toast.gz-toast {
   --background: var(--gz-text);

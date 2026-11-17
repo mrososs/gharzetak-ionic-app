@@ -8,7 +8,9 @@ import { AlertController, IonApp, IonRouterOutlet, NavController, Platform } fro
 import { AuthService } from './core/auth/auth.service';
 import { ONBOARDING_SLIDES, SETUP_STEPS, previousStep } from './core/data/flows';
 import { I18nService } from './core/i18n/i18n.service';
+import { ImmersiveService } from './core/services/immersive.service';
 import { TimerService } from './core/services/timer.service';
+import { formatMinutes } from './core/domain/time';
 import { AppStore } from './core/state/app.store';
 import { GuestImportService } from './core/sync/guest-import.service';
 import { SyncService } from './core/sync/sync.service';
@@ -46,6 +48,8 @@ export class App implements OnInit {
   private readonly store = inject(AppStore);
   private readonly sync = inject(SyncService);
   private readonly timer = inject(TimerService);
+  /** Instantiated at launch so the native immersive state is mirrored into the layout before the first screen. */
+  private readonly immersive = inject(ImmersiveService);
   private readonly importer = inject(GuestImportService);
   private readonly alerts = inject(AlertController);
   private readonly i18n = inject(I18nService);
@@ -72,6 +76,16 @@ export class App implements OnInit {
               : q(`نسخة أحدث من ${what} جت من جهاز تاني وحلّت محل تعديلاتك. اتحفظت نسختك على جهازك.`, `A newer version of ${what} from another device replaced your changes. Your version is kept on this device.`);
         this.sync.conflictNotice.set(null);
         void this.ui.toast(text);
+      });
+    });
+    // The app was killed while the timer was running: tell the user once what was saved (it stays paused; they decide to resume).
+    effect(() => {
+      const secs = this.timer.recovered();
+      if (secs === null) return;
+      untracked(() => {
+        this.timer.recovered.set(null);
+        const when = secs >= 60 ? formatMinutes(Math.floor(secs / 60), this.i18n.lang()) : this.i18n.q(secs + ' ثانية', secs + ' seconds');
+        void this.ui.toast(this.i18n.q(`المؤقت اتوقّف لما التطبيق اتقفل — اتحفظ ${when}. اضغطي استئناف لو لسه بتشتغلي.`, `The timer stopped when the app closed — ${when} was saved. Tap Resume if you are still working.`));
       });
     });
     // After sign-in, offer (never force) moving guest data into the account.

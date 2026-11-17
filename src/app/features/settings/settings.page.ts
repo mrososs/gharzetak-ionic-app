@@ -5,6 +5,7 @@ import { BiometricAvailability, BiometricService } from '../../core/auth/biometr
 import { AvatarId } from '../../core/data/avatars';
 import { LVL, LVL_IDS } from '../../core/data/catalog';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { ImmersiveService } from '../../core/services/immersive.service';
 import { TimerService } from '../../core/services/timer.service';
 import { AppStore } from '../../core/state/app.store';
 import { SyncService } from '../../core/sync/sync.service';
@@ -80,6 +81,14 @@ import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.co
           </div>
           <p class="gz-xs gz-mute" style="margin: 6px 2px 0" role="status">{{ bioHint() }}</p>
         }
+        @if (immersive.supported) {
+          <span class="gz-lbl" id="se-imm-l">{{ i18n.q('العرض الغامر (إخفاء أزرار أندرويد)', 'Immersive display (hide Android buttons)') }}</span>
+          <div class="gz-seg" role="group" aria-labelledby="se-imm-l">
+            <button type="button" [class.on]="immersive.preferred()" [attr.aria-pressed]="immersive.preferred()" (click)="setImmersive(true)">{{ i18n.q('تشغيل', 'On') }}</button>
+            <button type="button" [class.on]="!immersive.preferred()" [attr.aria-pressed]="!immersive.preferred()" (click)="setImmersive(false)">{{ i18n.q('إيقاف', 'Off') }}</button>
+          </div>
+          <p class="gz-xs gz-mute" style="margin: 6px 2px 0" role="status">{{ immersiveHint() }}</p>
+        }
         <button type="button" class="gz-btn3 w mt-4" (click)="sheet.set('tools')"><svg gzIcon="hook" size="s" />{{ t().editTools }}</button>
         <button type="button" class="gz-btn3 w mt-2" (click)="replayIntro()"><svg gzIcon="reset" size="s" />{{ t().replayIntro }}</button>
         <button type="button" class="gz-btn3 rose w mt-2" (click)="sheet.set('erase')"><svg gzIcon="trash" size="s" />{{ t().resetDemo }}</button>
@@ -150,6 +159,18 @@ export class SettingsPage {
   protected readonly bio = inject(BiometricService);
   protected readonly bioBusy = signal(false);
   protected readonly bioAvailable = signal<BiometricAvailability>({ available: false });
+  protected readonly immersive = inject(ImmersiveService);
+  protected readonly immersiveHint = computed(() => {
+    const q = (a: string, e: string) => this.i18n.q(a, e);
+    if (this.immersive.touchExploration()) return q('متوقف تلقائيًا طول ما قارئ الشاشة شغّال، علشان أزرار النظام تفضل ظاهرة.', 'Off automatically while a screen reader is running, so the system buttons stay visible.');
+    return this.immersive.preferred()
+      ? q('أزرار أندرويد مخفية. اسحبي من حافة الشاشة السفلية علشان تظهر مؤقتًا — أزرار التطبيق السفلية تفضل ظاهرة.', 'Android buttons are hidden. Swipe up from the bottom edge to show them briefly — the app tabs stay visible.')
+      : q('أزرار أندرويد ظاهرة دايمًا.', 'Android buttons are always visible.');
+  });
+  protected setImmersive(on: boolean): void {
+    void this.immersive.setEnabled(on);
+  }
+
   protected readonly bioHint = computed(() => {
     const t = this.t();
     const a = this.bioAvailable();

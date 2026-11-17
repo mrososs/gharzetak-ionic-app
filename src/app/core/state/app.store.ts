@@ -414,6 +414,28 @@ export class AppStore {
     );
   }
 
+  /**
+   * Applies an explicit "update to the latest collection version" plan (see planCollectionUpdate). Positions were already mapped
+   * (never reset); instances that had progress but were dropped by the new version are kept as retired pieces.
+   */
+  applyCollectionUpdate(projectId: string, plan: { snapshots: readonly PartSnapshot[]; instances: readonly PartInstance[] }, collectionRev: number): Promise<Project | null> {
+    return this.updateProject(
+      projectId,
+      (p) => {
+        const keepActive = plan.instances.some((i) => i.id === p.activeInstanceId);
+        return {
+          ...p,
+          collectionRev,
+          partSnapshots: plan.snapshots,
+          parts: plan.instances,
+          activeInstanceId: keepActive ? p.activeInstanceId : (plan.instances.find((i) => !i.retired)?.id ?? null),
+          tracker: { ...p.tracker, updatedAt: Date.now() },
+        };
+      },
+      ['progress'],
+    );
+  }
+
   /** Remembers which part the user is on (restored after a restart). */
   setActiveInstance(projectId: string, instanceId: string): Promise<Project | null> {
     return this.updateProject(projectId, (p) => ({ ...p, activeInstanceId: instanceId, tracker: { ...p.tracker, updatedAt: Date.now() } }), ['progress']);

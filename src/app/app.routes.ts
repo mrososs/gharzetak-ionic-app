@@ -56,7 +56,7 @@ export const routes: Routes = [
       { path: 'home/patterns/:id', loadComponent: () => import('./features/patterns/pattern-reader.page').then((m) => m.PatternReaderPage) },
       { path: 'home/terms', loadComponent: () => import('./features/terminology/terminology.page').then((m) => m.TerminologyPage) },
       { path: 'projects', loadComponent: () => import('./features/projects/projects.page').then((m) => m.ProjectsPage) },
-      { path: 'projects/new', loadComponent: () => import('./features/projects/new-project.page').then((m) => m.NewProjectPage) },
+      { path: 'projects/new', canDeactivate: [unsavedChangesGuard], loadComponent: () => import('./features/projects/new-project.page').then((m) => m.NewProjectPage) },
       { path: 'projects/:id', loadComponent: () => import('./features/projects/project-detail.page').then((m) => m.ProjectDetailPage) },
       { path: 'tracker', loadComponent: () => import('./features/tracker/tracker.page').then((m) => m.TrackerPage) },
       { path: 'learn', loadComponent: () => import('./features/learning/learn.page').then((m) => m.LearnPage) },
