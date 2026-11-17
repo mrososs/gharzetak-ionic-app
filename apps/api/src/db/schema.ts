@@ -167,6 +167,8 @@ export const patterns = sqliteTable(
     contentRev: integer('content_rev').notNull().default(1),
     /** Optional suggested project duration in minutes (0 = none). Only ever pre-fills a project's own optional estimate. */
     suggestedMinutes: integer('suggested_minutes').notNull().default(0),
+    /** The pasted text a Smart-paste conversion started from (the original stays recoverable). */
+    sourceText: text('source_text').notNull().default(''),
     clientUpdatedAt: integer('client_updated_at').notNull().default(0),
     revision: integer('revision').notNull().default(1),
     createdAt: integer('created_at').notNull().default(now),

@@ -65,6 +65,7 @@ export interface PullPattern {
   readingPosition: number;
   contentRev?: number;
   suggestedMinutes?: number;
+  sourceText?: string;
   revision: number;
   clientUpdatedAt: number;
 }

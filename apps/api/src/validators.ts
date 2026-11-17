@@ -59,6 +59,7 @@ export const patternBody = z.object({
   /** Optional for older clients (which keep the stored value). */
   contentRev: z.number().int().min(1).max(100000).optional(),
   suggestedMinutes: z.number().int().min(0).max(6_000_000).optional(),
+  sourceText: str(40000).optional(),
   /** Derived round table, replaced atomically with the pattern. */
   rounds: z
     .array(

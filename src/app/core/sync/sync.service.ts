@@ -330,7 +330,7 @@ export class SyncService {
         await this.versioned(key, `/v1/patterns/${p.id}`, p.updatedAt, {
           name: p.name.slice(0, 120), level: p.level, terms: p.terms, sourceType: p.source === 'sample' ? 'text' : p.source,
           sourceUrl: p.sourceUrl ? p.sourceUrl.slice(0, 500) : null, attribution: p.attribution ? p.attribution.slice(0, 200) : null,
-          rawText: p.text.slice(0, 20000), readingPosition: Math.max(0, Math.trunc(p.position)), contentRev: Math.max(1, p.rev ?? 1), suggestedMinutes: Math.max(0, Math.trunc(p.suggestedMinutes ?? 0)),
+          rawText: p.text.slice(0, 20000), readingPosition: Math.max(0, Math.trunc(p.position)), contentRev: Math.max(1, p.rev ?? 1), suggestedMinutes: Math.max(0, Math.trunc(p.suggestedMinutes ?? 0)), sourceText: (p.sourceText ?? '').slice(0, 40000),
           rounds: parsed.rounds.slice(0, 500).map((r) => ({ n: r.n, raw: r.raw.slice(0, 500), ok: r.ok, cons: r.cons, prod: r.prod, declared: r.declared })),
         }, { kind: 'pattern', id: e.id, label: p.name });
         return;
@@ -510,7 +510,7 @@ export class SyncService {
         id: x.id, isSample: false, name: x.name, level: x.level as LevelId, terms: x.terms as 'us' | 'uk', source: x.sourceType as Pattern['source'],
         text: x.rawText, attribution: x.attribution ?? '', sourceUrl: x.sourceUrl ?? '', position: x.readingPosition,
         file: x.fileName ? { name: x.fileName, size: x.fileSize ?? 0, mime: x.fileMime ?? '', storagePath: x.filePath } : null,
-        rev: x.contentRev ?? 1, suggestedMinutes: x.suggestedMinutes ?? 0,
+        rev: x.contentRev ?? 1, suggestedMinutes: x.suggestedMinutes ?? 0, sourceText: x.sourceText ?? '',
         updatedAt: x.clientUpdatedAt, deletedAt: null,
       };
       if (local) mergedPats.splice(mergedPats.indexOf(local), 1, pat);

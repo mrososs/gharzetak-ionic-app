@@ -123,18 +123,18 @@ entities.put('/patterns/:id', async (c) => {
     b.baseRevision === 0
       ? d1
           .prepare(
-            `INSERT INTO patterns (id, owner_id, is_sample, name, level, terms, source_type, source_url, attribution, raw_text, reading_position, client_updated_at, revision, created_at, updated_at, content_rev, suggested_minutes)
-             VALUES (?1, ?2, 0, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1, ?12, ?12, COALESCE(?13, 1), COALESCE(?14, 0)) ON CONFLICT(id) DO NOTHING`,
+            `INSERT INTO patterns (id, owner_id, is_sample, name, level, terms, source_type, source_url, attribution, raw_text, reading_position, client_updated_at, revision, created_at, updated_at, content_rev, suggested_minutes, source_text)
+             VALUES (?1, ?2, 0, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1, ?12, ?12, COALESCE(?13, 1), COALESCE(?14, 0), COALESCE(?15, '')) ON CONFLICT(id) DO NOTHING`,
           )
-          .bind(pid, userId, b.name, b.level, b.terms, b.sourceType, b.sourceUrl, b.attribution, b.rawText, b.readingPosition, cts, now, b.contentRev ?? null, b.suggestedMinutes ?? null)
+          .bind(pid, userId, b.name, b.level, b.terms, b.sourceType, b.sourceUrl, b.attribution, b.rawText, b.readingPosition, cts, now, b.contentRev ?? null, b.suggestedMinutes ?? null, b.sourceText ?? null)
       : d1
           .prepare(
             // content_rev / suggested_minutes: an older client omits them (NULL) and must never reset what a newer client stored.
             `UPDATE patterns SET name = ?3, level = ?4, terms = ?5, source_type = ?6, source_url = ?7, attribution = ?8, raw_text = ?9, reading_position = ?10,
-               client_updated_at = ?11, updated_at = ?12, revision = revision + 1, content_rev = COALESCE(?14, content_rev), suggested_minutes = COALESCE(?15, suggested_minutes)
+               client_updated_at = ?11, updated_at = ?12, revision = revision + 1, content_rev = COALESCE(?14, content_rev), suggested_minutes = COALESCE(?15, suggested_minutes), source_text = COALESCE(?16, source_text)
              WHERE id = ?1 AND owner_id = ?2 AND revision = ?13 AND deleted_at IS NULL`,
           )
-          .bind(pid, userId, b.name, b.level, b.terms, b.sourceType, b.sourceUrl, b.attribution, b.rawText, b.readingPosition, cts, now, b.baseRevision, b.contentRev ?? null, b.suggestedMinutes ?? null);
+          .bind(pid, userId, b.name, b.level, b.terms, b.sourceType, b.sourceUrl, b.attribution, b.rawText, b.readingPosition, cts, now, b.baseRevision, b.contentRev ?? null, b.suggestedMinutes ?? null, b.sourceText ?? null);
 
   const res = await d1.batch([
     write,

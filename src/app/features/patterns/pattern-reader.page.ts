@@ -17,7 +17,12 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
       <div class="gz-top">
         <button type="button" class="gz-icb" (click)="nav.back()" [attr.aria-label]="t().back"><svg gzIcon="arrowl" [flip]="true" /></button>
         <h1 class="gz-ttl gz-hd" style="font-size: 16px">{{ pat() ? store.patternName(pat()!) : '' }}</h1>
-        <button type="button" class="gz-icb" (click)="nav.navigateForward('/tabs/home/terms')" [attr.aria-label]="t().terminology"><svg gzIcon="convert" /></button>
+        <div class="flex gap-2">
+          @if (pat() && !pat()!.isSample) {
+            <button type="button" class="gz-icb pur" (click)="nav.navigateForward(['/tabs/home/patterns', pat()!.id, 'edit'])" [attr.aria-label]="i18n.q('تعديل الباترون', 'Edit pattern')"><svg gzIcon="notes" /></button>
+          }
+          <button type="button" class="gz-icb" (click)="nav.navigateForward('/tabs/home/terms')" [attr.aria-label]="t().terminology"><svg gzIcon="convert" /></button>
+        </div>
       </div>
     </ion-header>
     <ion-content class="gz-scroll">

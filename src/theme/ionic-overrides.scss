@@ -200,3 +200,21 @@ ion-tab-button.gz-mid:active::part(native) { background: transparent; }
 /* Refresher */
 ion-refresher-content { --color: var(--gz-primary); }
 ion-spinner { --color: var(--gz-primary); color: var(--gz-primary); }
+
+/* ── Confirmation alerts — same hierarchy as sheets: confirm on top (destructive = filled danger), Cancel is a quiet text button. ── */
+ion-alert.gz-alert {
+  --max-width: min(92vw, 340px);
+  --border-radius: 24px;
+  --min-width: min(88vw, 300px);
+}
+ion-alert.gz-alert .alert-head { padding-block: 22px 6px; text-align: start; }
+ion-alert.gz-alert .alert-title { font-weight: 700; font-size: 18px; line-height: 1.4; color: var(--gz-text); }
+ion-alert.gz-alert .alert-message { padding-block: 4px 12px; color: var(--gz-text-2); font-size: 14px; line-height: 1.6; max-height: 40vh; overflow-wrap: anywhere; }
+ion-alert.gz-alert .alert-button-group { flex-direction: column-reverse; gap: 8px; padding: 6px 16px 16px; flex-wrap: nowrap; }
+ion-alert.gz-alert .alert-button {
+  margin: 0; width: 100%; min-height: 48px; border-radius: 16px; border: 0; justify-content: center; font-family: var(--gz-font);
+  background: var(--gz-primary); color: #fff; font-weight: 700; font-size: 15px;
+}
+ion-alert.gz-alert .alert-button.alert-button-role-destructive { background: var(--gz-pink-ink); color: #fff; }
+ion-alert.gz-alert .alert-button.alert-button-role-cancel { background: transparent; color: var(--gz-text-2); font-weight: 600; }
+ion-alert.gz-alert .alert-button:focus-visible { outline: 3px solid var(--gz-primary); outline-offset: 2px; }

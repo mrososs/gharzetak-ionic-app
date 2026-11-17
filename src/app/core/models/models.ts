@@ -93,6 +93,8 @@ export interface Pattern {
   readonly position: number;
   /** Content revision (1 on creation; +1 whenever an edit changes the text). Absent on patterns saved by older builds = 1. */
   readonly rev?: number;
+  /** The text the pattern was converted from by Smart paste (kept so the original is always recoverable). */
+  readonly sourceText?: string;
   /** Optional suggested project duration in minutes: only ever pre-fills a project's own optional estimate. */
   readonly suggestedMinutes?: number;
   readonly updatedAt: number;

@@ -22,14 +22,18 @@ export class UiFeedback {
     return this.toast(this.i18n.q(ar, en));
   }
 
-  async confirm(header: string, message: string, confirmText: string, destructive = true): Promise<boolean> {
+  /**
+   * Confirmation dialog in the unified style: the confirming action is the filled primary (filled danger when destructive),
+   * Cancel is a quiet text button below it. Android hardware Back / backdrop count as Cancel.
+   */
+  async confirm(header: string, message: string, confirmText: string, destructive = true, cancelText?: string): Promise<boolean> {
     const t = this.i18n.t();
     const a = await this.alerts.create({
       header,
       message,
       cssClass: 'gz-alert',
       buttons: [
-        { text: t.cancel, role: 'cancel' },
+        { text: cancelText ?? t.cancel, role: 'cancel' },
         { text: confirmText, role: destructive ? 'destructive' : 'confirm' },
       ],
     });
