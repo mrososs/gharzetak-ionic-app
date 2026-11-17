@@ -50,7 +50,7 @@ import { PhotoComponent } from '../../shared/ui/images/photo.component';
               <section class="gz-rcard" [attr.aria-label]="p.name">
                 <div class="flex items-center gap-2">
                   <div class="min-w-0 flex-1">
-                    <div class="gz-b gz-hd" style="font-size: 17px">{{ p.name }} <span class="gz-ltr gz-mute">× {{ p.quantity }}</span></div>
+                    <div class="gz-b gz-hd" style="font-size: 17px">{{ p.name }} <span class="gz-mute gz-sm">· {{ i18n.q('عدد ' + p.quantity, '×' + p.quantity) }}</span></div>
                     <div class="gz-xs gz-mute">{{ ps.rounds.length }} {{ i18n.q('أدوار', 'rounds') }}@if (ps.ok) { · <span class="gz-ltr">{{ ps.total }}</span> {{ i18n.q('غرزة', 'sts') }} } @else if (ps.rounds.length) { · {{ ps.bad }} {{ i18n.q('غير مدعوم', 'unsupported') }} }</div>
                   </div>
                   <button type="button" class="gz-lnk" (click)="toggle(p.id)" [attr.aria-expanded]="open().has(p.id)">{{ open().has(p.id) ? i18n.q('إخفاء', 'Hide') : i18n.q('عرض', 'View') }}</button>

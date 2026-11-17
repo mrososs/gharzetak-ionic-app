@@ -104,24 +104,19 @@ import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.co
       </div>
     </ion-content>
 
-    <gz-sheet [open]="sheet() === 'tools'" [label]="t().myTools" (closed)="sheet.set(null)"><gz-tools-sheet-body (done)="sheet.set(null)" /></gz-sheet>
-    <gz-sheet [open]="sheet() === 'avatar'" [label]="i18n.q('شخصيتي في غرزتك', 'My Crochet Avatar')" (closed)="sheet.set(null)">
-      <h2 class="gz-h2 gz-hd text-center">{{ i18n.q('شخصيتي في غرزتك', 'My Crochet Avatar') }}</h2>
-      <p class="gz-mute gz-sm text-center" style="margin: 4px 0 8px">{{ i18n.q('اختاري صاحبتك الصغيرة اللي هترافقك في كل مشروع كروشيه.', 'Pick the little friend who will join you in every crochet project.') }}</p>
+    <gz-sheet [open]="sheet() === 'tools'" [title]="t().myTools" (closed)="sheet.set(null)"><gz-tools-sheet-body (done)="sheet.set(null)" /></gz-sheet>
+    <gz-sheet [open]="sheet() === 'avatar'" [title]="i18n.q('شخصيتي في غرزتك', 'My Crochet Avatar')" [description]="i18n.q('اختاري صاحبتك الصغيرة اللي هترافقك في كل مشروع كروشيه.', 'Pick the little friend who will join you in every crochet project.')" (closed)="sheet.set(null)">
       <gz-avatar-picker [compact]="true" [selected]="draftAvatar()" (picked)="draftAvatar.set($event)" />
-      <div class="gz-sheet-foot">
-        <button type="button" class="gz-btn" (click)="saveAvatar()">{{ i18n.q('دي شخصيتي!', "That's my buddy!") }}<svg gzIcon="check" /></button>
-        <button type="button" class="gz-btn2 mt-2" (click)="sheet.set(null)">{{ t().cancel }}</button>
-      </div>
+      <ng-container gzActions>
+        <button type="button" class="gz-btn" (click)="saveAvatar()"><svg gzIcon="check" />{{ i18n.q('دي شخصيتي!', "That's my buddy!") }}</button>
+        <button type="button" class="gz-btn-text" (click)="sheet.set(null)">{{ t().cancel }}</button>
+      </ng-container>
     </gz-sheet>
-    <gz-sheet [open]="sheet() === 'erase'" [label]="t().resetDemo" (closed)="sheet.set(null)">
-      <div class="text-center" style="padding: 6px 0 4px">
-        <div class="gz-tile t-blush mx-auto mb-2.5" style="width: 60px; height: 60px; border-radius: 20px"><svg gzIcon="trash" size="l" /></div>
-        <h2 class="gz-h2 gz-hd">{{ t().resetDemo }}</h2>
-        <p class="gz-mute gz-sm" style="margin: 6px 0 16px">{{ t().resetAllBody }}</p>
-      </div>
-      <button type="button" class="gz-btn danger" (click)="erase()">{{ t().resetConfirm }}</button>
-      <button type="button" class="gz-btn2 mt-2" (click)="sheet.set(null)">{{ t().cancel }}</button>
+    <gz-sheet [open]="sheet() === 'erase'" [title]="t().resetDemo" [description]="t().resetAllBody" (closed)="sheet.set(null)">
+      <ng-container gzActions>
+        <button type="button" class="gz-btn danger" (click)="erase()"><svg gzIcon="trash" size="s" />{{ t().resetConfirm }}</button>
+        <button type="button" class="gz-btn-text" (click)="sheet.set(null)">{{ t().cancel }}</button>
+      </ng-container>
     </gz-sheet>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

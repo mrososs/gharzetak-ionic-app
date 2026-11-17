@@ -168,8 +168,7 @@
 </ion-content>
 
 <!-- picker -->
-<gz-sheet [open]="sheet() === 'picker'" [label]="t().pickProject" (closed)="sheet.set(null)">
-  <h2 class="gz-h2 gz-hd mb-2.5">{{ t().pickProject }}</h2>
+<gz-sheet [open]="sheet() === 'picker'" [title]="t().pickProject" (closed)="sheet.set(null)">
   <div class="flex flex-col gap-2.5">
     @for (x of pickItems(); track x.id) {
       <button type="button" class="gz-rcard" [class.cur]="p()?.id === x.id" (click)="pick(x.id)">
@@ -188,9 +187,8 @@
 </gz-sheet>
 
 <!-- settings (GZ-T05) -->
-<gz-sheet [open]="sheet() === 'cfg'" [label]="t().trkSettings" (closed)="sheet.set(null)">
+<gz-sheet [open]="sheet() === 'cfg'" [title]="t().trkSettings" (closed)="sheet.set(null)">
   @if (p(); as project) {
-    <h2 class="gz-h2 gz-hd">{{ t().trkSettings }}</h2>
     <label class="gz-lbl" for="cf-name">{{ t().projName }}</label>
     <div class="gz-in"><input id="cf-name" type="text" maxlength="120" [value]="project.name" (input)="onName($event)" /></div>
     @if (!isPattern()) {
@@ -242,14 +240,9 @@
 </gz-sheet>
 
 <!-- reset confirmation (GZ-T06) -->
-<gz-sheet [open]="sheet() === 'reset'" [label]="t().resetTitle" (closed)="sheet.set(null)">
-  <div class="text-center" style="padding: 6px 0 4px">
-    <div class="gz-tile t-blush mx-auto mb-2.5" style="width: 60px; height: 60px; border-radius: 20px"><svg gzIcon="reset" size="l" /></div>
-    <h2 class="gz-h2 gz-hd">{{ t().resetTitle }}</h2>
-    <p class="gz-mute gz-sm" style="margin: 6px 0 16px">
-      {{ isPattern() ? i18n.q('الخطوات المنفّذة في الدور الحالي هترجع للصفر.', 'Steps done in the current round return to zero.') : i18n.q('عدّاد الدور الحالي هيرجع للصفر (رقم الدور مبيتغيرش).', 'The current round counter returns to zero (the round number stays).') }}
-    </p>
-  </div>
-  <button type="button" class="gz-btn danger" (click)="confirmReset()">{{ t().resetConfirm }}</button>
-  <button type="button" class="gz-btn2 mt-2" (click)="sheet.set(null)">{{ t().cancel }}</button>
+<gz-sheet [open]="sheet() === 'reset'" [title]="t().resetTitle" [description]="isPattern() ? i18n.q('الخطوات المنفّذة في الدور الحالي هترجع للصفر.', 'Steps done in the current round return to zero.') : i18n.q('عدّاد الدور الحالي هيرجع للصفر (رقم الدور مبيتغيرش).', 'The current round counter returns to zero (the round number stays).')" (closed)="sheet.set(null)">
+  <ng-container gzActions>
+    <button type="button" class="gz-btn danger" (click)="confirmReset()"><svg gzIcon="reset" size="s" />{{ t().resetConfirm }}</button>
+    <button type="button" class="gz-btn-text" (click)="sheet.set(null)">{{ t().cancel }}</button>
+  </ng-container>
 </gz-sheet>

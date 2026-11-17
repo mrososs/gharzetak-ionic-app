@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { IonContent, IonHeader, IonInput, NavController } from '@ionic/angular';
@@ -36,7 +36,7 @@ const MAX_FILE = 10 * 1024 * 1024;
       </div>
     </ion-header>
     <ion-content class="gz-scroll">
-      @if (editing() && !original()) {
+      @if (editing() && store.loaded() && !original()) {
         <div class="gz-pad"><div class="gz-note rose" role="alert"><span>{{ i18n.q('الباترون ده مش موجود.', 'This pattern no longer exists.') }}</span></div></div>
       } @else if (original()?.isSample) {
         <div class="gz-pad"><div class="gz-note lav"><svg gzIcon="info" size="s" /><span>{{ i18n.q('الباترونات النموذجية مش قابلة للتعديل — انسخي النص في باترون جديد.', 'Sample patterns cannot be edited — copy the text into a new pattern.') }}</span></div></div>
@@ -178,7 +178,7 @@ const MAX_FILE = 10 * 1024 * 1024;
 export class AddPatternPage implements HasUnsavedChanges {
   protected readonly i18n = inject(I18nService);
   protected readonly nav = inject(NavController);
-  private readonly store = inject(AppStore);
+  protected readonly store = inject(AppStore);
   private readonly sync = inject(SyncService);
   private readonly ui = inject(UiFeedback);
   private readonly drafts = inject(ImportDraftService);
@@ -278,9 +278,19 @@ export class AddPatternPage implements HasUnsavedChanges {
     void this.ui.say('تم التحويل — راجعي النص واحفظي', 'Converted — review the text and save');
   }
 
+  constructor() {
+    // A deep link / app restart opens this page before the store has loaded: hydrate as soon as the pattern is available.
+    effect(() => {
+      this.original();
+      this.store.loaded();
+      untracked(() => this.hydrate());
+    });
+  }
+
   private hydrate(): void {
     const key = this.id() ?? '';
     if (this.loadedFor === key) return;
+    if (key && !this.original()) return; // not loaded yet — the effect calls again when it is
     this.loadedFor = key;
     const o = this.original();
     if (!o || o.isSample) return;

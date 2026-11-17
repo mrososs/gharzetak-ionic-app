@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { LVL, LVL_IDS, LevelId } from '../../core/data/catalog';
 import { HasUnsavedChanges } from '../../core/guards/unsaved-changes.guard';
@@ -56,7 +56,7 @@ const MAX_TEXT = 20000;
     </ion-header>
     <ion-content class="gz-scroll">
       <div class="gz-pad">
-        @if (editing() && !original()) {
+        @if (editing() && store.loaded() && !original()) {
           <div class="gz-note rose" role="alert"><span>{{ i18n.q('الباترون ده مش موجود.', 'This pattern no longer exists.') }}</span></div>
         } @else {
           <label class="gz-lbl" for="ce-name">{{ i18n.q('اسم الباترون', 'Pattern name') }}</label>
@@ -110,7 +110,7 @@ const MAX_TEXT = 20000;
               <div class="gz-rcard" style="padding: 12px 14px">
                 <div class="flex items-center gap-2">
                   <button type="button" class="gz-reset flex min-w-0 flex-1 flex-col text-start" style="min-height: 44px" (click)="editPart(p.id)" [attr.aria-label]="i18n.q('تعديل الجزء ', 'Edit part ') + p.name">
-                    <span class="gz-b gz-hd truncate" style="font-size: 16px">{{ p.name || '—' }} <span class="gz-ltr gz-mute">× {{ p.quantity }}</span></span>
+                    <span class="gz-b gz-hd truncate" style="font-size: 16px">{{ p.name || '—' }} <span class="gz-mute gz-sm">· {{ i18n.q('عدد ' + p.quantity, '×' + p.quantity) }}</span></span>
                     <span class="gz-xs gz-mute">{{ s }}</span>
                   </button>
                   <button type="button" class="gz-icb flat" style="width: 44px; height: 44px" [disabled]="i === 0" (click)="move(i, -1)" [attr.aria-label]="i18n.q('تحريك لأعلى', 'Move up')"><svg gzIcon="chevd" size="s" style="transform: rotate(180deg)" /></button>
@@ -265,6 +265,15 @@ export class CollectionEditorPage implements HasUnsavedChanges {
     void this.ui.say(`تمت إضافة ${draft.parts.length} جزء — راجعيهم واحفظي`, `${draft.parts.length} part(s) added — review them and save`);
   }
 
+  constructor() {
+    // A deep link / app restart opens this page before the store has loaded: hydrate as soon as the collection is available.
+    effect(() => {
+      this.original();
+      this.store.loaded();
+      untracked(() => this.hydrate());
+    });
+  }
+
   private blank(): Draft {
     return { name: '', description: '', level: 'beginner', terms: 'us', cover: null, minutes: 0, sourceText: '', parts: [] };
   }
@@ -272,6 +281,7 @@ export class CollectionEditorPage implements HasUnsavedChanges {
   private hydrate(): void {
     const key = this.id() ?? '';
     if (this.loadedFor === key) return;
+    if (key && !this.original()) return; // not loaded yet — the effect calls again when it is
     this.loadedFor = key;
     const c = this.original();
     const d: Draft = c

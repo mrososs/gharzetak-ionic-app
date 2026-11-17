@@ -15,6 +15,8 @@ export interface ProgressPosition {
   actionPtr: number;
   /** Multi-part projects only: sum of every part instance's position (see `multiPosition`). */
   multi?: number;
+  /** Multi-part projects only: the server's full per-piece state, so a stale device can merge instead of overwrite. */
+  multiState?: PullMultiState;
 }
 
 export interface ConflictCurrent {

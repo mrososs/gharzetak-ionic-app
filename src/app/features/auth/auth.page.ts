@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { AlertController, IonContent, IonHeader, IonInput, IonSpinner, NavController } from '@ionic/angular';
+import { IonContent, IonHeader, IonInput, IonSpinner, NavController } from '@ionic/angular';
 import { AuthErrorKey, AuthService } from '../../core/auth/auth.service';
 import { BiometricService } from '../../core/auth/biometric.service';
 import { I18nService } from '../../core/i18n/i18n.service';
@@ -106,7 +106,6 @@ export class AuthPage {
   private readonly store = inject(AppStore);
   private readonly ui = inject(UiFeedback);
   private readonly bio = inject(BiometricService);
-  private readonly alerts = inject(AlertController);
 
   readonly mode = input<'login' | 'signup'>('login');
   protected readonly t = this.i18n.t;
@@ -199,19 +198,9 @@ export class AuthPage {
     if (!user || this.auth.biometricEnabled() || wasDeclined(user.id)) return;
     if (!(await this.bio.check()).available) return;
     const t = this.t();
-    const a = await this.alerts.create({
-      header: t.bioAskTitle,
-      message: t.bioAskBody,
-      cssClass: 'gz-alert',
-      backdropDismiss: false,
-      buttons: [
-        { text: t.bioLater, role: 'cancel' },
-        { text: t.bioEnable, role: 'confirm' },
-      ],
-    });
-    await a.present();
-    const { role } = await a.onDidDismiss();
-    if (role !== 'confirm') return void markDeclined(user.id);
+    // Same confirmation dialog as everywhere else: the offered action is the filled primary, "Not now" is the quiet text button.
+    const yes = await this.ui.confirm(t.bioAskTitle, t.bioAskBody, t.bioEnable, false, t.bioLater);
+    if (!yes) return void markDeclined(user.id);
     const r = await this.auth.enableBiometrics(); // the OS asks for a real fingerprint here
     await this.ui.toast(r.ok ? t.bioOnToast : t.bioEnableFailed);
   }

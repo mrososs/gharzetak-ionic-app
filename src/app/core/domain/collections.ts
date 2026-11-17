@@ -152,6 +152,34 @@ export function multiPosition(instances: readonly PartInstance[]): number {
   return instances.reduce((sum, i) => sum + (i.mode === 'pattern' ? i.cursor.roundIndex * 1_000_000 + i.cursor.ptr : i.simple.round * 1_000_000 + i.simple.count), 0);
 }
 
+/**
+ * Merges two devices' states of the same multi-part project PIECE BY PIECE, so progress on Arm 1 (device A) and on Arm 2
+ * (device B) both survive. Per piece: the more recently edited copy wins (so a deliberate undo is respected); when the edit
+ * times tie, the further-along one wins. Recorded time never goes down. Pieces that exist on only one side are kept.
+ */
+export function mergeInstances(local: readonly PartInstance[], remote: readonly PartInstance[]): PartInstance[] {
+  const pos = (i: PartInstance) => (i.mode === 'pattern' ? i.cursor.roundIndex * 1_000_000 + i.cursor.ptr : i.simple.round * 1_000_000 + i.simple.count);
+  const byId = new Map<string, PartInstance>();
+  for (const r of remote) byId.set(r.id, r);
+  for (const l of local) {
+    const r = byId.get(l.id);
+    if (!r) {
+      byId.set(l.id, l);
+      continue;
+    }
+    const winner = l.updatedAt > r.updatedAt ? l : l.updatedAt < r.updatedAt ? r : pos(l) >= pos(r) ? l : r;
+    byId.set(l.id, { ...winner, workedSeconds: Math.max(l.workedSeconds, r.workedSeconds) });
+  }
+  return [...byId.values()];
+}
+
+/** Union of the pinned part copies of two devices (the one with the higher collection revision wins a clash). */
+export function mergeSnapshots(local: readonly PartSnapshot[], localRev: number, remote: readonly PartSnapshot[], remoteRev: number): PartSnapshot[] {
+  const preferred = localRev >= remoteRev ? local : remote;
+  const other = localRev >= remoteRev ? remote : local;
+  return [...preferred, ...other.filter((s) => !preferred.some((p) => p.partId === s.partId))];
+}
+
 const untouched = (i: PartInstance): boolean => i.cursor.roundIndex === 0 && i.cursor.ptr === 0 && i.simple.round === 1 && i.simple.count === 0 && i.workedSeconds === 0 && !i.cursor.history.length && !i.simple.history.length;
 
 /* ------------------------------------------------------------------ */

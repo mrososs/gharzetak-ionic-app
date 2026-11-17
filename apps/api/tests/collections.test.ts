@@ -145,7 +145,7 @@ describe('revision history', () => {
     expect(again.status).toBe(200);
     const revs = (await pull(u)).revisions.filter((r) => r.entityId === pid);
     expect(revs).toHaveLength(1);
-    expect(revs[0].snapshot.text).toBe('R1: 6sc in MR [6]'); // history cannot be rewritten
+    expect(revs[0]?.snapshot.text).toBe('R1: 6sc in MR [6]'); // history cannot be rewritten
   });
 
   it('needs the right snapshot shape and an owned entity', async () => {
@@ -203,8 +203,8 @@ describe('projects from collections: independent progress', () => {
     const prog = await json(u, 'PUT', `/v1/projects/${pid}/progress`, progressBody({ baseRevision: 1, count: 3, clientUpdatedAt: Date.now() + 10 }));
     expect(prog.status).toBe(200);
     const state = await pull(u);
-    expect(state.projects[0].collectionId).toBe(cid);
-    expect(state.progress[0].multiState?.instances).toHaveLength(1);
+    expect(state.projects[0]?.collectionId).toBe(cid);
+    expect(state.progress[0]?.multiState?.instances).toHaveLength(1);
   });
 
   it('a progress conflict reports the multi-part position so the further-along device wins', async () => {
@@ -239,7 +239,7 @@ describe('projects from collections: independent progress', () => {
     expect((await json(u, 'PUT', `/v1/patterns/${pat}`, { ...body, baseRevision: 2, contentRev: 2, rawText: 'R1: 6sc in MR [6]\nR2: inc x 6 [12]', clientUpdatedAt: Date.now() + 9 })).status).toBe(200);
     const state = await pull(u);
     expect(state.patterns[0]).toMatchObject({ contentRev: 2, suggestedMinutes: 90 });
-    expect(state.progress[0].patternSnapshot?.text).toBe('R1: 6sc in MR [6]');
+    expect(state.progress[0]?.patternSnapshot?.text).toBe('R1: 6sc in MR [6]');
   });
 
   it('records which part instance a work session belonged to (project total stays the single source of truth)', async () => {
@@ -258,8 +258,22 @@ describe('projects from collections: independent progress', () => {
   it('keeps the optional estimate (estimatedHours) exactly as sent, including 0 = none', async () => {
     const u = await signUp('estimate');
     const pid = await createProject(u, { estimatedHours: 4.5 });
-    expect((await pull(u)).projects[0].estimatedHours).toBe(4.5);
+    expect((await pull(u)).projects[0]?.estimatedHours).toBe(4.5);
     expect((await json(u, 'PUT', `/v1/projects/${pid}`, projectBody({ baseRevision: 1, estimatedHours: 0, clientUpdatedAt: Date.now() + 10 }))).status).toBe(200);
-    expect((await pull(u)).projects[0].estimatedHours).toBe(0);
+    expect((await pull(u)).projects[0]?.estimatedHours).toBe(0);
+  });
+});
+
+describe('pattern source text (original paste stays recoverable)', () => {
+  it('stores sourceText with the pattern, and an older client that omits it never clears it', async () => {
+    const u = await signUp('srctext');
+    const pid = uuid();
+    const body = { baseRevision: 0, clientUpdatedAt: Date.now(), name: 'P', level: 'beginner', terms: 'us', sourceType: 'text', sourceUrl: null, attribution: null, rawText: 'R1: 6sc in MR [6]', readingPosition: 0, rounds: [], sourceText: 'الدور الأول: ٦ سنجل في حلقة سحرية' };
+    expect((await json(u, 'PUT', `/v1/patterns/${pid}`, body)).status).toBe(201);
+    const old = { ...body, baseRevision: 1, clientUpdatedAt: Date.now() + 5, name: 'Renamed' } as Record<string, unknown>;
+    delete old['sourceText'];
+    expect((await json(u, 'PUT', `/v1/patterns/${pid}`, old)).status).toBe(200);
+    const row = await env.DB.prepare('SELECT name, source_text AS s FROM patterns WHERE id = ?1').bind(pid).first<{ name: string; s: string }>();
+    expect(row).toEqual({ name: 'Renamed', s: 'الدور الأول: ٦ سنجل في حلقة سحرية' });
   });
 });

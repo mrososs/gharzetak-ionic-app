@@ -4,7 +4,7 @@ import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard, KeyboardResize } from '@capacitor/keyboard';
 import { StatusBar, Style } from '@capacitor/status-bar';
-import { AlertController, IonApp, IonRouterOutlet, NavController, Platform } from '@ionic/angular';
+import { IonApp, IonRouterOutlet, NavController, Platform } from '@ionic/angular';
 import { AuthService } from './core/auth/auth.service';
 import { ONBOARDING_SLIDES, SETUP_STEPS, previousStep } from './core/data/flows';
 import { I18nService } from './core/i18n/i18n.service';
@@ -51,7 +51,6 @@ export class App implements OnInit {
   /** Instantiated at launch so the native immersive state is mirrored into the layout before the first screen. */
   private readonly immersive = inject(ImmersiveService);
   private readonly importer = inject(GuestImportService);
-  private readonly alerts = inject(AlertController);
   private readonly i18n = inject(I18nService);
   private readonly ui = inject(UiFeedback);
   private askedImportFor: string | null = null;
@@ -164,18 +163,7 @@ export class App implements OnInit {
     const n = await this.importer.refresh();
     if (!n) return;
     const t = this.i18n.t();
-    const a = await this.alerts.create({
-      header: t.importTitle,
-      message: this.i18n.fmt(t.importBody, { n }),
-      cssClass: 'gz-alert',
-      buttons: [
-        { text: t.importLater, role: 'cancel' },
-        { text: t.importYes, role: 'confirm' },
-      ],
-    });
-    await a.present();
-    const { role } = await a.onDidDismiss();
-    if (role !== 'confirm') return;
+    if (!(await this.ui.confirm(t.importTitle, this.i18n.fmt(t.importBody, { n }), t.importYes, false, t.importLater))) return;
     const r = await this.importer.importGuestData();
     await this.ui.toast(this.i18n.fmt(t.importDone, { n: r.imported }));
   }

@@ -5,6 +5,8 @@ import {
   createInstances,
   instanceLabel,
   instanceProgress,
+  mergeInstances,
+  mergeSnapshots,
   multiPosition,
   nextUnfinished,
   planCollectionUpdate,
@@ -162,6 +164,45 @@ describe('pattern change analysis (editing never silently corrupts progress)', (
     expect(m.level).toBe('warn');
     expect(m.reasons).toContain('beyond-end');
     expect(m.cursor.roundIndex).toBe(1);
+  });
+});
+
+describe('merging two devices piece by piece', () => {
+  it('keeps Arm 1 progress from device A AND Arm 2 progress from device B (no whole-blob overwrite)', () => {
+    const { snapshots, instances } = createInstances([part('Arms', 2)], id, 0);
+    const text = snapshots[0].text;
+    const a = [tapN({ ...instances[0], updatedAt: 100 }, text, 10), instances[1]]; // device A worked Arm 1
+    const b = [{ ...instances[0], updatedAt: 1 }, tapN({ ...instances[1], updatedAt: 200 }, text, 3)]; // device B (older copy of Arm 1) worked Arm 2
+    const merged = mergeInstances(b, a); // local = B, remote = A
+    const arm1 = merged.find((i) => i.id === instances[0].id)!;
+    const arm2 = merged.find((i) => i.id === instances[1].id)!;
+    expect(arm1.cursor.history).toHaveLength(10);
+    expect(arm2.cursor.history).toHaveLength(3);
+  });
+
+  it('a deliberate later undo wins over an older, further-along copy; time never goes down; one-sided pieces are kept', () => {
+    const { snapshots, instances } = createInstances([part('Head', 1), part('Ears', 2)], id, 0);
+    const text = snapshots[0].text;
+    const older = { ...tapN(instances[0], text, 12), updatedAt: 100, workedSeconds: 90 };
+    const undone = { ...instances[0], updatedAt: 500, workedSeconds: 60 }; // the user undid back to the start later, on another device
+    const merged = mergeInstances([undone, instances[1]], [older, instances[2]]);
+    const head = merged.find((i) => i.id === instances[0].id)!;
+    expect(head.cursor.roundIndex).toBe(0);
+    expect(head.cursor.ptr).toBe(0);
+    expect(head.workedSeconds).toBe(90);
+    expect(merged.map((i) => i.id).sort()).toEqual([instances[0].id, instances[1].id, instances[2].id].sort());
+  });
+
+  it('ties on edit time resolve to the further-along piece; snapshots take the newer collection revision and keep the union', () => {
+    const { snapshots, instances } = createInstances([part('Head', 1)], id, 0);
+    const text = snapshots[0].text;
+    const ahead = { ...tapN(instances[0], text, 6), updatedAt: 50 };
+    const behind = { ...instances[0], updatedAt: 50 };
+    expect(mergeInstances([behind], [ahead])[0].cursor.history).toHaveLength(6);
+    const s = mergeSnapshots([{ ...snapshots[0], text: 'NEW' }], 2, [{ ...snapshots[0], text: 'OLD' }, { ...snapshots[0], partId: 'x', name: 'Extra' }], 1);
+    expect(s).toHaveLength(2); // the clashing part keeps only the newer copy; the extra part from the other side is kept
+    expect(s[0].text).toBe('NEW');
+    expect(s.find((x) => x.partId === 'x')).toBeTruthy();
   });
 });
 

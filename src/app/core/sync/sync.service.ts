@@ -4,7 +4,7 @@ import type { Accepted, ConflictCurrent, MediaStored, PullMultiState, PullProgre
 import { AuthService } from '../auth/auth.service';
 import { toAvatarId } from '../data/avatars';
 import { CategoryId, YarnId, AccessoryId, LevelId } from '../data/catalog';
-import { multiPosition } from '../domain/collections';
+import { PartInstance, mergeInstances, mergeSnapshots, multiPosition } from '../domain/collections';
 import { parsePattern } from '../domain/pattern-parser';
 import { createPatternCursor, createSimpleCounter } from '../domain/tracker-engine';
 import { Pattern, PatternCollection, PatternRevision, Profile, Project, ProjectPhoto, TutorialData } from '../models/models';
@@ -261,7 +261,18 @@ export class SyncService {
     path: string,
     localTs: number,
     body: Record<string, unknown>,
-    info: { kind: OutboxKind; id: string; label: string; ahead?: (cur: ConflictCurrent) => 'ahead' | 'same' | 'behind' },
+    info: {
+      kind: OutboxKind;
+      id: string;
+      label: string;
+      ahead?: (cur: ConflictCurrent) => 'ahead' | 'same' | 'behind';
+      /**
+       * Multi-part progress only: merge the server's per-piece state into the local one (written to the store) and return the rebuilt
+       * request. Returning null falls back to the ordinary rules. Nothing is overwritten wholesale, so a piece worked on by another
+       * device keeps its progress.
+       */
+      merge?: (cur: ConflictCurrent) => Promise<{ body: Record<string, unknown>; localTs: number } | null>;
+    },
   ): Promise<'applied' | 'superseded'> {
     for (let attempt = 0; attempt <= MAX_REBASES; attempt++) {
       try {
@@ -279,6 +290,15 @@ export class SyncService {
         if (!cur.deleted && cur.clientUpdatedAt === localTs) {
           this.pullRequested = true;
           return 'superseded';
+        }
+        // 1b) Multi-part projects: merge piece by piece and retry with the merged state (never a whole-blob overwrite).
+        if (!cur.deleted && info.merge) {
+          const merged = await info.merge(cur);
+          if (merged) {
+            body = merged.body;
+            localTs = merged.localTs;
+            continue;
+          }
         }
         // 2) Tracker progress: the further-along position always wins, whatever the clocks say, so no stitches are thrown away.
         const rel = cur.deleted ? 'behind' : (info.ahead?.(cur) ?? 'behind');
@@ -387,6 +407,7 @@ export class SyncService {
           patternSnapshot: p.patternPin ? { rev: p.patternPin.rev, name: p.patternPin.name.slice(0, 120), text: p.patternPin.text.slice(0, 20000), terms: p.patternPin.terms } : null,
         }, {
           kind: 'progress', id: e.id, label: p.name,
+          merge: p.parts?.length && p.collectionId ? (cur) => this.mergeMultiConflict(e.id, cur) : undefined,
           ahead: (cur) => {
             const s = cur.state;
             if (p.parts?.length && s?.multi != null) {
@@ -677,6 +698,41 @@ export class SyncService {
       ...(profileAdopted ? { profile: this.store.profile() } : {}),
       ...(interestEmail !== null ? { storeEmail: this.store.storeEmail(), storeNotified: this.store.storeNotified() } : {}),
     });
+  }
+
+  /**
+   * A progress push lost to another device's newer revision of a MULTI-PART project: keep this device's copy as a recoverable backup,
+   * merge the two states piece by piece into the store, and rebuild the push body from the merged result.
+   */
+  private async mergeMultiConflict(projectId: string, cur: ConflictCurrent): Promise<{ body: Record<string, unknown>; localTs: number } | null> {
+    const remote = cur.state?.multiState;
+    const local = this.store.project(projectId);
+    if (!remote || !local?.parts?.length || !local.collectionId) return null;
+    const wire = this.multiFromPull({ multiState: remote } as PullProgress);
+    const remoteParts: readonly PartInstance[] = wire.parts ?? [];
+    const remoteSnaps = wire.partSnapshots ?? [];
+    await this.keepBackup('progress', projectId, local.name, { tracker: local.tracker, parts: local.parts, activeInstanceId: local.activeInstanceId ?? null }, 'newer-on-server');
+    const parts = mergeInstances(local.parts, remoteParts);
+    const snapshots = mergeSnapshots(local.partSnapshots ?? [], local.collectionRev ?? 1, remoteSnaps, remote.collectionRev);
+    const active = parts.some((i) => i.id === local.activeInstanceId) ? local.activeInstanceId : remote.activeInstanceId;
+    const now = Date.now();
+    const next = await this.store.updateProject(
+      projectId,
+      (p) => ({ ...p, parts, partSnapshots: snapshots, activeInstanceId: active ?? null, collectionRev: Math.max(p.collectionRev ?? 1, remote.collectionRev), tracker: { ...p.tracker, updatedAt: now } }),
+      [], // we are pushing right now: no new outbox entry needed
+    );
+    if (!next) return null;
+    const t = next.tracker;
+    return {
+      localTs: t.updatedAt,
+      body: {
+        mode: t.mode, round: t.simple.round, target: t.simple.target, perTap: t.simple.perTap, count: t.simple.count, totalRounds: t.simple.totalRounds,
+        patternId: t.patternId, patternRoundIndex: t.cursor.roundIndex, actionPtr: t.cursor.ptr, countMode: t.cursor.mode,
+        history: t.simple.history.slice(-100), patternHistory: t.cursor.history.slice(-100),
+        multiState: this.multiStateBody(next),
+        patternSnapshot: next.patternPin ? { rev: next.patternPin.rev, name: next.patternPin.name.slice(0, 120), text: next.patternPin.text.slice(0, 20000), terms: next.patternPin.terms } : null,
+      },
+    };
   }
 
   /** Wire body of a multi-part project's state (history capped: the undo stack of each piece stays small on the wire). */

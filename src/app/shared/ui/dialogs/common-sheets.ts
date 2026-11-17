@@ -10,7 +10,6 @@ const toggle = <T,>(arr: readonly T[], x: T): T[] => (arr.includes(x) ? arr.filt
 @Component({
   selector: 'gz-tools-sheet-body',
   template: `
-    <h2 class="gz-h2 gz-hd">{{ t().myTools }}</h2>
     <span class="gz-lbl">{{ t().hookQ }}</span>
     <div class="gz-chips">
       @for (h of hooks; track h) {
@@ -58,7 +57,6 @@ export class ToolsSheetBody {
   selector: 'gz-notif-sheet-body',
   imports: [IconComponent],
   template: `
-    <h2 class="gz-h2 gz-hd mb-2.5">{{ t().notifs }}</h2>
     <div class="flex flex-col gap-2.5">
       <div class="gz-rcard">
         <div class="flex items-start gap-2.5">

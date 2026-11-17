@@ -399,7 +399,8 @@ entities.put('/projects/:id/progress', async (c) => {
   // The 409 carries the server's position so a stale device can compare progress, not just clocks, before deciding what to do.
   const { revision, clientUpdatedAt, multiState, ...state } = cur;
   const multi = multiPosition(multiState);
-  return conflict({ revision, clientUpdatedAt, state: multi === null ? state : { ...state, multi } }); // `multi` only for multi-part projects (unchanged shape otherwise)
+  // Multi-part projects: also hand back the server's per-piece state so the stale device can MERGE piece by piece instead of overwriting.
+  return conflict({ revision, clientUpdatedAt, state: multi === null ? state : { ...state, multi, multiState } }); // extra keys only for multi-part projects (unchanged shape otherwise)
 });
 
 entities.put('/projects/:id/notes', async (c) => {
