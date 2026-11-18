@@ -76,6 +76,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
                 <div class="flex items-center gap-2" style="margin: 10px 0 4px"><span class="gz-hd" style="font-size: 28px; color: var(--gz-primary)">R{{ r.n }}</span><span class="gz-xs gz-mute flex-1">{{ pos() + 1 }} / {{ parsed().rounds.length }}</span></div>
                 <div class="gz-code" style="font-size: 20px">{{ code(r.raw) }}</div>
                 <p style="margin: 10px 0 0; font-size: 15px; line-height: 1.7; white-space: pre-line">{{ explain() }}</p>
+                <button type="button" class="gz-btn3 mt-2" style="min-height: 40px; font-size: 13px" (click)="askKhayoota(r.n, r.raw)"><svg gzIcon="sparkles" size="s" />{{ t().askKhayoota }}</button>
                 <div class="mt-2.5 flex flex-wrap gap-1.5">
                   @if (r.ok) {
                     <span class="gz-badge peach gz-ltr">{{ i18n.q('مستهلك: ', 'In: ') }}{{ r.cons }}</span><span class="gz-badge sage gz-ltr">{{ i18n.q('ناتج: ', 'Out: ') }}{{ r.prod }}</span>
@@ -131,6 +132,12 @@ export class PatternReaderPage {
   protected readonly i18n = inject(I18nService);
   protected readonly store = inject(AppStore);
   protected readonly nav = inject(NavController);
+
+  /** Opens Khayoota with a question about this round pre-filled (not sent: the user decides). */
+  protected askKhayoota(n: number, raw: string): void {
+    const ask = this.i18n.q('خيوطة، اشرحيلي الدور ده: ' + raw, 'Khayoota, explain this round: ' + raw);
+    void this.nav.navigateForward(['/tabs/assistant'], { queryParams: { ask: ask.slice(0, 400), round: n } });
+  }
   private readonly ai = inject(AssistantService);
   private readonly ui = inject(UiFeedback);
   readonly id = input.required<string>();

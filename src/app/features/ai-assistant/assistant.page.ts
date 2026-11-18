@@ -1,44 +1,71 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { IonContent, IonFooter, IonHeader } from '@ionic/angular';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { IonContent, IonFooter, IonHeader, NavController } from '@ionic/angular';
+import { resolveAction, type ResolvedAction } from '../../core/ai/action-registry';
 import { AssistantService } from '../../core/ai/assistant.service';
+import { calcFacts } from '../../core/ai/calc';
+import { buildKhayootaContext } from '../../core/ai/khayoota-context';
+import { KhayootaFailure, KhayootaService } from '../../core/ai/khayoota.service';
+import type { InlineImage, KhayootaErrorCode } from '../../core/ai/khayoota.types';
+import { previewFromTranscript, type PatternPreview } from '../../core/ai/transcript-draft';
+import { AuthService } from '../../core/auth/auth.service';
 import { CAT } from '../../core/data/catalog';
 import { parsePattern } from '../../core/domain/pattern-parser';
-import { patternContext } from '../../core/domain/tracker-engine';
 import { displayInTerms } from '../../core/domain/terminology';
+import { patternContext } from '../../core/domain/tracker-engine';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ChatMessage } from '../../core/models/models';
+import { TrackerNavigator } from '../../core/services/tracker-navigator.service';
 import { AppStore } from '../../core/state/app.store';
 import { uuid } from '../../core/state/factories';
 import { readImageFile } from '../../core/utils/image';
 import { projectCard } from '../../shared/project-view';
+import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
+import { ImportDraftService } from '../patterns/import-draft.service';
+import { KhayootaReplyComponent } from './khayoota-reply.component';
 
-/** GZ-S21 assistant · GZ-T04 conversation — demo mode unless an Edge Function is configured. */
+type PhotoPurpose = 'diagnose' | 'pattern';
+/** Base64 cap per image (matches the server contract). */
+const MAX_B64 = 950_000;
+
+/**
+ * GZ-S21 Khayoota (خيوطة) — Gharzetak's AI-powered crochet companion.
+ *
+ *  - Hosted replies (signed in + consent + server kill switch on) go through KhayootaService → /v1/ai.
+ *  - Everything else (guest, offline, no backend, limits, errors) falls back to the deterministic offline helper, labelled.
+ *  - Context: ONLY the chosen project, read from the revision it follows (buildKhayootaContext → trackerView).
+ *  - Photos are resized/re-encoded on the device (EXIF dropped), sent inline, and never stored in chat history.
+ *  - Actions are re-validated at render and at tap; none changes progress or saves anything.
+ */
 @Component({
   selector: 'gz-assistant',
-  imports: [IonHeader, IonContent, IonFooter, IconComponent, PhotoComponent],
+  imports: [IonHeader, IonContent, IonFooter, IconComponent, PhotoComponent, SheetComponent, KhayootaReplyComponent],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top" style="padding-top: calc(18px + var(--gz-safe-top))">
         <div class="gz-tile t-lav" style="width: 46px; height: 46px"><svg gzIcon="sparkles" /></div>
-        <div class="flex min-w-0 flex-1 flex-col"><h1 class="gz-hd m-0" style="font-size: 18px">{{ t().aiTitle }}</h1><span class="gz-xs gz-mute">{{ t().aiSub }}</span></div>
-        @if (!ai.connected) {
-          <span class="gz-badge rose">{{ t().demoBadge }}</span>
-        }
+        <div class="flex min-w-0 flex-1 flex-col"><h1 class="gz-hd m-0" style="font-size: 18px">{{ t().aiTitle }}</h1><span class="gz-xs gz-mute truncate">{{ t().aiSub }}</span></div>
+        <span class="gz-badge" [class.rose]="mode() !== 'ai'" [class.sage]="mode() === 'ai'">{{ mode() === 'ai' ? t().aiBadge : mode() === 'demo' ? t().demoBadge : t().aiOfflineBadge }}</span>
+        <button type="button" class="gz-icb flat" (click)="sheet.set('menu')" [attr.aria-label]="i18n.q('خيارات خيوطة', 'Khayoota options')"><svg gzIcon="sliders" /></button>
       </div>
       <div style="padding: 0 20px 8px">
         <div class="gz-card" style="padding: 10px 12px; border: 1.5px solid var(--gz-border); box-shadow: none">
           <div class="flex items-center gap-2.5">
-            <gz-photo class="flex-none" [tone]="ctx().tone" [src]="ctx().img" [storagePath]="ctx().path" [alt]="ctx().name" [showLabel]="false" iconSize="s" height="44px" width="44px" extraClass="r16" />
+            <gz-photo class="flex-none" [tone]="ctxView().tone" [src]="ctxView().img" [storagePath]="ctxView().path" [alt]="ctxView().name" [showLabel]="false" iconSize="s" height="44px" width="44px" extraClass="r16" />
             <div class="flex min-w-0 flex-1 flex-col">
-              <span class="gz-xs gz-mute gz-b">{{ t().aiContext }}</span>
-              <span class="gz-b truncate" style="font-size: 14px">{{ ctx().name }}</span>
-              <span class="gz-xs gz-mute truncate">{{ ctx().line }}</span>
+              <span class="gz-xs gz-mute gz-b">{{ i18n.q('بتتكلمي عن', 'Talking about') }}</span>
+              <span class="gz-b truncate" style="font-size: 14px">{{ ctxView().name }}</span>
+              <span class="gz-xs gz-mute truncate">{{ ctxView().line }}</span>
             </div>
-            <button type="button" class="gz-btn3" style="min-height: 44px; padding: 0 12px; font-size: 13px" (click)="explainCurrent()">{{ t().explainCur }}</button>
+            @if (useProject()) {
+              <button type="button" class="gz-btn3" style="min-height: 44px; padding: 0 12px; font-size: 13px" (click)="explainCurrent()">{{ t().explainCur }}</button>
+            }
           </div>
+          @if (activeProject()) {
+            <button type="button" class="gz-btn-text gz-xs mt-1" (click)="useProject.set(!useProject())">{{ useProject() ? i18n.q('اسألي سؤال عام بدل كده', 'Ask a general question instead') : i18n.q('اسألي عن المشروع ده', 'Ask about this project') }}</button>
+          }
         </div>
       </div>
     </ion-header>
@@ -53,37 +80,87 @@ import { PhotoComponent } from '../../shared/ui/images/photo.component';
             @if (m.text) {
               <div class="gz-msg" [class.u]="m.role === 'user'" [class.a]="m.role !== 'user'">{{ m.text }}</div>
             }
-            @if (m.role === 'bot' && m.id !== 'hello' && !ai.connected) {
-              <span class="gz-xs" style="color: var(--gz-pink-ink); font-weight: 700; padding-inline: 6px">{{ t().demoReply }}</span>
+            @if (m.role === 'bot' && m.id !== 'hello') {
+              @if (m.error) {
+                <div class="gz-note err" role="alert" style="max-width: 92%">
+                  <div class="flex-1">{{ errorText(m.error) }}</div>
+                  @if (retryable(m.error) && lastQuestion()) { <button type="button" class="gz-btn-text" (click)="retry()">{{ i18n.q('حاولي تاني', 'Try again') }}</button> }
+                </div>
+              }
+              <gz-khayoota-reply [msg]="m" [preview]="m.previewId ? previews()[m.previewId] ?? null : null" (act)="runAction($event)" (watch)="openTopic($event)" (addDraft)="addDraft($event)" (dismissPreview)="dropPreview(m.previewId)" />
+              @if (m.source === 'offline' || m.source === 'demo') {
+                <span class="gz-xs" style="color: var(--gz-pink-ink); font-weight: 700; padding-inline: 6px">{{ m.source === 'demo' ? t().demoReply : t().offlineReply }}</span>
+              }
             }
           </div>
         }
         @if (typing()) {
-          <div class="gz-msg a gz-mute" [style.align-self]="i18n.isAr() ? 'flex-end' : 'flex-start'" role="status">{{ t().typing }}</div>
+          <div class="gz-msg a gz-mute" [style.align-self]="i18n.isAr() ? 'flex-end' : 'flex-start'" role="status">{{ busyText() }}</div>
         }
       </div>
     </ion-content>
 
     <ion-footer class="ion-no-border" style="background: var(--gz-bg)">
-      <!-- The tab bar already owns the safe-area inset; only clear the floating Tracker here. -->
       <div style="padding: 4px 0 var(--gz-tab-float)">
+        @if (guestHint()) {
+          <div class="gz-note lav mx-5 mb-1.5"><svg gzIcon="info" size="s" /><div class="flex-1">{{ i18n.q('خيوطة بالذكاء الاصطناعي محتاجة حساب علشان خصوصيتك. لسه تقدري تستخدمي الشرح بدون نت.', 'Khayoota AI needs an account to protect your privacy. The offline helper still works.') }}</div><button type="button" class="gz-btn-text" (click)="signIn()">{{ i18n.q('تسجيل الدخول', 'Sign in') }}</button></div>
+        }
         <div class="gz-hs" style="padding-block: 2px">
           @for (q of suggestions(); track q) {
             <button type="button" class="gz-chip sm tint" (click)="send(q)">{{ q }}</button>
           }
         </div>
         <div class="flex items-center gap-2 px-5">
-          <label class="gz-icb flat" style="cursor: pointer" [attr.aria-label]="t().attachPhoto">
-            <input class="gz-sr" type="file" accept="image/*" (change)="onPhoto($event)" /><svg gzIcon="camera" />
-          </label>
+          <button type="button" class="gz-icb flat" (click)="photoTap()" [attr.aria-label]="t().attachPhoto"><svg gzIcon="camera" /></button>
+          <input #file class="gz-sr" type="file" accept="image/*" (change)="onPhoto($event)" />
           <div class="gz-in flex-1" style="min-height: 48px; padding: 0 6px 0 14px">
-            <input type="text" [value]="input()" (input)="input.set($any($event.target).value)" (keydown.enter)="send(input())" [placeholder]="t().askPh" [attr.aria-label]="t().askPh" enterkeyhint="send" style="height: 46px" />
+            <input type="text" dir="auto" [value]="input()" (input)="input.set($any($event.target).value)" (keydown.enter)="send(input())" [placeholder]="t().askPh" [attr.aria-label]="t().askPh" enterkeyhint="send" maxlength="2000" style="height: 46px" />
           </div>
-          <button type="button" class="gz-icb pur" (click)="send(input())" [attr.aria-label]="t().send"><svg gzIcon="send" /></button>
+          <button type="button" class="gz-icb pur" (click)="send(input())" [disabled]="typing()" [attr.aria-label]="t().send"><svg gzIcon="send" /></button>
         </div>
-        <div class="gz-xs gz-mute px-6 pt-1.5 text-center">{{ ai.connected ? '' : t().aiDisclaimer }}</div>
+        <div class="gz-xs gz-mute px-6 pt-1.5 text-center">{{ footerNote() }}</div>
       </div>
     </ion-footer>
+
+    <gz-sheet [open]="sheet() === 'consent'" [title]="i18n.q('قبل ما نبدأ', 'Before we start')" (closed)="sheet.set(null)">
+      <div class="flex flex-col gap-2.5">
+        <p class="gz-sm m-0">{{ i18n.q('خيوطة رفيقة كروشيه بالذكاء الاصطناعي من غرزتك — مش مدرّسة بشرية ومش نموذج اتدرّب عندنا.', 'Khayoota is Gharzetak’s AI-powered crochet companion — not a human teacher and not a model trained by us.') }}</p>
+        <ul class="gz-sm m-0" style="padding-inline-start: 18px; line-height: 1.7">
+          <li>{{ i18n.q('لما تسأليها، بنبعت سؤالك والصورة اللي ترفقيها ومعلومات الدور اللي إنتي فيه لخدمة ذكاء اصطناعي بتشغّلها Cloudflare علشان ترد عليكي.', 'When you ask, your question, any photo you attach and details of the round you are on are sent to an AI service run by Cloudflare to answer you.') }}</li>
+          <li>{{ i18n.q('الصور مش بتتخزن عندنا، والمحادثة بتفضل على موبايلك بس.', 'Photos are not stored by us, and the conversation stays on your phone.') }}</li>
+          <li>{{ i18n.q('خيوطة ممكن تغلط — راجعي دايمًا على الباترون. وفيه حد يومي للأسئلة.', 'Khayoota can be wrong — always check against your pattern. There is a daily question limit.') }}</li>
+        </ul>
+      </div>
+      <ng-container gzActions>
+        <button type="button" class="gz-btn" [class.is-busy]="consentBusy()" (click)="acceptConsent()">{{ i18n.q('موافقة ومتابعة', 'Agree and continue') }}</button>
+        <button type="button" class="gz-btn-text" (click)="declineConsent()">{{ i18n.q('مش دلوقتي', 'Not now') }}</button>
+      </ng-container>
+    </gz-sheet>
+
+    <gz-sheet [open]="sheet() === 'photo'" [title]="i18n.q('هتعملي إيه بالصورة؟', 'What should Khayoota do with the photo?')" (closed)="sheet.set(null)">
+      <div class="flex flex-col gap-2">
+        <button type="button" class="gz-btn2" [disabled]="!kh.features().vision" (click)="pickPhoto('diagnose')"><svg gzIcon="search" size="s" />{{ i18n.q('شوفي شغلي', 'Look at my work') }}</button>
+        <button type="button" class="gz-btn2" [disabled]="!kh.features().extract" (click)="pickPhoto('pattern')"><svg gzIcon="notes" size="s" />{{ i18n.q('اقري باترون', 'Read a pattern') }}</button>
+        <p class="gz-xs gz-mute m-0">{{ i18n.q('الصورة بتتصغّر على موبايلك، وبتتبعت للتحليل ومش بتتخزن. نور كويس وصفحة واحدة في الصورة.', 'The photo is resized on your phone, sent for analysis and not stored. Good light, one page per photo.') }}</p>
+        @if (!kh.features().vision && !kh.features().extract) {
+          <p class="gz-xs m-0">{{ i18n.q('تحليل الصور لسه مش متاح.', 'Photo analysis is not available yet.') }}</p>
+        }
+      </div>
+    </gz-sheet>
+
+    <gz-sheet [open]="sheet() === 'menu'" [title]="t().aiTitle" (closed)="sheet.set(null)">
+      <div class="flex flex-col gap-2">
+        @if (kh.hosted() && kh.status(); as s) {
+          @if (s.enabled) {
+            <p class="gz-sm m-0">{{ i18n.q('الباقي النهارده', 'Left today') }}: {{ s.remaining.chat }} {{ i18n.q('سؤال', 'questions') }} · {{ s.remaining.image }} {{ i18n.q('صورة', 'photos') }} · {{ s.remaining.extract }} {{ i18n.q('باترون', 'patterns') }}</p>
+          }
+        }
+        <button type="button" class="gz-btn3" (click)="clearChat()"><svg gzIcon="x" size="s" />{{ i18n.q('مسح المحادثة', 'Clear conversation') }}</button>
+        @if (kh.hosted() && !kh.needsConsent()) {
+          <button type="button" class="gz-btn-text" (click)="withdraw()">{{ i18n.q('إيقاف خيوطة بالذكاء الاصطناعي', 'Turn off Khayoota AI') }}</button>
+        }
+      </div>
+    </gz-sheet>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -91,70 +168,402 @@ export class AssistantPage {
   protected readonly i18n = inject(I18nService);
   protected readonly store = inject(AppStore);
   protected readonly ai = inject(AssistantService);
+  protected readonly kh = inject(KhayootaService);
+  private readonly auth = inject(AuthService);
   private readonly ui = inject(UiFeedback);
+  private readonly nav = inject(NavController);
+  private readonly trackerNav = inject(TrackerNavigator);
+  private readonly drafts = inject(ImportDraftService);
+
+  /** Query params (withComponentInputBinding): ?project=<id> from Project Details / Tracker, ?ask=… from the Pattern Reader. */
+  readonly project = input<string | undefined>();
+  readonly ask = input<string | undefined>();
 
   protected readonly t = this.i18n.t;
+  private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('file');
   protected readonly input = signal('');
   protected readonly typing = signal(false);
+  protected readonly busyText = signal('');
+  protected readonly sheet = signal<'consent' | 'photo' | 'menu' | null>(null);
+  protected readonly consentBusy = signal(false);
+  protected readonly useProject = signal(true);
+  protected readonly previews = signal<Record<string, PatternPreview>>({});
+  protected readonly lastQuestion = signal<{ text: string; images?: InlineImage[]; img?: string; purpose?: PhotoPurpose } | null>(null);
+  private pendingAfterConsent: (() => void) | null = null;
+  private photoPurpose: PhotoPurpose = 'diagnose';
 
-  protected readonly ctx = computed(() => {
-    const p = this.store.currentProject();
-    if (!p) return { name: this.i18n.q('مفيش مشروع نشط', 'No active project'), line: '—', tone: CAT.amigurumi.tone, img: '', path: null as string | null };
+  constructor() {
+    effect(() => {
+      const a = this.ask();
+      if (a) untracked(() => this.input.set(a.slice(0, 2000)));
+    });
+    effect(() => {
+      // Re-read the server status whenever sign-in changes.
+      this.auth.signedIn();
+      untracked(() => void this.kh.refreshStatus());
+    });
+  }
+
+  ionViewWillEnter(): void {
+    void this.kh.refreshStatus();
+  }
+
+  /** The project Khayoota talks about: the one passed in the URL, else the current one. */
+  protected readonly activeProject = computed(() => {
+    const id = this.project();
+    return (id ? this.store.project(id) : null) ?? this.store.currentProject();
+  });
+
+  protected readonly mode = computed<'ai' | 'demo' | 'offline'>(() => (this.kh.ready() ? (this.kh.demoProvider() ? 'demo' : 'ai') : 'offline'));
+
+  protected readonly guestHint = computed(() => this.kh.configured && !this.auth.signedIn());
+
+  protected readonly ctxView = computed(() => {
+    const p = this.useProject() ? this.activeProject() : null;
+    if (!p) return { name: this.i18n.q('من غير مشروع — أسئلة عامة', 'No project — general questions'), line: '—', tone: CAT.amigurumi.tone, img: '', path: null as string | null };
     const card = projectCard(this.store, this.i18n, p);
+    const view = this.store.trackerView(p);
     let line = `${this.i18n.q('الدور ', 'Round ')}${p.tracker.simple.round} · ${p.tracker.simple.count}/${p.tracker.simple.target}`;
-    const pat = p.tracker.mode === 'pattern' ? this.store.pattern(p.tracker.patternId) : null;
-    if (pat) {
-      const c = patternContext(parsePattern(pat.text), p.tracker.cursor);
-      if (c) line = `R${c.round.n} · ${displayInTerms(c.round.raw, pat.terms, this.store.viewTerms())}`;
+    if (view?.source && view.tracker.mode === 'pattern') {
+      const c = patternContext(parsePattern(view.source.text), view.tracker.cursor);
+      if (c) line = `${view.instance ? view.source.name + ' · ' : ''}R${c.round.n} · ${displayInTerms(c.round.raw, view.source.terms, this.store.viewTerms())}`;
     }
     return { name: p.name, line, tone: card.tone, img: card.img, path: card.storagePath };
   });
 
   protected readonly messages = computed<ChatMessage[]>(() => {
-    const p = this.store.currentProject();
-    const name = this.store.profile().displayName || this.i18n.q('صديقتي', 'friend');
+    const p = this.activeProject();
     const hello: ChatMessage = {
       id: 'hello',
       role: 'bot',
       text: this.i18n.q(
-        `أهلاً ${name}! أنا مساعدك${this.ai.connected ? '' : ' التجريبي'} للكروشيه. ` + (p ? `شايفة إن مشروعك الحالي «${p.name}». ` : '') + 'اسأليني أو اضغطي على سؤال من تحت.',
-        `Hi ${name}! I'm your${this.ai.connected ? '' : ' demo'} crochet assistant. ` + (p ? `I can see your current project is "${p.name}". ` : '') + 'Ask me something or tap a question below.',
+        'أهلًا! أنا خيوطة 🧶 صاحبتك في كل غرزة. اسأليني عن الباترون أو ورّيني الشغل اللي محتاجة مساعدة فيه.' + (p ? ` شايفة إن مشروعك «${p.name}».` : ''),
+        'Hi! I’m Khayoota 🧶 your companion for every stitch. Ask me about your pattern or show me the work you need help with.' + (p ? ` I can see your project “${p.name}”.` : ''),
       ),
     };
     return [hello, ...this.store.chat()];
   });
 
-  protected readonly suggestions = computed(() =>
-    this.i18n.isAr()
-      ? ['إزاي أعمل غرزة حشو؟', 'إيه الفرق بين الزيادة والتنقيص؟', 'ليه شغلي طالع معوج؟', 'اشرحلي الدور الخامس.', 'إزاي أعرف لو عدد الغرز صح؟']
-      : ['How do I stuff my work?', "What's the difference between increase and decrease?", 'Why is my work coming out crooked?', 'Explain round 5.', 'How do I know my stitch count is right?'],
-  );
+  protected readonly suggestions = computed(() => {
+    const ar = this.i18n.isAr();
+    const withProject = this.useProject() && !!this.activeProject();
+    if (withProject) return ar ? ['اشرحيلي الدور اللي أنا فيه', 'المفروض أوصل لكام غرزة؟', 'إيه اللي فاضل في المشروع؟', 'إيه الفرق بين الزيادة والتنقيص؟'] : ['Explain the round I’m on', 'How many stitches should I have?', 'What’s left in this project?', 'Increase vs decrease?'];
+    return ar ? ['إزاي أعمل حلقة سحرية؟', 'إيه الفرق بين الزيادة والتنقيص؟', 'ليه شغلي طالع معوج؟', 'يعني إيه (2sc, inc) x 6؟'] : ['How do I make a magic ring?', 'What’s the difference between increase and decrease?', 'Why is my work crooked?', 'What does (2sc, inc) x 6 mean?'];
+  });
 
-  protected async send(text: string, img?: string): Promise<void> {
-    const clean = (text || '').trim();
+  protected readonly footerNote = computed(() => {
+    if (this.mode() === 'offline') return this.t().aiDisclaimer;
+    const s = this.kh.status();
+    const left = s && s.enabled ? ` · ${this.i18n.q('الباقي النهارده', 'left today')}: ${s.remaining.chat}` : '';
+    return this.t().aiHostedNote + left;
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* sending                                                             */
+  /* ------------------------------------------------------------------ */
+
+  protected async send(text: string, img?: { dataUrl: string; image: InlineImage }, purpose: PhotoPurpose = 'diagnose'): Promise<void> {
+    const clean = (text || '').trim().slice(0, 2000);
     if ((!clean && !img) || this.typing()) return;
+    if (this.kh.needsConsent()) {
+      // Ask first; the question is sent only after an explicit "Agree".
+      this.pendingAfterConsent = () => void this.send(clean, img, purpose);
+      this.sheet.set('consent');
+      return;
+    }
     this.input.set('');
-    await this.store.setChat([...this.store.chat(), { id: uuid(), role: 'user', text: clean, img }]);
-    this.typing.set(true);
-    const reply = await this.ai.ask(clean, !!img);
-    await new Promise((r) => setTimeout(r, 450));
-    this.typing.set(false);
-    await this.store.setChat([...this.store.chat(), { id: uuid(), role: 'bot', text: reply.text }]);
+    await this.push({ id: uuid(), role: 'user', text: clean, img: img?.dataUrl });
+    this.lastQuestion.set({ text: clean, images: img ? [img.image] : undefined, img: img?.dataUrl, purpose });
+    await this.answer(clean, img ? [img.image] : undefined, purpose);
   }
 
-  protected async explainCurrent(): Promise<void> {
-    await this.store.setChat([...this.store.chat(), { id: uuid(), role: 'user', text: this.i18n.q('اشرحي الدور الحالي', 'Explain my current round') }]);
+  protected async retry(): Promise<void> {
+    const q = this.lastQuestion();
+    if (q && !this.typing()) await this.answer(q.text, q.images, q.purpose ?? 'diagnose');
+  }
+
+  private async answer(text: string, images: InlineImage[] | undefined, purpose: PhotoPurpose): Promise<void> {
     this.typing.set(true);
-    await new Promise((r) => setTimeout(r, 450));
-    this.typing.set(false);
-    await this.store.setChat([...this.store.chat(), { id: uuid(), role: 'bot', text: this.ai.explainCurrent() }]);
+    this.busyText.set(images?.length && purpose === 'pattern' ? this.i18n.q('خيوطة بتقرا الصورة…', 'Khayoota is reading the photo…') : this.t().aiThinking);
+    try {
+      if (this.kh.ready() && (!images?.length || (purpose === 'pattern' ? this.kh.features().extract : this.kh.features().vision))) {
+        if (images?.length && purpose === 'pattern') await this.extractPattern(images);
+        else await this.hostedChat(text, images);
+      } else {
+        await this.offline(text, !!images?.length);
+      }
+    } finally {
+      this.typing.set(false);
+    }
+  }
+
+  private async hostedChat(text: string, images?: InlineImage[]): Promise<void> {
+    const p = this.useProject() ? this.activeProject() : null;
+    const history = this.store
+      .chat()
+      .filter((m) => m.text && !m.error)
+      .slice(-9, -1)
+      .map((m) => ({ role: m.role === 'user' ? ('user' as const) : ('assistant' as const), text: m.text.slice(0, 2000) }));
+    const calc = calcFacts(text);
+    try {
+      const res = await this.kh.chat({
+        message: text,
+        lang: this.i18n.lang(),
+        ...(images?.length ? { images, intent: 'diagnose-photo' as const } : {}),
+        ...(history.length ? { history } : {}),
+        ...(p ? { context: buildKhayootaContext(this.store, p) } : {}),
+        ...(calc.length ? { calc } : {}),
+      });
+      const r = res.reply;
+      await this.push({
+        id: uuid(),
+        role: 'bot',
+        text: r.text,
+        source: this.kh.demoProvider() ? 'demo' : 'ai',
+        actions: r.actions,
+        observations: r.observations,
+        hypotheses: r.hypotheses,
+        cannotConfirm: r.cannotConfirm,
+        citations: r.citations,
+      });
+    } catch (e) {
+      await this.failed(e, text, !!images?.length);
+    }
+  }
+
+  private async extractPattern(images: InlineImage[]): Promise<void> {
+    try {
+      const res = await this.kh.extract({ images }, this.i18n.lang());
+      const pv = previewFromTranscript(res.transcript, uuid());
+      if (!pv) {
+        const cls = res.transcript.sourceClass;
+        await this.push({
+          id: uuid(),
+          role: 'bot',
+          source: this.kh.demoProvider() ? 'demo' : 'ai',
+          text:
+            cls === 'finished-object'
+              ? this.i18n.q('دي صورة شغل جاهز، مش باترون مكتوب — مقدرش أطلّع منها الباترون الأصلي. لو عايزة، صوّري صفحة الباترون نفسها.', 'This is a photo of finished work, not a written pattern — I can’t recover the original pattern from it. Photograph the pattern page itself instead.')
+              : this.i18n.q('ملقيتش تعليمات باترون أقدر أقراها في الصورة دي. جرّبي صورة أوضح لصفحة الباترون.', 'I couldn’t find pattern instructions to read in this photo. Try a clearer photo of the pattern page.'),
+        });
+        return;
+      }
+      this.previews.update((m) => ({ ...m, [pv.id]: pv }));
+      const review = pv.counts.needsReview + pv.counts.unsupported;
+      // The sentence is filled from the DETERMINISTIC counts, not written by the model.
+      await this.push({
+        id: uuid(),
+        role: 'bot',
+        source: this.kh.demoProvider() ? 'demo' : 'ai',
+        previewId: pv.id,
+        text: this.i18n.q(
+          `لقيت باترون فيه ${pv.counts.rounds} دور${review ? `، و${review} منهم محتاجين مراجعة` : ''}. تحبي نجهزه للإضافة؟ 🧶`,
+          `I found a pattern with ${pv.counts.rounds} rounds${review ? `; ${review} need review` : ''}. Shall I prepare it for you? 🧶`,
+        ),
+      });
+    } catch (e) {
+      await this.failed(e, '', true);
+    }
+  }
+
+  private async offline(text: string, hasImage: boolean): Promise<void> {
+    const reply = text === this.explainText() ? { text: this.ai.explainCurrent() } : await this.ai.ask(text, hasImage);
+    await this.push({ id: uuid(), role: 'bot', text: reply.text, source: 'offline' });
+  }
+
+  private async failed(e: unknown, text: string, hadImage: boolean): Promise<void> {
+    const code: KhayootaErrorCode = e instanceof KhayootaFailure ? e.code : 'unknown';
+    if (code === 'ai_consent_required') {
+      this.sheet.set('consent');
+      return;
+    }
+    // Friendly error line, then (for text questions) the offline helper so the user is never left without an answer.
+    const offline = text && !hadImage ? (await this.ai.ask(text, false)).text : '';
+    await this.push({ id: uuid(), role: 'bot', text: offline, error: code, source: offline ? 'offline' : undefined });
+  }
+
+  private async push(m: ChatMessage): Promise<void> {
+    await this.store.setChat([...this.store.chat(), m]);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* actions                                                             */
+  /* ------------------------------------------------------------------ */
+
+  protected async runAction(a: ResolvedAction): Promise<void> {
+    // Re-validate at tap time: the project / piece may have changed since the reply was rendered.
+    const again = resolveAction(
+      { id: a.kind, v: 1, payload: a.kind === 'learn.explainStitch' ? { stitch: a.stitch } : { projectId: a.projectId, ...(a.instanceId ? { partInstanceId: a.instanceId } : {}) } },
+      {
+        project: (id) => this.store.project(id) ?? null,
+        partLabel: (p, iid) => ((p.parts ?? []).some((i) => i.id === iid && !i.retired) ? iid : null),
+      },
+    );
+    if (!again || a.kind === 'learn.explainStitch') {
+      if (!again) await this.ui.say('ده مبقاش متاح.', 'That is no longer available.');
+      return;
+    }
+    const res = await this.trackerNav.open(a.projectId, a.instanceId);
+    if (res === 'missing') await this.ui.say('معرفتش أفتحه — المشروع مش موجود.', 'Could not open it — the project no longer exists.');
+    if (res === 'done') {
+      await this.ui.say('المشروع ده مكتمل — بفتحلك صفحته.', 'This project is finished — opening its page.');
+      await this.nav.navigateForward(['/tabs/projects', a.projectId]);
+    }
+  }
+
+  protected openTopic(topic: string): void {
+    void this.nav.navigateForward(['/tabs/learn', topic]);
+  }
+
+  /** "إضافة لغرزتك": hands the draft to the REAL editor, unsaved. Nothing is stored until the user presses Save there. */
+  protected async addDraft(pv: PatternPreview): Promise<void> {
+    this.drafts.offer({
+      target: pv.target,
+      collectionName: pv.title,
+      sourceText: pv.sourceText,
+      parts: pv.parts.map((p) => ({ name: p.name, quantity: p.quantity, text: p.text, assemblyNotes: p.notes.join('\n'), status: p.status })),
+    });
+    await this.nav.navigateForward(pv.target === 'collection' ? '/tabs/home/collections/new' : '/tabs/home/patterns/new');
+  }
+
+  protected dropPreview(id: string | undefined): void {
+    if (!id) return;
+    this.previews.update((m) => {
+      const { [id]: _drop, ...rest } = m;
+      return rest;
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* photos                                                              */
+  /* ------------------------------------------------------------------ */
+
+  protected photoTap(): void {
+    if (this.kh.ready() && (this.kh.features().vision || this.kh.features().extract)) {
+      this.sheet.set('photo');
+      return;
+    }
+    if (this.kh.needsConsent()) {
+      this.pendingAfterConsent = () => this.sheet.set('photo');
+      this.sheet.set('consent');
+      return;
+    }
+    this.photoPurpose = 'diagnose';
+    this.fileInput()?.nativeElement.click();
+  }
+
+  protected pickPhoto(purpose: PhotoPurpose): void {
+    this.photoPurpose = purpose;
+    this.sheet.set(null);
+    this.fileInput()?.nativeElement.click();
   }
 
   protected async onPhoto(ev: Event): Promise<void> {
-    const f = (ev.target as HTMLInputElement).files?.[0];
+    const el = ev.target as HTMLInputElement;
+    const f = el.files?.[0];
+    el.value = '';
     if (!f) return;
-    const r = await readImageFile(f, 600, 0.7);
+    // Re-encoded through a canvas: EXIF/GPS metadata is dropped; size is bounded before sending.
+    const edge = this.photoPurpose === 'pattern' ? 1568 : 1280;
+    let r = await readImageFile(f, edge, this.photoPurpose === 'pattern' ? 0.85 : 0.8);
+    if (!('error' in r) && r.dataUrl.length > MAX_B64 + 32) r = await readImageFile(f, 1280, 0.7);
     if ('error' in r) return this.ui.toast(this.t()[r.error]);
-    await this.send('', r.dataUrl);
+    const data = r.dataUrl.slice(r.dataUrl.indexOf(',') + 1);
+    if (data.length > MAX_B64) return this.ui.say('الصورة كبيرة قوي — جرّبي صورة تانية.', 'The photo is too large — try another one.');
+    const text = this.input().trim();
+    await this.send(text, { dataUrl: r.dataUrl, image: { mime: 'image/jpeg', data } }, this.photoPurpose);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* consent, menu, misc                                                 */
+  /* ------------------------------------------------------------------ */
+
+  protected async acceptConsent(): Promise<void> {
+    this.consentBusy.set(true);
+    try {
+      await this.kh.acceptConsent();
+      this.sheet.set(null);
+      const next = this.pendingAfterConsent;
+      this.pendingAfterConsent = null;
+      next?.();
+    } catch {
+      await this.ui.say('معرفتش أحفظ الموافقة — حاولي تاني.', 'Could not save your choice — try again.');
+    } finally {
+      this.consentBusy.set(false);
+    }
+  }
+
+  protected async declineConsent(): Promise<void> {
+    this.sheet.set(null);
+    const next = this.pendingAfterConsent;
+    this.pendingAfterConsent = null;
+    if (next) {
+      // Declined: answer with the offline helper instead (nothing is sent anywhere).
+      const text = this.input().trim();
+      if (text) {
+        this.input.set('');
+        await this.push({ id: uuid(), role: 'user', text });
+        await this.offline(text, false);
+      }
+    }
+  }
+
+  protected async withdraw(): Promise<void> {
+    this.sheet.set(null);
+    await this.kh.withdrawConsent();
+    await this.ui.say('اتقفلت خيوطة بالذكاء الاصطناعي. الشرح بدون نت لسه شغال.', 'Khayoota AI is off. The offline helper still works.');
+  }
+
+  protected async clearChat(): Promise<void> {
+    this.sheet.set(null);
+    this.previews.set({});
+    await this.store.setChat([]);
+  }
+
+  protected signIn(): void {
+    void this.nav.navigateForward('/auth/login');
+  }
+
+  private explainText(): string {
+    return this.i18n.q('اشرحي الدور الحالي', 'Explain my current round');
+  }
+
+  protected async explainCurrent(): Promise<void> {
+    await this.send(this.explainText());
+  }
+
+  protected errorText(code: string): string {
+    const q = (ar: string, en: string) => this.i18n.q(ar, en);
+    const s = this.kh.status();
+    switch (code as KhayootaErrorCode) {
+      case 'network':
+        return q('مفيش نت دلوقتي — دي إجابة من الشرح بدون نت.', 'No connection right now — here is the offline helper instead.');
+      case 'ai_quota_exceeded':
+        return s && s.enabled && !s.available
+          ? q('خيوطة واخدة راحة لحد بكرة — الضغط كان كبير النهارده.', 'Khayoota is resting until tomorrow — it was a busy day.')
+          : q('خلّصنا أسئلة النهارده 🌙 خيوطة هترجع بكرة. العدّاد والشرح بدون نت شغالين عادي.', 'That’s today’s questions 🌙 Khayoota is back tomorrow. The counter and offline helper still work.');
+      case 'ai_rate_limited':
+        return q('أسئلة كتير ورا بعض — استني دقيقة وجرّبي تاني.', 'Lots of questions in a row — wait a minute and try again.');
+      case 'ai_feature_disabled':
+        return q('تحليل الصور لسه مش متاح.', 'Photo analysis is not available yet.');
+      case 'ai_unsupported_image':
+        return q('الصورة دي مش مدعومة — جرّبي JPEG أو PNG.', 'That image type isn’t supported — try a JPEG or PNG.');
+      case 'ai_disabled':
+        return q('خيوطة مش متاحة دلوقتي.', 'Khayoota isn’t available right now.');
+      case 'ai_busy':
+      case 'ai_timeout':
+      case 'ai_upstream_error':
+        return q('خيوطة مش قادرة ترد دلوقتي — جرّبي كمان شوية.', 'Khayoota can’t answer right now — try again shortly.');
+      case 'ai_bad_output':
+        return q('معرفتش أجاوب المرة دي — جرّبي تاني.', 'I couldn’t answer this time — try again.');
+      case 'unauthorized':
+        return q('انتهت الجلسة — سجّلي الدخول تاني.', 'Your session ended — please sign in again.');
+      default:
+        return q('حصلت مشكلة — جرّبي تاني.', 'Something went wrong — try again.');
+    }
+  }
+
+  protected retryable(code: string): boolean {
+    return ['network', 'ai_busy', 'ai_timeout', 'ai_upstream_error', 'ai_bad_output', 'unknown'].includes(code);
   }
 }

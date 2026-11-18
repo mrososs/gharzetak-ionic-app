@@ -9,6 +9,7 @@
     <button type="button" class="gz-chip sm" [class.on]="timerOn()" (click)="toggleTimer()" [disabled]="!p()" [attr.aria-label]="t().workTimer + ': ' + timerLabel()" [attr.aria-pressed]="timerOn()">
       <svg [gzIcon]="timerOn() ? 'pause' : timerState() === 'paused' ? 'play' : 'clock'" size="s" /><span class="gz-ltr">{{ timeText() }}</span>
     </button>
+    <button type="button" class="gz-icb flat" (click)="askKhayoota()" [disabled]="!p()" [attr.aria-label]="t().askKhayoota"><svg gzIcon="sparkles" /></button>
     <button type="button" class="gz-icb" (click)="p() && sheet.set('cfg')" [attr.aria-label]="t().trkSettings"><svg gzIcon="sliders" /></button>
   </div>
 </ion-header>
