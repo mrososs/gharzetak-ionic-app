@@ -1,0 +1,4 @@
+# Fixtures may contain photos of personal handwriting/work; results contain raw model output. Neither is committed.
+fixtures/*
+!fixtures/README.md
+results/
