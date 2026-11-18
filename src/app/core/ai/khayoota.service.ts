@@ -18,6 +18,7 @@ export class KhayootaFailure extends Error {
 const KNOWN: readonly KhayootaErrorCode[] = [
   'unauthorized',
   'ai_disabled',
+  'ai_access_restricted',
   'ai_consent_required',
   'ai_rate_limited',
   'ai_quota_exceeded',
@@ -58,6 +59,11 @@ export class KhayootaService {
     return this.hosted() && !!s && s.enabled && !s.consent.accepted;
   });
   readonly ready = computed(() => this.hosted() && !this.needsConsent());
+  /** Hosted AI exists but this account is not a tester yet: show "coming soon", never call chat/extract. */
+  readonly restricted = computed(() => {
+    const s = this.status();
+    return this.configured && this.auth.signedIn() && !!s && !s.enabled && s.access === 'restricted';
+  });
   readonly features = computed(() => {
     const s = this.status();
     return s && s.enabled ? s.features : { chat: false, vision: false, extract: false };
@@ -135,6 +141,7 @@ export class KhayootaService {
       if (f.code === 'ai_consent_required') this.status.set({ ...s, consent: { ...s.consent, accepted: false } });
       if (f.code === 'ai_quota_exceeded' && f.info.scope === 'global') this.status.set({ ...s, available: false });
       if (f.code === 'ai_disabled') this.status.set({ v: 1, enabled: false });
+      if (f.code === 'ai_access_restricted') this.status.set({ v: 1, enabled: false, access: 'restricted' });
     }
     return f;
   }

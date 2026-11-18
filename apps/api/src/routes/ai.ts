@@ -51,11 +51,13 @@ async function consentVersion(db: D1Database, userId: string): Promise<number> {
   return row?.consent_version ?? 0;
 }
 
-function requireEnabled(c: C): { cfg: AiConfig; provider: AiProvider } {
+/** Kill switch → provider → per-account access (deny-all allowlist). Runs before consent, body parsing, quotas or any model call. */
+async function requireEnabled(c: C): Promise<{ cfg: AiConfig; provider: AiProvider }> {
   const cfg = aiConfig(c.env);
-  if (!cfg.enabled || !userAllowed(cfg, c.get('userId'))) throw aiError(503, 'ai_disabled', 'Khayoota is not available right now');
+  if (!cfg.enabled) throw aiError(503, 'ai_disabled', 'Khayoota is not available right now');
   const provider = createProvider(c.env, cfg);
   if (!provider) throw aiError(503, 'ai_disabled', 'Khayoota is not configured');
+  if (!(await userAllowed(c.env.DB, cfg, c.get('userId')))) throw aiError(403, 'ai_access_restricted', 'Khayoota AI is not available for this account yet');
   return { cfg, provider };
 }
 
@@ -135,8 +137,9 @@ ai.use('*', async (c, next) => {
 
 ai.get('/status', async (c) => {
   const cfg = aiConfig(c.env);
-  const providerReady = cfg.enabled && userAllowed(cfg, c.get('userId')) && !!createProvider(c.env, cfg);
-  if (!providerReady) return c.json({ v: 1, enabled: false });
+  if (!cfg.enabled || !createProvider(c.env, cfg)) return c.json({ v: 1, enabled: false });
+  // Hosted AI is on, but not for this account: the app shows "coming soon" and never calls chat/extract.
+  if (!(await userAllowed(c.env.DB, cfg, c.get('userId')))) return c.json({ v: 1, enabled: false, access: 'restricted' });
   const day = utcDay();
   const [accepted, usage] = await Promise.all([consentVersion(c.env.DB, c.get('userId')), usageFor(c.env.DB, cfg, c.get('userId'), day)]);
   return c.json({
@@ -154,7 +157,7 @@ ai.get('/status', async (c) => {
 });
 
 ai.put('/consent', async (c) => {
-  const { cfg } = requireEnabled(c);
+  const { cfg } = await requireEnabled(c);
   const body = await parseBody(c, consentRequest, 1024);
   if (body.version !== cfg.consentVersion) throw badRequest('Outdated consent version', [{ path: 'version', message: `current version is ${cfg.consentVersion}` }]);
   const now = Date.now();
@@ -173,7 +176,7 @@ ai.delete('/consent', async (c) => {
 });
 
 ai.post('/chat', async (c) => {
-  const { cfg, provider } = requireEnabled(c);
+  const { cfg, provider } = await requireEnabled(c);
   await requireConsent(c, cfg);
   // With photos off, a text-only body is small: refuse big bodies before reading/parsing them (Worker CPU limit).
   const req = await parseBody(c, chatRequest, cfg.features.vision ? AI_LIMITS.chatBodyBytes : AI_LIMITS.chatTextBodyBytes);
@@ -216,7 +219,7 @@ ai.post('/chat', async (c) => {
 });
 
 ai.post('/extract', async (c) => {
-  const { cfg, provider } = requireEnabled(c);
+  const { cfg, provider } = await requireEnabled(c);
   await requireConsent(c, cfg);
   // Flag first: while extraction is off its (large) body is never read.
   if (!cfg.features.extract) throw aiError(403, 'ai_feature_disabled', 'Reading patterns from photos is not available yet', { feature: 'extract' });

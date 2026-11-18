@@ -17,7 +17,7 @@ const flush = async () => {
   for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 10));
 };
 
-function fakeKhayoota(over: { ready?: boolean; needsConsent?: boolean; vision?: boolean; extract?: boolean } = {}) {
+function fakeKhayoota(over: { ready?: boolean; needsConsent?: boolean; vision?: boolean; extract?: boolean; restricted?: boolean } = {}) {
   const ready = over.ready ?? true;
   const needsConsent = signal(over.needsConsent ?? false);
   return {
@@ -28,6 +28,7 @@ function fakeKhayoota(over: { ready?: boolean; needsConsent?: boolean; vision?: 
     ready: signal(ready && !needsConsent()),
     features: signal({ chat: true, vision: !!over.vision, extract: !!over.extract }),
     demoProvider: signal(false),
+    restricted: signal(!!over.restricted),
     refreshStatus: vi.fn(async () => null),
     chat: vi.fn(),
     extract: vi.fn(),
@@ -52,6 +53,8 @@ describe('Khayoota page', () => {
   let kh: ReturnType<typeof fakeKhayoota>;
   let nav: { navigateForward: ReturnType<typeof vi.fn>; navigateRoot: ReturnType<typeof vi.fn>; navigateBack: ReturnType<typeof vi.fn> };
   let drafts: ImportDraftService;
+  let host: HTMLElement;
+  let detect: () => void;
 
   async function setup(k = fakeKhayoota()) {
     kh = k;
@@ -75,6 +78,8 @@ describe('Khayoota page', () => {
     await store.whenScopeLoaded('user:test');
     const fixture = TestBed.createComponent(AssistantPage);
     fixture.detectChanges();
+    host = fixture.nativeElement as HTMLElement;
+    detect = () => fixture.detectChanges();
     return fixture.componentInstance as unknown as Page;
   }
 
@@ -142,6 +147,56 @@ describe('Khayoota page', () => {
     await flush();
     expect(kh.chat).not.toHaveBeenCalled();
     expect(page.messages().at(-1)).toMatchObject({ role: 'bot', source: 'offline' });
+  });
+
+  it('a non-tester account (access restricted) sees "coming soon", and its questions never reach hosted AI', async () => {
+    const page = await setup(fakeKhayoota({ ready: false, restricted: true }));
+    await page.send('خيوطة، إيه الفرق بين sc و hdc؟');
+    await flush();
+    expect(kh.chat).not.toHaveBeenCalled();
+    expect(kh.extract).not.toHaveBeenCalled();
+    expect(page.messages().at(-1)).toMatchObject({ role: 'bot', source: 'offline' });
+    expect((page as unknown as { mode(): string }).mode()).toBe('soon');
+    expect((page as unknown as { statusDetail(): string }).statusDetail()).toContain('مرحلة التجربة');
+  });
+
+  it('composer layout: one flexible field between two fixed round buttons; chips hide while typing; empty drafts never send', async () => {
+    const page = await setup();
+    const row = host.querySelector('.kh-composer')!;
+    expect([...row.children].filter((c) => !c.classList.contains('gz-sr')).map((c) => c.className.split(' ')[0])).toEqual(['gz-icb', 'kh-field', 'gz-icb']);
+    expect(host.querySelector('.kh-field textarea')).not.toBeNull();
+    expect(host.querySelectorAll('.kh-rail .kh-chip').length).toBeGreaterThan(0);
+    const send = host.querySelector<HTMLButtonElement>('.kh-composer .gz-icb.pur')!;
+    expect(send.disabled).toBe(true); // empty draft
+    (page as unknown as { input: { set(v: string): void } }).input.set('   ');
+    detect();
+    expect(send.disabled).toBe(true);
+    const ta = host.querySelector('textarea')!;
+    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(kh.chat).not.toHaveBeenCalled();
+    (page as unknown as { input: { set(v: string): void } }).input.set('long question '.repeat(30));
+    detect();
+    expect(host.querySelector('.kh-rail')).toBeNull(); // suggestions step aside while typing
+    expect(send.disabled).toBe(false);
+    const shift = new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true });
+    ta.dispatchEvent(shift);
+    expect(shift.defaultPrevented).toBe(false); // Shift+Enter = new line
+    expect(kh.chat).not.toHaveBeenCalled();
+  });
+
+  it('status line reflects the real state and never says "offline" while only consent is missing', async () => {
+    const cases: [ReturnType<typeof fakeKhayoota>, string][] = [
+      [fakeKhayoota(), 'متصلة'],
+      [fakeKhayoota({ needsConsent: true }), 'موافقتك'],
+      [fakeKhayoota({ ready: false, restricted: true }), 'مرحلة التجربة'],
+      [fakeKhayoota({ ready: false }), 'غير متاحة'],
+    ];
+    for (const [k, expected] of cases) {
+      await setup(k);
+      const line = host.querySelector('.kh-status')!.textContent!;
+      expect(line).toContain(expected);
+      expect(line).not.toContain('بدون اتصال');
+    }
   });
 
   it('image → pattern: preview from the deterministic parser, then the REAL editor opens with an unsaved draft', async () => {

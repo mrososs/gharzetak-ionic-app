@@ -45,27 +45,27 @@ const MAX_B64 = 950_000;
   imports: [IonHeader, IonContent, IonFooter, IconComponent, PhotoComponent, SheetComponent, KhayootaReplyComponent],
   template: `
     <ion-header class="gz-header ion-no-border">
-      <div class="gz-top" style="padding-top: calc(18px + var(--gz-safe-top))">
+      <div class="gz-top kh-top" style="padding-top: calc(18px + var(--gz-safe-top))">
         <div class="gz-tile t-lav" style="width: 46px; height: 46px"><svg gzIcon="sparkles" /></div>
-        <div class="flex min-w-0 flex-1 flex-col"><h1 class="gz-hd m-0" style="font-size: 18px">{{ t().aiTitle }}</h1><span class="gz-xs gz-mute truncate">{{ t().aiSub }}</span></div>
+        <div class="flex min-w-0 flex-1 flex-col"><h1 class="gz-hd m-0" style="font-size: 18px">{{ t().aiTitle }}</h1><span class="gz-xs gz-mute truncate kh-sub">{{ t().aiSub }}</span></div>
         <span class="gz-badge" [class.rose]="mode() === 'offline'" [class.sage]="mode() === 'ai'" [class.peach]="mode() === 'consent'">{{ badge() }}</span>
         <button type="button" class="gz-icb flat" (click)="sheet.set('menu')" [attr.aria-label]="i18n.q('خيارات خيوطة', 'Khayoota options')"><svg gzIcon="sliders" /></button>
       </div>
-      <div style="padding: 0 20px 8px">
-        <div class="gz-card" style="padding: 10px 12px; border: 1.5px solid var(--gz-border); box-shadow: none">
+      <div class="kh-ctx-wrap" style="padding: 0 20px 8px">
+        <div class="gz-card kh-ctx" style="padding: 10px 12px; border: 1.5px solid var(--gz-border); box-shadow: none">
           <div class="flex items-center gap-2.5">
-            <gz-photo class="flex-none" [tone]="ctxView().tone" [src]="ctxView().img" [storagePath]="ctxView().path" [alt]="ctxView().name" [showLabel]="false" iconSize="s" height="44px" width="44px" extraClass="r16" />
+            <gz-photo class="flex-none kh-ctx-photo" [tone]="ctxView().tone" [src]="ctxView().img" [storagePath]="ctxView().path" [alt]="ctxView().name" [showLabel]="false" iconSize="s" height="44px" width="44px" extraClass="r16" />
             <div class="flex min-w-0 flex-1 flex-col">
-              <span class="gz-xs gz-mute gz-b">{{ i18n.q('بتتكلمي عن', 'Talking about') }}</span>
+              <span class="gz-xs gz-mute gz-b kh-ctx-label">{{ i18n.q('بتتكلمي عن', 'Talking about') }}</span>
               <span class="gz-b truncate" style="font-size: 14px">{{ ctxView().name }}</span>
-              <span class="gz-xs gz-mute truncate">{{ ctxView().line }}</span>
+              <span class="gz-xs gz-mute truncate kh-ctx-line">{{ ctxView().line }}</span>
             </div>
             @if (useProject()) {
               <button type="button" class="gz-btn3" style="min-height: 44px; padding: 0 12px; font-size: 13px" (click)="explainCurrent()">{{ t().explainCur }}</button>
             }
           </div>
           @if (activeProject()) {
-            <button type="button" class="gz-btn-text gz-xs mt-1" (click)="useProject.set(!useProject())">{{ useProject() ? i18n.q('اسألي سؤال عام بدل كده', 'Ask a general question instead') : i18n.q('اسألي عن المشروع ده', 'Ask about this project') }}</button>
+            <button type="button" class="gz-btn-text gz-xs mt-1 kh-ctx-toggle" (click)="useProject.set(!useProject())">{{ useProject() ? i18n.q('اسألي سؤال عام بدل كده', 'Ask a general question instead') : i18n.q('اسألي عن المشروع ده', 'Ask about this project') }}</button>
           }
         </div>
       </div>
@@ -106,20 +106,37 @@ const MAX_B64 = 950_000;
         @if (guestHint()) {
           <div class="gz-note lav mx-5 mb-1.5"><svg gzIcon="info" size="s" /><div class="flex-1">{{ i18n.q('خيوطة بالذكاء الاصطناعي محتاجة حساب علشان خصوصيتك. لسه تقدري تستخدمي الشرح بدون نت.', 'Khayoota AI needs an account to protect your privacy. The offline helper still works.') }}</div><button type="button" class="gz-btn-text" (click)="signIn()">{{ i18n.q('تسجيل الدخول', 'Sign in') }}</button></div>
         }
-        <div class="gz-hs" style="padding-block: 2px">
-          @for (q of suggestions(); track q) {
-            <button type="button" class="gz-chip sm tint" (click)="send(q)">{{ q }}</button>
-          }
-        </div>
-        <div class="flex items-center gap-2 px-5">
+        <!-- Suggestions: one contained, RTL-aware scroll rail (no negative margins), hidden while typing so the
+             composer keeps the space. Chips stay single-line; long ones end in an ellipsis and keep a full label. -->
+        @if (!input().trim() && !typing()) {
+          <div class="kh-rail" role="group" [attr.aria-label]="i18n.q('أسئلة مقترحة', 'Suggested questions')">
+            @for (q of suggestions(); track q) {
+              <button type="button" class="gz-chip sm tint kh-chip" [attr.title]="q" (click)="send(q)">{{ q }}</button>
+            }
+          </div>
+        }
+        <div class="kh-composer">
           <button type="button" class="gz-icb flat" (click)="photoTap()" [attr.aria-label]="t().attachPhoto"><svg gzIcon="camera" /></button>
           <input #file class="gz-sr" type="file" accept="image/*" (change)="onPhoto($event)" />
-          <div class="gz-in flex-1" style="min-height: 48px; padding: 0 6px 0 14px">
-            <input type="text" dir="auto" [value]="input()" (input)="input.set($any($event.target).value)" (keydown.enter)="send(input())" [placeholder]="t().askPh" [attr.aria-label]="t().askPh" enterkeyhint="send" maxlength="2000" style="height: 46px" />
-          </div>
-          <button type="button" class="gz-icb pur" (click)="send(input())" [disabled]="typing()" [attr.aria-label]="t().send"><svg gzIcon="send" /></button>
+          <label class="kh-field">
+            <span class="gz-sr">{{ t().askPh }}</span>
+            <textarea
+              rows="1"
+              dir="auto"
+              [value]="input()"
+              (input)="input.set($any($event.target).value)"
+              (keydown.enter)="onEnter($any($event))"
+              [placeholder]="t().askPh"
+              enterkeyhint="send"
+              maxlength="2000"
+            ></textarea>
+          </label>
+          <button type="button" class="gz-icb pur" (click)="send(input())" [disabled]="typing() || !input().trim()" [attr.aria-label]="t().send"><svg gzIcon="send" /></button>
         </div>
-        <div class="gz-xs gz-mute px-6 pt-1.5 text-center">{{ footerNote() }}</div>
+        <!-- One compact status line from the real backend/provider state; details live in the options sheet. -->
+        <button type="button" class="kh-status" [attr.data-mode]="mode()" (click)="sheet.set('menu')" [attr.aria-label]="statusLine() + ' — ' + i18n.q('التفاصيل', 'details')">
+          <span class="kh-dot" aria-hidden="true"></span><span class="truncate">{{ statusLine() }}</span><svg gzIcon="info" size="s" aria-hidden="true" />
+        </button>
       </div>
     </ion-footer>
 
@@ -151,6 +168,7 @@ const MAX_B64 = 950_000;
 
     <gz-sheet [open]="sheet() === 'menu'" [title]="t().aiTitle" (closed)="sheet.set(null)">
       <div class="flex flex-col gap-2">
+        <div class="gz-note lav" role="status"><div class="flex-1">{{ statusDetail() }}</div></div>
         @if (kh.hosted() && kh.status(); as s) {
           @if (s.enabled) {
             <p class="gz-sm m-0">{{ i18n.q('الباقي النهارده', 'Left today') }}: {{ s.remaining.chat }} {{ i18n.q('سؤال', 'questions') }} · {{ s.remaining.image }} {{ i18n.q('صورة', 'photos') }} · {{ s.remaining.extract }} {{ i18n.q('باترون', 'patterns') }}</p>
@@ -163,6 +181,60 @@ const MAX_B64 = 950_000;
       </div>
     </gz-sheet>
   `,
+  styles: [
+    `
+      /* Composer: the field is the only flexible item (min-width: 0 lets it shrink below its content); the two round
+         buttons never shrink, so nothing can be pushed past the screen edge in RTL or LTR. */
+      .kh-composer { display: flex; align-items: flex-end; gap: 8px; padding-inline: var(--gz-screen-pad, 20px); }
+      .kh-composer > .gz-icb { flex: none; }
+      .kh-field {
+        flex: 1 1 auto; min-width: 0; display: flex; align-items: center; min-height: 46px;
+        border: 1.5px solid var(--gz-border); border-radius: 23px; background: var(--gz-surface); padding: 0 14px;
+      }
+      .kh-field:focus-within { border-color: var(--gz-primary); }
+      .kh-field textarea {
+        flex: 1; min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; resize: none; font: inherit;
+        font-size: 15px; line-height: 1.45; color: var(--gz-text); padding: 11px 0; max-height: 7.5em; overflow-y: auto;
+        field-sizing: content; /* grows with the text up to max-height, then scrolls inside */
+      }
+      .kh-field textarea::placeholder { color: var(--gz-text-3); }
+      /* Suggestions rail: contained in the footer; edge fade is the scroll affordance (symmetric, so RTL and LTR). */
+      .kh-rail {
+        display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+        padding: 2px var(--gz-screen-pad, 20px) 8px; scroll-padding-inline: var(--gz-screen-pad, 20px);
+        mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+      }
+      .kh-rail::-webkit-scrollbar { display: none; }
+      .kh-chip { flex: none; max-width: min(72vw, 280px); min-height: 40px; overflow: hidden; text-overflow: ellipsis; }
+      /* Status: one line, colour from the real state; tap for details. */
+      .kh-status {
+        display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 32px; margin-top: 2px;
+        padding: 0 var(--gz-screen-pad, 20px); border: 0; background: transparent; font: inherit; font-size: 12px; color: var(--gz-text-2);
+      }
+      .kh-status > .truncate { min-width: 0; }
+      .kh-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--gz-text-3); }
+      .kh-status[data-mode='ai'] .kh-dot { background: var(--gz-mint-ink); }
+      .kh-status[data-mode='demo'] .kh-dot,
+      .kh-status[data-mode='consent'] .kh-dot,
+      .kh-status[data-mode='soon'] .kh-dot { background: var(--gz-warning); }
+      .kh-status[data-mode='offline'] .kh-dot { background: var(--gz-error); }
+      /* Short viewports (landscape, or the keyboard is open): keep the conversation visible. The project card keeps its
+         name and the explain button; the photo, the round line, the label and the subtitle step aside. */
+      @media (max-height: 560px) {
+        .kh-top { padding-top: calc(8px + var(--gz-safe-top)) !important; padding-bottom: 4px; }
+        .kh-sub, .kh-ctx-photo, .kh-ctx-label, .kh-ctx-line { display: none; }
+        .kh-ctx { padding: 6px 10px !important; }
+        .kh-ctx-toggle { margin-top: 0; }
+        .kh-ctx-wrap { padding-bottom: 4px !important; }
+        .kh-field textarea { max-height: 4.4em; }
+        .kh-status { min-height: 24px; }
+      }
+      @media (max-width: 340px) {
+        .kh-composer { gap: 6px; padding-inline: 12px; }
+        .kh-rail { padding-inline: 12px; }
+      }
+    `,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AssistantPage {
@@ -183,6 +255,7 @@ export class AssistantPage {
 
   protected readonly t = this.i18n.t;
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('file');
+  private readonly content = viewChild(IonContent);
   protected readonly input = signal('');
   protected readonly typing = signal(false);
   protected readonly busyText = signal('');
@@ -219,14 +292,15 @@ export class AssistantPage {
   });
 
   /** ai/demo = hosted and consented; consent = hosted but waiting for the user's OK; rules = online without hosted AI (guest, no backend, disabled); offline = no network. */
-  protected readonly mode = computed<'ai' | 'demo' | 'consent' | 'rules' | 'offline'>(() => {
+  protected readonly mode = computed<'ai' | 'demo' | 'consent' | 'soon' | 'rules' | 'offline'>(() => {
     if (this.kh.ready()) return this.kh.demoProvider() ? 'demo' : 'ai';
     if (this.kh.needsConsent()) return 'consent';
+    if (this.kh.restricted() && this.net.online()) return 'soon';
     return this.net.online() ? 'rules' : 'offline';
   });
   protected readonly badge = computed(() => {
     const t = this.t();
-    return { ai: t.aiBadge, demo: t.demoBadge, consent: t.aiConsentBadge, rules: t.aiRulesBadge, offline: t.aiOfflineBadge }[this.mode()];
+    return { ai: t.aiBadge, demo: t.demoBadge, consent: t.aiConsentBadge, soon: t.aiSoonBadge, rules: t.aiRulesBadge, offline: t.aiOfflineBadge }[this.mode()];
   });
 
   protected readonly guestHint = computed(() => this.kh.configured && !this.auth.signedIn());
@@ -264,12 +338,39 @@ export class AssistantPage {
     return ar ? ['إزاي أعمل حلقة سحرية؟', 'إيه الفرق بين الزيادة والتنقيص؟', 'ليه شغلي طالع معوج؟', 'يعني إيه (2sc, inc) x 6؟'] : ['How do I make a magic ring?', 'What’s the difference between increase and decrease?', 'Why is my work crooked?', 'What does (2sc, inc) x 6 mean?'];
   });
 
-  protected readonly footerNote = computed(() => {
-    if (this.mode() === 'offline' || this.mode() === 'rules') return this.t().aiDisclaimer;
+  /** One short line under the composer, from the real backend/provider state (never "offline" just because consent is missing). */
+  protected readonly statusLine = computed(() => {
+    const q = (ar: string, en: string) => this.i18n.q(ar, en);
     const s = this.kh.status();
-    const left = s && s.enabled ? ` · ${this.i18n.q('الباقي النهارده', 'left today')}: ${s.remaining.chat}` : '';
-    return this.t().aiHostedNote + left;
+    switch (this.mode()) {
+      case 'ai':
+        return s && s.enabled ? `${q('خيوطة متصلة', 'Khayoota is connected')} · ${q('الباقي النهارده', 'left today')} ${s.remaining.chat}` : q('خيوطة متصلة', 'Khayoota is connected');
+      case 'demo':
+        return q('وضع تجريبي — ردود ثابتة', 'Demo mode — fixed replies');
+      case 'consent':
+        return q('خيوطة مستنية موافقتك قبل أول سؤال', 'Khayoota needs your OK before the first question');
+      case 'soon':
+        return this.t().aiSoonNote;
+      case 'offline':
+        return q('بدون اتصال — شرح من قواعد غرزتك', 'Offline — answers from Gharzetak’s rules');
+      default:
+        return q('خيوطة غير متاحة حاليًا — شرح من قواعد غرزتك', 'Khayoota is unavailable — answers from Gharzetak’s rules');
+    }
   });
+
+  /** The longer explanation, shown in the options sheet when the status line is tapped. */
+  protected readonly statusDetail = computed(() => {
+    if (this.mode() === 'soon') return `${this.t().aiSoonNote} ${this.t().aiDisclaimer}`;
+    if (this.mode() === 'offline' || this.mode() === 'rules') return this.t().aiDisclaimer;
+    return this.t().aiHostedNote;
+  });
+
+  /** Enter sends (Shift+Enter = new line); an empty draft is never sent. */
+  protected onEnter(ev: KeyboardEvent): void {
+    if (ev.shiftKey || ev.isComposing) return;
+    ev.preventDefault();
+    if (this.input().trim()) void this.send(this.input());
+  }
 
   /* ------------------------------------------------------------------ */
   /* sending                                                             */
@@ -398,7 +499,21 @@ export class AssistantPage {
   }
 
   private async push(m: ChatMessage): Promise<void> {
+    const follow = m.role === 'user' || (await this.nearBottom());
     await this.store.setChat([...this.store.chat(), m]);
+    if (follow) setTimeout(() => void this.content()?.scrollToBottom(220), 30);
+  }
+
+  /** True when the reader is within ~1.5 bubbles of the end: someone who scrolled up to read is never yanked down. */
+  private async nearBottom(): Promise<boolean> {
+    const c = this.content();
+    if (!c) return true;
+    try {
+      const el = await c.getScrollElement();
+      return el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+    } catch {
+      return true;
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -564,6 +679,8 @@ export class AssistantPage {
         return q('الصورة دي مش مدعومة — جرّبي JPEG أو PNG.', 'That image type isn’t supported — try a JPEG or PNG.');
       case 'ai_disabled':
         return q('خيوطة مش متاحة دلوقتي.', 'Khayoota isn’t available right now.');
+      case 'ai_access_restricted':
+        return this.t().aiSoonNote;
       case 'ai_busy':
       case 'ai_timeout':
       case 'ai_upstream_error':

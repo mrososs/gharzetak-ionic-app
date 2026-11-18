@@ -102,7 +102,8 @@ export interface ExtractResponseV1 {
 }
 
 export type AiStatusV1 =
-  | { v: 1; enabled: false }
+  /** access 'restricted' = hosted AI is on, but not for this account (tester allowlist). */
+  | { v: 1; enabled: false; access?: 'restricted' }
   | {
       v: 1;
       enabled: true;
@@ -119,6 +120,7 @@ export type AiStatusV1 =
 export type KhayootaErrorCode =
   | 'unauthorized'
   | 'ai_disabled'
+  | 'ai_access_restricted'
   | 'ai_consent_required'
   | 'ai_rate_limited'
   | 'ai_quota_exceeded'

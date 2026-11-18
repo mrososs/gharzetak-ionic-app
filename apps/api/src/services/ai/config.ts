@@ -36,10 +36,11 @@ export interface AiConfig {
   burstWeight: Record<AiKind, number>;
   consentVersion: number;
   /**
-   * Who may use hosted AI: '*' = every signed-in account, otherwise an explicit list of user ids. FAIL-CLOSED: in a deployed
-   * environment an unset/empty AI_ALLOWED_USER_IDS means NOBODY; only local development/tests default to everyone.
+   * Who may use hosted AI. DENY ALL by default in a deployed environment: only accounts listed in AI_ALLOWED_EMAILS or
+   * AI_ALLOWED_USER_IDS, and only while that account's e-mail is VERIFIED (read from D1 for the session's user id — never
+   * from anything the client sends). '*' = every signed-in account. Local development/tests default to everyone.
    */
-  allowedUsers: '*' | readonly string[];
+  access: { all: boolean; ids: readonly string[]; emails: readonly string[] };
   timeoutMs: number;
   maxOutputTokens: { chat: number; image: number; extract: number; repair: number };
 }
@@ -49,18 +50,33 @@ const int = (v: string | undefined, d: number, min: number, max: number): number
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : d;
 };
 const model = (v: string | undefined): string => (v && v in MODELS ? v : DEFAULT_MODEL);
-const allowList = (v: string | undefined, environment: string | undefined): '*' | readonly string[] => {
-  const raw = (v ?? '').trim();
-  if (raw === '*') return '*';
-  const ids = raw
+const list = (v: string | undefined): string[] =>
+  (v ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, 200);
-  if (ids.length) return ids;
-  return environment === 'development' || environment === 'test' ? '*' : [];
+const accessList = (env: AppEnv): AiConfig['access'] => {
+  const ids = list(env.AI_ALLOWED_USER_IDS);
+  const emails = list(env.AI_ALLOWED_EMAILS).map((e) => e.toLowerCase());
+  if (ids.includes('*') || emails.includes('*')) return { all: true, ids: [], emails: [] };
+  if (ids.length || emails.length) return { all: false, ids, emails };
+  const local = env.ENVIRONMENT === 'development' || env.ENVIRONMENT === 'test';
+  return { all: local, ids: [], emails: [] };
 };
-export const userAllowed = (cfg: Pick<AiConfig, 'allowedUsers'>, userId: string): boolean => cfg.allowedUsers === '*' || cfg.allowedUsers.includes(userId);
+
+/**
+ * Server-side access decision for the SESSION's user id (set by requireUser from the validated Better Auth session).
+ * An explicit match additionally needs a verified e-mail. No request field or header can influence this.
+ */
+export async function userAllowed(db: D1Database, cfg: Pick<AiConfig, 'access'>, userId: string): Promise<boolean> {
+  const a = cfg.access;
+  if (a.all) return true;
+  if (!a.ids.length && !a.emails.length) return false;
+  const row = await db.prepare('SELECT email, email_verified FROM user WHERE id = ?1').bind(userId).first<{ email: string; email_verified: number }>();
+  if (!row || !row.email_verified) return false;
+  return a.ids.includes(userId) || a.emails.includes(row.email.trim().toLowerCase());
+}
 
 export function aiConfig(env: AppEnv): AiConfig {
   return {
@@ -75,7 +91,7 @@ export function aiConfig(env: AppEnv): AiConfig {
     burstUnitsPerMinute: int(env.AI_BURST_UNITS_PER_MINUTE, 20, 1, 10_000),
     burstWeight: { chat: 1, image: 3, extract: 6 },
     consentVersion: int(env.AI_CONSENT_VERSION, 1, 1, 1000),
-    allowedUsers: allowList(env.AI_ALLOWED_USER_IDS, env.ENVIRONMENT),
+    access: accessList(env),
     timeoutMs: int(env.AI_TIMEOUT_MS, 45_000, 1000, 120_000),
     maxOutputTokens: { chat: 600, image: 700, extract: 2500, repair: 600 },
   };

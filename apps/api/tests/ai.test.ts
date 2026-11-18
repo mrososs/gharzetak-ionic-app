@@ -273,27 +273,74 @@ describe('staging readiness', () => {
     expect(await reserveNeurons(env.DB, 30, day, 6)).toBe(false); // 25 + 6 > 30
   });
 
-  it('allowlist: deployed environments are fail-closed; only listed accounts reach the model', async () => {
-    const inside = await consented('allow-in');
-    const outside = await consented('allow-out');
-    const stagingFake = (ids?: string) => aiEnv({ ENVIRONMENT: 'development', ...(ids === undefined ? {} : { AI_ALLOWED_USER_IDS: ids }) });
-    // development default: everyone
-    expect((await chat(outside, { message: 'a' }, stagingFake())).status).toBe(200);
-    // explicit list: only that account
-    const listed = stagingFake(`  ${inside.id} , someone-else `);
-    expect((await chat(inside, { message: 'b' }, listed)).status).toBe(200);
-    const denied = await chat(outside, { message: 'c' }, listed);
-    expect([denied.status, await errCode(denied)]).toEqual([503, 'ai_disabled']);
-    expect(await (await send(outside, 'GET', '/v1/ai/status', undefined, listed)).json()).toEqual({ v: 1, enabled: false });
-    expect(FakeAiProvider.calls).toBe(2);
-  });
+  describe('tester allowlist (deny all by default)', () => {
+    const verify = (u: TestUser) => env.DB.prepare('UPDATE user SET email_verified = 1 WHERE id = ?').bind(u.id).run();
+    const restricted = (over: Record<string, string>) => aiEnv({ ENVIRONMENT: 'development', ...over });
 
-  it('allowlist parsing: empty means nobody outside dev/test, "*" means everyone', () => {
-    expect(aiConfig({ ...env, ENVIRONMENT: 'staging', AI_ALLOWED_USER_IDS: '' } as unknown as AppEnv).allowedUsers).toEqual([]);
-    expect(aiConfig({ ...env, ENVIRONMENT: 'production' } as unknown as AppEnv).allowedUsers).toEqual([]);
-    expect(aiConfig({ ...env, ENVIRONMENT: 'staging', AI_ALLOWED_USER_IDS: '*' } as unknown as AppEnv).allowedUsers).toBe('*');
-    expect(aiConfig({ ...env, ENVIRONMENT: 'staging', AI_ALLOWED_USER_IDS: 'a, b,,' } as unknown as AppEnv).allowedUsers).toEqual(['a', 'b']);
-    expect(aiConfig({ ...env, ENVIRONMENT: 'development' } as unknown as AppEnv).allowedUsers).toBe('*');
+    it('only the listed, VERIFIED e-mail reaches the model; everyone else gets 403 ai_access_restricted with zero inference', async () => {
+      const tester = await consented('tester');
+      const other = await consented('other');
+      await verify(tester);
+      await verify(other);
+      const e = restricted({ AI_ALLOWED_EMAILS: ` ${tester.email.toUpperCase()} ` });
+      expect((await chat(tester, { message: 'a' }, e)).status).toBe(200);
+      expect(FakeAiProvider.calls).toBe(1);
+      for (const [m, p, body] of [['POST', '/v1/ai/chat', { v: 1, lang: 'en', message: 'x' }], ['POST', '/v1/ai/extract', { v: 1, lang: 'en', text: 'R1: 6 sc' }], ['PUT', '/v1/ai/consent', { version: 1 }]] as const) {
+        const r = await send(other, m, p, body, e);
+        expect([r.status, await errCode(r)], p).toEqual([403, 'ai_access_restricted']);
+      }
+      const photo = await chat(other, { message: 'look', images: [jpeg] }, e);
+      expect([photo.status, await errCode(photo)]).toEqual([403, 'ai_access_restricted']);
+      expect(await (await send(other, 'GET', '/v1/ai/status', undefined, e)).json()).toEqual({ v: 1, enabled: false, access: 'restricted' });
+      expect(FakeAiProvider.calls).toBe(1); // no inference for any denied request
+    });
+
+    it('a listed e-mail that is NOT verified is rejected', async () => {
+      const u = await consented('unverified');
+      const r = await chat(u, { message: 'a' }, restricted({ AI_ALLOWED_EMAILS: u.email }));
+      expect([r.status, await errCode(r)]).toEqual([403, 'ai_access_restricted']);
+      expect(FakeAiProvider.calls).toBe(0);
+    });
+
+    it('client-side spoofing (headers, body fields) cannot borrow the tester identity', async () => {
+      const tester = await consented('tester2');
+      const other = await consented('spoof');
+      await verify(tester);
+      await verify(other);
+      const e = restricted({ AI_ALLOWED_EMAILS: tester.email });
+      const viaHeader = await app.request('/v1/ai/chat', { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json', Authorization: `Bearer ${other.token}`, 'X-User-Email': tester.email, 'X-User-Id': tester.id }, body: JSON.stringify({ v: 1, lang: 'en', message: 'x' }) }, e);
+      expect([viaHeader.status, await errCode(viaHeader)]).toEqual([403, 'ai_access_restricted']);
+      const viaBody = await chat(other, { message: 'x', email: tester.email, userId: tester.id }, e);
+      expect(viaBody.status).toBe(403); // access is checked before the body is even read
+      expect(FakeAiProvider.calls).toBe(0);
+    });
+
+    it('switching accounts revokes access immediately; the kill switch beats the allowlist', async () => {
+      const tester = await consented('tester3');
+      const other = await consented('switch');
+      await verify(tester);
+      await verify(other);
+      const e = restricted({ AI_ALLOWED_EMAILS: tester.email });
+      expect((await chat(tester, { message: 'a' }, e)).status).toBe(200);
+      expect((await chat(other, { message: 'b' }, e)).status).toBe(403);
+      expect((await chat(tester, { message: 'c' }, e)).status).toBe(200);
+      const off = await chat(tester, { message: 'd' }, restricted({ AI_ALLOWED_EMAILS: tester.email, AI_ENABLED: 'false' }));
+      expect([off.status, await errCode(off)]).toEqual([503, 'ai_disabled']);
+      expect(FakeAiProvider.calls).toBe(2);
+    });
+
+    it('a listed user id also needs a verified e-mail; "*" opens to all; deployed environments default to nobody', async () => {
+      const u = await consented('byid');
+      expect((await chat(u, { message: 'a' }, restricted({ AI_ALLOWED_USER_IDS: u.id }))).status).toBe(403);
+      await verify(u);
+      expect((await chat(u, { message: 'b' }, restricted({ AI_ALLOWED_USER_IDS: u.id }))).status).toBe(200);
+      const cfg = (over: Record<string, string>) => aiConfig({ ...env, ...over } as unknown as AppEnv).access;
+      expect(cfg({ ENVIRONMENT: 'staging', AI_ALLOWED_USER_IDS: '', AI_ALLOWED_EMAILS: '' })).toEqual({ all: false, ids: [], emails: [] });
+      expect(cfg({ ENVIRONMENT: 'production' })).toEqual({ all: false, ids: [], emails: [] });
+      expect(cfg({ ENVIRONMENT: 'staging', AI_ALLOWED_EMAILS: '*' }).all).toBe(true);
+      expect(cfg({ ENVIRONMENT: 'staging', AI_ALLOWED_EMAILS: 'A@X.test, b@y.test,,' }).emails).toEqual(['a@x.test', 'b@y.test']);
+      expect(cfg({ ENVIRONMENT: 'development' }).all).toBe(true);
+    });
   });
 
   it('signing out ends hosted AI for that session immediately', async () => {

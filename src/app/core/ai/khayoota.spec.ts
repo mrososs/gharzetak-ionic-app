@@ -139,6 +139,7 @@ describe('mapError', () => {
     expect(mapError(new ApiError(0, 'network', 'offline')).code).toBe('network');
     expect(mapError(new ApiError(418, 'teapot', 'x')).code).toBe('unknown');
     expect(mapError(new Error('boom')).code).toBe('unknown');
+    expect(mapError(new ApiError(403, 'ai_access_restricted', 'x')).code).toBe('ai_access_restricted');
   });
 
   it('a hung request ends as ai_timeout on the client (the spinner never hangs forever)', async () => {

@@ -43,6 +43,8 @@ export interface AppEnv {
   AI_CONSENT_VERSION?: string;
   /** "*" = every signed-in account; else comma-separated user ids. Unset/empty in a deployed environment = nobody. */
   AI_ALLOWED_USER_IDS?: string;
+  /** Tester e-mails (comma-separated). Set as a Worker SECRET on staging so the address is not in git. Verified e-mails only. */
+  AI_ALLOWED_EMAILS?: string;
   /** Upstream deadline per model call (ms). */
   AI_TIMEOUT_MS?: string;
 }
