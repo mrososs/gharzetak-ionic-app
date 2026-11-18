@@ -12,7 +12,7 @@
 | File | Change |
 |---|---|
 | `src/app/core/domain/smart-parser.ts` | The four P5a fixes, set-up line handling, invalid-range handling, `each-basis` review rule |
-| `src/app/core/domain/smart-parser-arabic.spec.ts` | **New** — 88 tests (positive and negative) |
+| `src/app/core/domain/smart-parser-arabic.spec.ts` | **New** — 91 tests (positive and negative) |
 | `src/app/core/domain/fixtures/bunny-dress-summary.fixture.ts` | **New** — the bunny-dress summary from the planning brief, labelled as a summary |
 | `docs/pattern-collections/architecture.md` | Smart parser section: supported syntax added |
 | `docs/khayoota-ai/p5a-parser-implementation-report.md` | This report |
@@ -53,7 +53,7 @@ Terminology: descriptive Arabic names describe the stitch itself, so they now me
 | `R5 - 7:`, `R5 - R7:`, `Rounds 5 – 7:`, `Rnds 5 —7:`, `الدور ٥ - ٧:`, `الأدوار ٥ - ٧:`, `من الدور ٥ إلى ٧:` | Arabic-Indic, Persian and Western digits; `-` `–` `—`; also `الصفوف`, `الجولات` |
 | `R5-7`, `R4 >> R7`, `R4 to R7`, `R5-R7` | unchanged |
 | A **spaced** dash range is a range only if the header ends right after the second number (`:` `.` `)` `=`, end of line, or a bare total) | so `R5 - 12 sc [12]` stays **one** round of 12 sc |
-| Reversed (`R7 - R5`, `الدور ٧ - ٥`, `R7-5`) | one `unsupported` round numbered as written, code `range-invalid`, nothing expanded |
+| Reversed (`R7 - R5`, `الدور ٧ - ٥`, `R7-5`) | one `unsupported` round numbered as written, code `range-invalid`, nothing expanded; its normalised line is `R7: <the whole original line>`, so the tracker cannot count it as one round either |
 | Longer than 100 rounds (`R2 - R500`) | same; `MAX_RANGE_SPAN = 99` (exported) |
 
 Every expanded round keeps the same instruction and the same `original` line.
@@ -114,14 +114,14 @@ Unchanged on purpose (identical before and after): `in magic ring`, `in MR`, `in
 
 | Run | Before (origin/development) | After (this branch) |
 |---|---|---|
-| Domain specs (`src/app/core/domain`) | 6 files · **135 passed** | 7 files · **223 passed** (135 existing + 88 new) |
-| Full frontend unit suite (`ng test`) | 36 files · **547 passed** | 37 files · **635 passed**, 0 failed |
+| Domain specs (`src/app/core/domain`) | 6 files · **135 passed** | 7 files · **226 passed** (135 existing + 91 new) |
+| Full frontend unit suite (`ng test`) | 36 files · **547 passed** | 37 files · **638 passed**, 0 failed |
 | Typecheck (`tsc -p tsconfig.app.json` and `tsconfig.spec.json`, `--noEmit`) | — | 0 errors / 0 errors |
 | Production build (`ng build`) | — | success, 0 warnings (initial bundle 1.32 MB raw / 288 kB transfer) |
 
 "Before" was measured in this worktree with `smart-parser.ts` restored from `origin/development` and the new spec removed; both files were then restored and checked by SHA-256. Node 24.22.3 (portable), Vitest 5.1, Angular CLI 22.2.
 
-The 88 new tests cover: Arabic-Indic and Western digits; mixed Arabic/English; every magic-ring form above; singular, plural and dual stitch names; hdc/dc/tr never collapsing to sc; US/UK consistency; spaced, reversed, runaway and maximum-length ranges; `2 sc in each st` with a known, an unavailable and an unreliable previous count; wrong declared totals; the three "two stitches" meanings; armhole chains and `skip`/`sk`; turning chains; `sl st`; `*…*`; BLO; joins into other pieces; set-up lines; the bunny-dress summary; the amigurumi bunny fixture (counts identical to before: 26 validated / 11 needs-review / 0 unsupported / 37 rounds); the bundled sample patterns; idempotent round trip; original text preserved. Each converted round is re-parsed by the strict parser and its totals must agree.
+The 91 new tests cover: Arabic-Indic and Western digits; mixed Arabic/English; every magic-ring form above; singular, plural and dual stitch names; hdc/dc/tr never collapsing to sc; US/UK consistency; spaced, reversed, runaway and maximum-length ranges; `2 sc in each st` with a known, an unavailable and an unreliable previous count; wrong declared totals; the three "two stitches" meanings; armhole chains and `skip`/`sk`; turning chains; `sl st`; `*…*`; BLO; joins into other pieces; set-up lines; the bunny-dress summary; the amigurumi bunny fixture (counts identical to before: 26 validated / 11 needs-review / 0 unsupported / 37 rounds); the bundled sample patterns; idempotent round trip; original text preserved. Each converted round is re-parsed by the strict parser and its totals must agree.
 
 Existing parser, collection, revision, tracker and joy specs are part of the domain run above and all pass unchanged. API tests were not run: no file under `apps/api` changed.
 
@@ -151,7 +151,32 @@ Existing parser, collection, revision, tracker and joy specs are part of the dom
 
 The bunny-dress pattern is **not** supported end to end. With P5a its plain rows (1, 3, 4–8) and rounds (11–14) convert; the foundation chain is a note; row 2 (armhole chains and skips) is unsupported; rounds 9 and 10 need review. The actual Gemini extraction text was not available locally (only image files named `Gemini_Generated_Image_*` exist in Downloads; they were not opened), so the regression fixture is the summary from the brief and is labelled as such. Its `ch`, `skip`, `turn`, `sl st` and `dc inc` constructs are covered by targeted tests instead.
 
-Supporting chains, skips, slip stitches and turning chains in the tracker is **P5b**: it changes `STITCH_IO`, cursor semantics and the revision mapper, and needs its own decision.
+### Future P5b scope — garment and row patterns
+
+Supporting these needs the **strict parser and the tracker** to change, not only the converter: `STITCH_IO`, cursor semantics, the revision mapper (`mapCursor`) and the tracker UI. It needs its own decision, design and regression plan.
+
+| P5b item | Why it is not a converter-only fix |
+|---|---|
+| Chains as stitches (`ch` 0 → 1), foundation chains as row 0, chain spaces (`ch 6` armholes) | a chain produces positions that the next row works into but consumes nothing; the tracker has no "0-consume" stitch other than MR |
+| Skips (`sk`, `skip N sts`) | consume without producing — a new stitch kind with `[1, 0]` I/O |
+| Turning chains and "does / does not count as a stitch" | changes the total of a row depending on a convention stated elsewhere in the pattern |
+| Slip stitches and slip-stitch joins (`sl st to join`) | joining a round changes whether the next round starts in the join; count-neutral but position-changing |
+| Working into chain spaces / armholes (`5 dc in ch-6 sp`) | needs a target that is a chain space, not a stitch |
+| Joins between garment pieces (bodice ↔ skirt, sleeve into armhole) | like the existing `in <piece>` joins, but on rows and chain spaces |
+| Rows vs rounds in normalised text | the strict notation writes every line as `R{n}:`; rows keep their wording only in `original` / `sourceText` |
+| `*…*` repeats, front/back-loop stitches, 3+ stitches into one stitch (shells, clusters, popcorns) | need new strict syntax and new stitch kinds |
+
+## 6a. Review of the change (before opening the PR)
+
+| Check | Result |
+|---|---|
+| Regression sweep — 24,948 generated two-round patterns (11 header styles × 7 total styles × 27 bodies × 6 first rounds × with/without a previous round), old vs new converter | **462 changed, all improvements** (`2 sc in each st` now validates); **0** rounds became stricter or lost |
+| Range / heading / set-up sweep — 12,189 inputs (5 range shapes × 9 separators × 9 prefixes × 3 second-number forms × 10 tails, plus 13 set-up lines in 3 positions) | 0 lost rounds. Changes: lines that used to become **bogus piece headings** (`الأدوار ٥-٧ (١٢)`, `من الدور ٥ إلى ٧ …`) are now rounds; set-up lines are now notes. The only "stricter" hits were a counting artefact of duplicated round numbers in `ch 3 (counts as dc)` inputs — the old and new outputs are identical there. |
+| Ambiguity | Every «حشو» form stays `needs-review`; a bare dual without a stitch name and `3 sc in each st` are not guessed; `each` never invents a count (`each-unknown`) and now flags an unreliable basis (`each-basis`). |
+| Range expansion | Spaced dash ranges only when the header ends after the second number; reversed and > 100-round ranges are never expanded; a spaced range with only a bare total (`R2 - 4 [12]`) is read as a range under the existing flagged "work even" assumption (`assumed-sc`, never validated). |
+| Saved patterns | `pattern-parser.ts` untouched; `git diff` contains no file outside the parser, its spec/fixture and two docs. |
+| Found and fixed during review | (1) Arabic set-up verbs were written in un-normalised form (`ابدئي`) and `بسلسلة` was not matched — fixed, 2 tests added. (2) A reversed/runaway range's normalised line could still be read by the strict parser as one countable round — it now carries the whole original line, so the tracker does not count it; 2 assertions added. |
+| Pre-existing, not changed | `ch 3 (counts as dc)` (a chain line with extra words) becomes an unsupported round with a duplicated number; part of P5b. |
 
 ## 7. Readiness for Khayoota image-extraction integration
 
