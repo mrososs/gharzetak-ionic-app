@@ -6,6 +6,9 @@ import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import app from '../src/index';
 import { FakeAiProvider, FAKE_TRIGGERS } from '../src/services/ai/provider';
+import { reserveNeurons, settle } from '../src/services/ai/quota';
+import { aiConfig } from '../src/services/ai/config';
+import type { AppEnv } from '../src/env';
 import { JPEG, ORIGIN, PNG, signUp, type TestUser } from './helpers';
 
 type Env = typeof env;
@@ -232,6 +235,74 @@ describe('usage protection', () => {
     expect(sb.remaining.chat).toBe(20);
     const sa = (await (await send(a, 'GET', '/v1/ai/status')).json()) as { remaining: { chat: number } };
     expect(sa.remaining.chat).toBe(18);
+  });
+});
+
+describe('staging readiness', () => {
+  it('a deployed environment never serves the fake provider: missing or "fake" AI_PROVIDER means disabled', async () => {
+    const u = await consented('nofake');
+    for (const e of [aiEnv({ ENVIRONMENT: 'staging' }), aiEnv({ ENVIRONMENT: 'production', AI_PROVIDER: '' }), aiEnv({ ENVIRONMENT: 'staging', AI_PROVIDER: 'workers-ai' })]) {
+      expect(await (await send(u, 'GET', '/v1/ai/status', undefined, e)).json()).toEqual({ v: 1, enabled: false });
+      const r = await chat(u, { message: 'hi' }, e);
+      expect([r.status, await errCode(r)]).toEqual([503, 'ai_disabled']);
+    }
+    expect(FakeAiProvider.calls).toBe(0);
+  });
+
+  it('with photos off, an oversized chat body is refused before it is parsed', async () => {
+    const u = await consented('bigbody');
+    const r = await chat(u, { message: 'hi', images: [{ mime: 'image/jpeg', data: '/9j/' + 'A'.repeat(80_000) }] }, aiEnv({ AI_VISION_ENABLED: 'false' }));
+    expect(r.status).toBe(400);
+    expect(await r.json()).toMatchObject({ error: { message: 'Request body too large' } });
+    expect(FakeAiProvider.calls).toBe(0);
+  });
+
+  it('with extraction off, the extract body is never read (flag checked first)', async () => {
+    const u = await consented('extoff');
+    const r = await send(u, 'POST', '/v1/ai/extract', '{not json', aiEnv({ AI_EXTRACT_ENABLED: 'false' }));
+    expect([r.status, await errCode(r)]).toEqual([403, 'ai_feature_disabled']);
+  });
+
+  it('settling records usage ABOVE the reservation, so the budget is never under-counted', async () => {
+    const day = '2001-01-01';
+    expect(await reserveNeurons(env.DB, 1000, day, 10)).toBe(true);
+    await settle(env.DB, 'settle-user', day, 10, 25, 100, 50);
+    const g = await env.DB.prepare("SELECT neurons_reserved, neurons_used FROM ai_usage_daily WHERE scope = '__all__' AND day = ?").bind(day).first<{ neurons_reserved: number; neurons_used: number }>();
+    expect(g).toEqual({ neurons_reserved: 25, neurons_used: 25 });
+    await settle(env.DB, 'settle-user', day, 0, null, 0, 0); // no usage reported for a zero reservation → nothing added
+    expect(await reserveNeurons(env.DB, 30, day, 6)).toBe(false); // 25 + 6 > 30
+  });
+
+  it('allowlist: deployed environments are fail-closed; only listed accounts reach the model', async () => {
+    const inside = await consented('allow-in');
+    const outside = await consented('allow-out');
+    const stagingFake = (ids?: string) => aiEnv({ ENVIRONMENT: 'development', ...(ids === undefined ? {} : { AI_ALLOWED_USER_IDS: ids }) });
+    // development default: everyone
+    expect((await chat(outside, { message: 'a' }, stagingFake())).status).toBe(200);
+    // explicit list: only that account
+    const listed = stagingFake(`  ${inside.id} , someone-else `);
+    expect((await chat(inside, { message: 'b' }, listed)).status).toBe(200);
+    const denied = await chat(outside, { message: 'c' }, listed);
+    expect([denied.status, await errCode(denied)]).toEqual([503, 'ai_disabled']);
+    expect(await (await send(outside, 'GET', '/v1/ai/status', undefined, listed)).json()).toEqual({ v: 1, enabled: false });
+    expect(FakeAiProvider.calls).toBe(2);
+  });
+
+  it('allowlist parsing: empty means nobody outside dev/test, "*" means everyone', () => {
+    expect(aiConfig({ ...env, ENVIRONMENT: 'staging', AI_ALLOWED_USER_IDS: '' } as unknown as AppEnv).allowedUsers).toEqual([]);
+    expect(aiConfig({ ...env, ENVIRONMENT: 'production' } as unknown as AppEnv).allowedUsers).toEqual([]);
+    expect(aiConfig({ ...env, ENVIRONMENT: 'staging', AI_ALLOWED_USER_IDS: '*' } as unknown as AppEnv).allowedUsers).toBe('*');
+    expect(aiConfig({ ...env, ENVIRONMENT: 'staging', AI_ALLOWED_USER_IDS: 'a, b,,' } as unknown as AppEnv).allowedUsers).toEqual(['a', 'b']);
+    expect(aiConfig({ ...env, ENVIRONMENT: 'development' } as unknown as AppEnv).allowedUsers).toBe('*');
+  });
+
+  it('signing out ends hosted AI for that session immediately', async () => {
+    const u = await consented('signout');
+    expect((await chat(u, { message: 'a' })).status).toBe(200);
+    const out = await app.request('/api/auth/sign-out', { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json', Authorization: `Bearer ${u.token}` }, body: '{}' }, aiEnv());
+    expect(out.status).toBe(200);
+    expect((await chat(u, { message: 'b' })).status).toBe(401);
+    expect(FakeAiProvider.calls).toBe(1);
   });
 });
 

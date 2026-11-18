@@ -12,8 +12,8 @@ import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { resolveAction, resolveActions, type ActionLookup } from './action-registry';
 import { AssistantService } from './assistant.service';
 import { calcFacts } from './calc';
-import { buildKhayootaContext } from './khayoota-context';
-import { KhayootaFailure, mapError } from './khayoota.service';
+import { buildKhayootaContext, roundsMentioned } from './khayoota-context';
+import { CHAT_CLIENT_TIMEOUT_MS, KhayootaFailure, mapError, within } from './khayoota.service';
 import type { TranscriptV1 } from './khayoota.types';
 import { previewFromTranscript } from './transcript-draft';
 
@@ -140,6 +140,21 @@ describe('mapError', () => {
     expect(mapError(new ApiError(418, 'teapot', 'x')).code).toBe('unknown');
     expect(mapError(new Error('boom')).code).toBe('unknown');
   });
+
+  it('a hung request ends as ai_timeout on the client (the spinner never hangs forever)', async () => {
+    vi.useFakeTimers();
+    try {
+      const hung = within(new Promise<never>(() => undefined), CHAT_CLIENT_TIMEOUT_MS);
+      const seen = hung.catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(CHAT_CLIENT_TIMEOUT_MS + 1);
+      const e = await seen;
+      expect(e).toBeInstanceOf(KhayootaFailure);
+      expect((e as KhayootaFailure).code).toBe('ai_timeout');
+      await expect(within(Promise.resolve(7), 10)).resolves.toBe(7);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -187,6 +202,34 @@ describe('project context and the offline helper read the revision the project f
     expect(JSON.stringify(ctx)).not.toContain('8sc'); // the newer, unpinned edit never leaks in
     expect(Object.keys(ctx).sort()).toEqual(['nearby', 'pattern', 'percent', 'project', 'round', 'v', 'viewTerms']);
     expect(JSON.stringify(ctx).length).toBeLessThan(6 * 1024);
+  });
+
+  it('a round the user names ("الدور السابع", "R5") is added from the SAME pinned revision, even when the counter is elsewhere', async () => {
+    const seven = 'R1: 6sc in MR [6]\nR2: inc x 6 [12]\nR3: (sc, inc) x 6 [18]\nR4: 18sc [18]\nR5: (2sc, inc) x 6 [24]\nR6: 24sc [24]\nR7: (2sc, dec) x 6 [18]';
+    const pat: Pattern = { id: uuid(), isSample: false, name: 'Ball', level: 'beginner', terms: 'us', source: 'text', text: seven, file: null, attribution: '', sourceUrl: '', position: 0, updatedAt: 1, deletedAt: null };
+    await store.addPattern(pat);
+    const p0 = createProject({ name: 'Ball', category: 'amigurumi', hook: '3.0', yarn: 'cotton', target: 0, coverLocalUrl: null, patternId: pat.id, totalRounds: 7 });
+    await store.addProject(p0);
+    await store.updateTracker(p0.id, (t) => ({ ...t, cursor: { ...t.cursor, roundIndex: 1, ptr: 0 } }));
+    await store.updateProject(p0.id, (x) => ({ ...x, patternPin: { rev: 1, name: 'Ball', text: seven, terms: 'us' } }));
+    await store.updatePattern(pat.id, (x) => ({ ...x, text: seven.replace('R7: (2sc, dec) x 6 [18]', 'R7: (sc, dec) x 8 [16]'), rev: 2 }));
+    const p = store.project(p0.id)!;
+
+    const ctx = buildKhayootaContext(store, p, 'أنا واقفة عند الدور السابع، ممكن تشرحيهولي؟')!;
+    expect(ctx.round?.n).toBe(2);
+    expect(ctx.nearby?.map((r) => r.n)).toEqual([1, 3, 7]);
+    expect(ctx.nearby?.find((r) => r.n === 7)?.text).toBe('R7: (2sc, dec) x 6 [18]'); // pinned, not the newer edit
+    expect(JSON.stringify(ctx)).not.toContain('x 8');
+    expect(buildKhayootaContext(store, p, 'what about R5 and round 6 and R7?')!.nearby?.map((r) => r.n)).toEqual([1, 3, 5, 6]);
+    expect(buildKhayootaContext(store, p, 'explain this')!.nearby?.map((r) => r.n)).toEqual([1, 3]);
+  });
+
+  it('roundsMentioned reads digits, Arabic-Indic digits and Egyptian ordinals; at most 2', () => {
+    expect(roundsMentioned('الدور ٧ مش طالع')).toEqual([7]);
+    expect(roundsMentioned('R12 vs rnd 3')).toEqual([12, 3]);
+    expect(roundsMentioned('الدور التالت والدور الحادي عشر')).toEqual([3, 11]);
+    expect(roundsMentioned('Round 4, round 5, round 6')).toEqual([4, 5]);
+    expect(roundsMentioned('(2sc, inc) x 6 for 30 minutes')).toEqual([]);
   });
 
   it('no project → no context', () => {

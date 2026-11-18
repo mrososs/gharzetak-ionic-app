@@ -41,6 +41,7 @@ type Page = {
   messages(): { role: string; text: string; source?: string; actions?: unknown[]; error?: string; previewId?: string }[];
   sheet(): string | null;
   acceptConsent(): Promise<void>;
+  declineConsent(): Promise<void>;
   previews(): Record<string, { counts: { rounds: number }; target: string }>;
   addDraft(pv: unknown): Promise<void>;
   answerPattern(): Promise<void>;
@@ -110,6 +111,19 @@ describe('Khayoota page', () => {
     await page.acceptConsent();
     await flush();
     expect(kh.chat).toHaveBeenCalledTimes(1);
+  });
+
+  it('declining consent answers the SAME question (even one tapped from a chip) with the offline helper and sends nothing', async () => {
+    const page = await setup(fakeKhayoota({ needsConsent: true }));
+    await page.send('How do I know my stitch count is right?'); // chip-style: the text box is empty
+    expect(page.sheet()).toBe('consent');
+    await page.declineConsent();
+    await flush();
+    const msgs = page.messages();
+    expect(msgs.at(-2)).toMatchObject({ role: 'user', text: 'How do I know my stitch count is right?' });
+    expect(msgs.at(-1)).toMatchObject({ role: 'bot', source: 'offline' });
+    expect(kh.chat).not.toHaveBeenCalled();
+    expect(kh.acceptConsent).not.toHaveBeenCalled();
   });
 
   it('a failed hosted request shows a friendly error and still answers with the offline helper', async () => {

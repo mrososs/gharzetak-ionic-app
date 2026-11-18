@@ -24,6 +24,8 @@ export const AI_LIMITS = {
   /** Base64 characters per image (~700 KB of bytes). The app resizes to ≤ 1568 px JPEG before sending. */
   imageBase64Chars: 950_000,
   chatBodyBytes: 1_500_000 + 64 * 1024,
+  /** Text-only chat (photos off): message + history + context + calc, with room for multi-byte Arabic. */
+  chatTextBodyBytes: 64 * 1024,
   extractBodyBytes: 3_800_000 + 64 * 1024,
   extractTextChars: 20_000,
   replyTextChars: 1500,

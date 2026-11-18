@@ -106,7 +106,7 @@ export class KhayootaService {
 
   async chat(req: Omit<ChatRequestV1, 'v'>): Promise<ChatResponseV1> {
     try {
-      const res = await this.api.post<ChatResponseV1>(`${this.endpoint}/chat`, { v: 1, ...req });
+      const res = await within(this.api.post<ChatResponseV1>(`${this.endpoint}/chat`, { v: 1, ...req }), CHAT_CLIENT_TIMEOUT_MS);
       this.applyUsage(res.usage);
       return res;
     } catch (e) {
@@ -116,7 +116,7 @@ export class KhayootaService {
 
   async extract(input: { images?: InlineImage[]; text?: string }, lang: KhayootaLang): Promise<ExtractResponseV1> {
     try {
-      const res = await this.api.post<ExtractResponseV1>(`${this.endpoint}/extract`, { v: 1, lang, ...input });
+      const res = await within(this.api.post<ExtractResponseV1>(`${this.endpoint}/extract`, { v: 1, lang, ...input }), EXTRACT_CLIENT_TIMEOUT_MS);
       this.applyUsage(res.usage);
       return res;
     } catch (e) {
@@ -138,6 +138,23 @@ export class KhayootaService {
     }
     return f;
   }
+}
+
+/**
+ * Client-side ceiling so the spinner can never hang. The server bounds one model call to 45 s, with at most one capacity
+ * retry and one repair call; these limits sit above that worst case. The server still settles usage if the app gives up.
+ */
+export const CHAT_CLIENT_TIMEOUT_MS = 150_000;
+export const EXTRACT_CLIENT_TIMEOUT_MS = 150_000;
+
+export function within<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new KhayootaFailure('ai_timeout')), ms);
+    p.then(
+      (v) => (clearTimeout(t), resolve(v)),
+      (e) => (clearTimeout(t), reject(e)),
+    );
+  });
 }
 
 export function mapError(e: unknown): KhayootaFailure {

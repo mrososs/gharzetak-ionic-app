@@ -81,10 +81,11 @@ export async function reserveNeurons(db: D1Database, budget: number, day: string
 
 /**
  * Replaces a reservation by the estimate from reported tokens. When the provider reported no usage (failure, timeout)
- * the full reservation is kept as "used": conservative by design.
+ * the full reservation is kept as "used": conservative by design. When the reported usage is HIGHER than the reservation
+ * (the input estimate was low), the higher figure is recorded, so the budget is never under-counted.
  */
 export async function settle(db: D1Database, userId: string, day: string, reserved: number, actual: number | null, tokensIn: number, tokensOut: number): Promise<void> {
-  const used = actual === null ? reserved : Math.min(actual, reserved);
+  const used = actual === null ? reserved : actual;
   const release = reserved - used;
   await db.batch([
     db

@@ -195,7 +195,14 @@ function fakeTranscript(req: ExtractRequest): unknown {
   return { sourceClass: 'written', title: req.text ? null : 'Demo ball (fake provider)', language: req.lang === 'ar' ? 'ar' : 'en', terms: 'us', lines, warnings: [] };
 }
 
-export function createProvider(env: { AI?: Ai }, cfg: AiConfig): AiProvider | null {
+/** The fake provider is for local development and tests only. */
+export const fakeAllowed = (environment: string | undefined): boolean => environment === 'development' || environment === 'test';
+
+/**
+ * null = treat hosted AI as disabled. A deployed environment (staging, production) never falls back to demo replies:
+ * a missing/misspelt AI_PROVIDER or a missing AI binding switches Khayoota off instead of silently serving the fake.
+ */
+export function createProvider(env: { AI?: Ai; ENVIRONMENT?: string }, cfg: AiConfig): AiProvider | null {
   if (cfg.provider === 'workers-ai') return env.AI ? new WorkersAiProvider(env.AI, cfg.timeoutMs) : null;
-  return new FakeAiProvider();
+  return fakeAllowed(env.ENVIRONMENT) ? new FakeAiProvider() : null;
 }

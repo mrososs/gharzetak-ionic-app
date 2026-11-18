@@ -127,9 +127,9 @@ const MAX_B64 = 950_000;
       <div class="flex flex-col gap-2.5">
         <p class="gz-sm m-0">{{ i18n.q('خيوطة رفيقة كروشيه بالذكاء الاصطناعي من غرزتك — مش مدرّسة بشرية ومش نموذج اتدرّب عندنا.', 'Khayoota is Gharzetak’s AI-powered crochet companion — not a human teacher and not a model trained by us.') }}</p>
         <ul class="gz-sm m-0" style="padding-inline-start: 18px; line-height: 1.7">
-          <li>{{ i18n.q('لما تسأليها، بنبعت سؤالك والصورة اللي ترفقيها ومعلومات الدور اللي إنتي فيه لخدمة ذكاء اصطناعي بتشغّلها Cloudflare علشان ترد عليكي.', 'When you ask, your question, any photo you attach and details of the round you are on are sent to an AI service run by Cloudflare to answer you.') }}</li>
-          <li>{{ i18n.q('الصور مش بتتخزن عندنا، والمحادثة بتفضل على موبايلك بس.', 'Photos are not stored by us, and the conversation stays on your phone.') }}</li>
-          <li>{{ i18n.q('خيوطة ممكن تغلط — راجعي دايمًا على الباترون. وفيه حد يومي للأسئلة.', 'Khayoota can be wrong — always check against your pattern. There is a daily question limit.') }}</li>
+          <li>{{ i18n.q('لما تسأليها، بنبعت لخدمة ذكاء اصطناعي بتشغّلها Cloudflare علشان ترد عليكي: سؤالك، وآخر كام رسالة في المحادثة، وأي صورة ترفقيها. ولو بتسألي عن مشروع: اسمه، والدور اللي إنتي فيه، والأدوار اللي جنبه أو اللي بتسألي عنها، من نسخة الباترون اللي المشروع ماشي عليها.', 'When you ask, we send to an AI service run by Cloudflare so it can answer: your question, the last few messages of this chat and any photo you attach. If you ask about a project: its name, the round you are on and the rounds next to it or that you ask about, from the pattern version that project follows.') }}</li>
+          <li>{{ i18n.q('مش بنبعت مشاريعك التانية ولا ملاحظاتك ولا اسمك ولا إيميلك. إحنا مش بنخزّن أسئلتك ولا صورك ولا الردود؛ المحادثة بتفضل على موبايلك، وبنحسب عدد الأسئلة بس.', 'We do not send your other projects, your notes, your name or your e-mail. We do not store your questions, photos or the replies; the chat stays on your phone and we only count how many questions you ask.') }}</li>
+          <li>{{ i18n.q('خيوطة ممكن تغلط — راجعي دايمًا على الباترون. فيه حد يومي للأسئلة، وتقدري تقفلي خيوطة بالذكاء الاصطناعي في أي وقت من قايمة خيوطة.', 'Khayoota can be wrong — always check against your pattern. There is a daily question limit, and you can turn Khayoota AI off at any time from the Khayoota menu.') }}</li>
         </ul>
       </div>
       <ng-container gzActions>
@@ -192,6 +192,8 @@ export class AssistantPage {
   protected readonly previews = signal<Record<string, PatternPreview>>({});
   protected readonly lastQuestion = signal<{ text: string; images?: InlineImage[]; img?: string; purpose?: PhotoPurpose } | null>(null);
   private pendingAfterConsent: (() => void) | null = null;
+  /** The question waiting behind the consent sheet (typed OR tapped from a suggestion chip). */
+  private pendingQuestion: { text: string; hadImage: boolean } | null = null;
   private photoPurpose: PhotoPurpose = 'diagnose';
 
   constructor() {
@@ -279,9 +281,11 @@ export class AssistantPage {
     if (this.kh.needsConsent()) {
       // Ask first; the question is sent only after an explicit "Agree".
       this.pendingAfterConsent = () => void this.send(clean, img, purpose);
+      this.pendingQuestion = { text: clean, hadImage: !!img };
       this.sheet.set('consent');
       return;
     }
+    this.pendingQuestion = null;
     this.input.set('');
     await this.push({ id: uuid(), role: 'user', text: clean, img: img?.dataUrl });
     this.lastQuestion.set({ text: clean, images: img ? [img.image] : undefined, img: img?.dataUrl, purpose });
@@ -322,7 +326,7 @@ export class AssistantPage {
         lang: this.i18n.lang(),
         ...(images?.length ? { images, intent: 'diagnose-photo' as const } : {}),
         ...(history.length ? { history } : {}),
-        ...(p ? { context: buildKhayootaContext(this.store, p) } : {}),
+        ...(p ? { context: buildKhayootaContext(this.store, p, text) } : {}),
         ...(calc.length ? { calc } : {}),
       });
       const r = res.reply;
@@ -507,15 +511,14 @@ export class AssistantPage {
   protected async declineConsent(): Promise<void> {
     this.sheet.set(null);
     const next = this.pendingAfterConsent;
+    const q = this.pendingQuestion;
     this.pendingAfterConsent = null;
-    if (next) {
-      // Declined: answer with the offline helper instead (nothing is sent anywhere).
-      const text = this.input().trim();
-      if (text) {
-        this.input.set('');
-        await this.push({ id: uuid(), role: 'user', text });
-        await this.offline(text, false);
-      }
+    this.pendingQuestion = null;
+    if (next && q && (q.text || q.hadImage)) {
+      // Declined: answer the SAME question with the offline helper (nothing is sent anywhere; a photo is not uploaded).
+      if (this.input().trim() === q.text) this.input.set('');
+      await this.push({ id: uuid(), role: 'user', text: q.text });
+      await this.offline(q.text, q.hadImage);
     }
   }
 

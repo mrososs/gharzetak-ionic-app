@@ -17,7 +17,40 @@ type StoreView = Pick<AppStore, 'trackerView' | 'viewTerms'>;
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
-export function buildKhayootaContext(store: StoreView, p: Project | null): KhayootaContextV1 | undefined {
+const ORDINALS: readonly [RegExp, number][] = [
+  [/(?:الحادي|الحادى)\s*عشر/, 11],
+  [/(?:الثاني|التاني|الثانى|التانى)\s*عشر/, 12],
+  [/(?:الأول|الاول|الأولاني|الاولاني)/, 1],
+  [/(?:الثاني|التاني|الثانى|التانى)/, 2],
+  [/(?:الثالث|التالت)/, 3],
+  [/الرابع/, 4],
+  [/الخامس/, 5],
+  [/السادس/, 6],
+  [/السابع/, 7],
+  [/(?:الثامن|التامن)/, 8],
+  [/التاسع/, 9],
+  [/العاشر/, 10],
+];
+const toInt = (d: string) => Number.parseInt(d.replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 0x0660)), 10);
+
+/**
+ * Round numbers the user names in the question ("R7", "round 7", "الدور ٧", "الدور السابع"), at most 2, in order.
+ * Only these rounds' text is added to the context, so "explain round 7" works even when the counter is elsewhere.
+ */
+export function roundsMentioned(question: string): number[] {
+  const out: number[] = [];
+  const add = (n: number) => {
+    if (Number.isFinite(n) && n > 0 && n <= 1000 && !out.includes(n)) out.push(n);
+  };
+  for (const m of question.matchAll(/(?:\b(?:r|rnd|round|row)\s*#?\s*|(?:ال)?دور\s*(?:رقم\s*)?)([0-9٠-٩]{1,3})(?![0-9٠-٩])/gi)) add(toInt(m[1]!));
+  for (const m of question.matchAll(/(?:ال)?دور\s+(ال\S+(?:\s+عشر)?)/g)) {
+    const hit = ORDINALS.find(([re]) => re.test(m[1]!));
+    if (hit) add(hit[1]);
+  }
+  return out.slice(0, 2);
+}
+
+export function buildKhayootaContext(store: StoreView, p: Project | null, question = ''): KhayootaContextV1 | undefined {
   if (!p) return undefined;
   const view = store.trackerView(p);
   const kind: 'simple' | 'pattern' | 'collection' = p.parts?.length ? 'collection' : p.tracker.mode === 'pattern' ? 'pattern' : 'simple';
@@ -63,6 +96,11 @@ export function buildKhayootaContext(store: StoreView, p: Project | null): Khayo
         position: { done: tracker.cursor.ptr, of: r.acts.length },
       };
       const near = [parsed.rounds[idx - 1], parsed.rounds[idx + 1]].filter((x): x is NonNullable<typeof x> => !!x);
+      // Rounds the user asks about by number, from the SAME (pinned / snapshot) revision; max 4 entries in total.
+      for (const n of roundsMentioned(question)) {
+        const asked = parsed.rounds.find((x) => x.n === n);
+        if (asked && asked.n !== r.n && !near.some((x) => x.n === n) && near.length < 4) near.push(asked);
+      }
       if (near.length) ctx.nearby = near.map((x) => ({ n: x.n, text: clip(x.raw, 300) }));
       const stats = patternStats(parsed, tracker.cursor);
       if (stats) ctx.percent = Math.round(stats.progress * 100);

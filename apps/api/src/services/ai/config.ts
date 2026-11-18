@@ -35,6 +35,11 @@ export interface AiConfig {
   burstUnitsPerMinute: number;
   burstWeight: Record<AiKind, number>;
   consentVersion: number;
+  /**
+   * Who may use hosted AI: '*' = every signed-in account, otherwise an explicit list of user ids. FAIL-CLOSED: in a deployed
+   * environment an unset/empty AI_ALLOWED_USER_IDS means NOBODY; only local development/tests default to everyone.
+   */
+  allowedUsers: '*' | readonly string[];
   timeoutMs: number;
   maxOutputTokens: { chat: number; image: number; extract: number; repair: number };
 }
@@ -44,6 +49,18 @@ const int = (v: string | undefined, d: number, min: number, max: number): number
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : d;
 };
 const model = (v: string | undefined): string => (v && v in MODELS ? v : DEFAULT_MODEL);
+const allowList = (v: string | undefined, environment: string | undefined): '*' | readonly string[] => {
+  const raw = (v ?? '').trim();
+  if (raw === '*') return '*';
+  const ids = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 200);
+  if (ids.length) return ids;
+  return environment === 'development' || environment === 'test' ? '*' : [];
+};
+export const userAllowed = (cfg: Pick<AiConfig, 'allowedUsers'>, userId: string): boolean => cfg.allowedUsers === '*' || cfg.allowedUsers.includes(userId);
 
 export function aiConfig(env: AppEnv): AiConfig {
   return {
@@ -58,6 +75,7 @@ export function aiConfig(env: AppEnv): AiConfig {
     burstUnitsPerMinute: int(env.AI_BURST_UNITS_PER_MINUTE, 20, 1, 10_000),
     burstWeight: { chat: 1, image: 3, extract: 6 },
     consentVersion: int(env.AI_CONSENT_VERSION, 1, 1, 1000),
+    allowedUsers: allowList(env.AI_ALLOWED_USER_IDS, env.ENVIRONMENT),
     timeoutMs: int(env.AI_TIMEOUT_MS, 45_000, 1000, 120_000),
     maxOutputTokens: { chat: 600, image: 700, extract: 2500, repair: 600 },
   };

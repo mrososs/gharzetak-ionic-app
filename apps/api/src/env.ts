@@ -41,6 +41,8 @@ export interface AppEnv {
   AI_BURST_UNITS_PER_MINUTE?: string;
   /** Version of the consent text users must accept before hosted AI is used. */
   AI_CONSENT_VERSION?: string;
+  /** "*" = every signed-in account; else comma-separated user ids. Unset/empty in a deployed environment = nobody. */
+  AI_ALLOWED_USER_IDS?: string;
   /** Upstream deadline per model call (ms). */
   AI_TIMEOUT_MS?: string;
 }

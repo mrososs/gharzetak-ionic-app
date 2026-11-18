@@ -15,7 +15,7 @@ import { Hono, type Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { AppBindings } from '../env';
 import { ApiError, badRequest } from '../errors';
-import { aiConfig, nextUtcMidnight, utcDay, worstCaseNeurons, actualNeurons, type AiConfig, type AiKind } from '../services/ai/config';
+import { aiConfig, nextUtcMidnight, userAllowed, utcDay, worstCaseNeurons, actualNeurons, type AiConfig, type AiKind } from '../services/ai/config';
 import { AI_LIMITS, chatRequest, consentRequest, extractJson, extractRequest, modelReply, modelTranscript, toChatReply, toTranscript, type ChatReplyV1, type InlineImage } from '../services/ai/contracts';
 import { aiLog } from '../services/ai/log';
 import { buildChatMessages, buildExtractMessages, estimateInputTokens, REPLY_JSON_SCHEMA, TRANSCRIPT_JSON_SCHEMA, type PromptMessage } from '../services/ai/prompts';
@@ -53,7 +53,7 @@ async function consentVersion(db: D1Database, userId: string): Promise<number> {
 
 function requireEnabled(c: C): { cfg: AiConfig; provider: AiProvider } {
   const cfg = aiConfig(c.env);
-  if (!cfg.enabled) throw aiError(503, 'ai_disabled', 'Khayoota is not available right now');
+  if (!cfg.enabled || !userAllowed(cfg, c.get('userId'))) throw aiError(503, 'ai_disabled', 'Khayoota is not available right now');
   const provider = createProvider(c.env, cfg);
   if (!provider) throw aiError(503, 'ai_disabled', 'Khayoota is not configured');
   return { cfg, provider };
@@ -135,7 +135,7 @@ ai.use('*', async (c, next) => {
 
 ai.get('/status', async (c) => {
   const cfg = aiConfig(c.env);
-  const providerReady = cfg.enabled && !!createProvider(c.env, cfg);
+  const providerReady = cfg.enabled && userAllowed(cfg, c.get('userId')) && !!createProvider(c.env, cfg);
   if (!providerReady) return c.json({ v: 1, enabled: false });
   const day = utcDay();
   const [accepted, usage] = await Promise.all([consentVersion(c.env.DB, c.get('userId')), usageFor(c.env.DB, cfg, c.get('userId'), day)]);
@@ -175,7 +175,8 @@ ai.delete('/consent', async (c) => {
 ai.post('/chat', async (c) => {
   const { cfg, provider } = requireEnabled(c);
   await requireConsent(c, cfg);
-  const req = await parseBody(c, chatRequest, AI_LIMITS.chatBodyBytes);
+  // With photos off, a text-only body is small: refuse big bodies before reading/parsing them (Worker CPU limit).
+  const req = await parseBody(c, chatRequest, cfg.features.vision ? AI_LIMITS.chatBodyBytes : AI_LIMITS.chatTextBodyBytes);
   const images = req.images ?? [];
   if (images.length && !cfg.features.vision) throw aiError(403, 'ai_feature_disabled', 'Photo questions are not available yet', { feature: 'vision' });
   if (images.some((i) => !sniffImage(i))) throw aiError(415, 'ai_unsupported_image', 'Images must be JPEG, PNG or WebP');
@@ -217,8 +218,9 @@ ai.post('/chat', async (c) => {
 ai.post('/extract', async (c) => {
   const { cfg, provider } = requireEnabled(c);
   await requireConsent(c, cfg);
-  const req = await parseBody(c, extractRequest, AI_LIMITS.extractBodyBytes);
+  // Flag first: while extraction is off its (large) body is never read.
   if (!cfg.features.extract) throw aiError(403, 'ai_feature_disabled', 'Reading patterns from photos is not available yet', { feature: 'extract' });
+  const req = await parseBody(c, extractRequest, AI_LIMITS.extractBodyBytes);
   const images = req.images ?? [];
   if (images.some((i) => !sniffImage(i))) throw aiError(415, 'ai_unsupported_image', 'Images must be JPEG, PNG or WebP');
   const day = utcDay();
