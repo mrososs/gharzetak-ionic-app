@@ -14,6 +14,7 @@ import { displayInTerms } from '../../core/domain/terminology';
 import { patternContext } from '../../core/domain/tracker-engine';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ChatMessage } from '../../core/models/models';
+import { NetworkService } from '../../core/services/network.service';
 import { TrackerNavigator } from '../../core/services/tracker-navigator.service';
 import { AppStore } from '../../core/state/app.store';
 import { uuid } from '../../core/state/factories';
@@ -47,7 +48,7 @@ const MAX_B64 = 950_000;
       <div class="gz-top" style="padding-top: calc(18px + var(--gz-safe-top))">
         <div class="gz-tile t-lav" style="width: 46px; height: 46px"><svg gzIcon="sparkles" /></div>
         <div class="flex min-w-0 flex-1 flex-col"><h1 class="gz-hd m-0" style="font-size: 18px">{{ t().aiTitle }}</h1><span class="gz-xs gz-mute truncate">{{ t().aiSub }}</span></div>
-        <span class="gz-badge" [class.rose]="mode() !== 'ai'" [class.sage]="mode() === 'ai'">{{ mode() === 'ai' ? t().aiBadge : mode() === 'demo' ? t().demoBadge : t().aiOfflineBadge }}</span>
+        <span class="gz-badge" [class.rose]="mode() === 'offline'" [class.sage]="mode() === 'ai'" [class.peach]="mode() === 'consent'">{{ badge() }}</span>
         <button type="button" class="gz-icb flat" (click)="sheet.set('menu')" [attr.aria-label]="i18n.q('خيارات خيوطة', 'Khayoota options')"><svg gzIcon="sliders" /></button>
       </div>
       <div style="padding: 0 20px 8px">
@@ -170,6 +171,7 @@ export class AssistantPage {
   protected readonly ai = inject(AssistantService);
   protected readonly kh = inject(KhayootaService);
   private readonly auth = inject(AuthService);
+  private readonly net = inject(NetworkService);
   private readonly ui = inject(UiFeedback);
   private readonly nav = inject(NavController);
   private readonly trackerNav = inject(TrackerNavigator);
@@ -214,7 +216,16 @@ export class AssistantPage {
     return (id ? this.store.project(id) : null) ?? this.store.currentProject();
   });
 
-  protected readonly mode = computed<'ai' | 'demo' | 'offline'>(() => (this.kh.ready() ? (this.kh.demoProvider() ? 'demo' : 'ai') : 'offline'));
+  /** ai/demo = hosted and consented; consent = hosted but waiting for the user's OK; rules = online without hosted AI (guest, no backend, disabled); offline = no network. */
+  protected readonly mode = computed<'ai' | 'demo' | 'consent' | 'rules' | 'offline'>(() => {
+    if (this.kh.ready()) return this.kh.demoProvider() ? 'demo' : 'ai';
+    if (this.kh.needsConsent()) return 'consent';
+    return this.net.online() ? 'rules' : 'offline';
+  });
+  protected readonly badge = computed(() => {
+    const t = this.t();
+    return { ai: t.aiBadge, demo: t.demoBadge, consent: t.aiConsentBadge, rules: t.aiRulesBadge, offline: t.aiOfflineBadge }[this.mode()];
+  });
 
   protected readonly guestHint = computed(() => this.kh.configured && !this.auth.signedIn());
 
@@ -252,7 +263,7 @@ export class AssistantPage {
   });
 
   protected readonly footerNote = computed(() => {
-    if (this.mode() === 'offline') return this.t().aiDisclaimer;
+    if (this.mode() === 'offline' || this.mode() === 'rules') return this.t().aiDisclaimer;
     const s = this.kh.status();
     const left = s && s.enabled ? ` · ${this.i18n.q('الباقي النهارده', 'left today')}: ${s.remaining.chat}` : '';
     return this.t().aiHostedNote + left;
