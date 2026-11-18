@@ -11,7 +11,7 @@ import { LocalDb } from '../storage/local-db';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { resolveAction, resolveActions, type ActionLookup } from './action-registry';
 import { AssistantService } from './assistant.service';
-import { calcFacts } from './calc';
+import { calcFacts, messageLang } from './calc';
 import { buildKhayootaContext, roundsMentioned } from './khayoota-context';
 import { CHAT_CLIENT_TIMEOUT_MS, KhayootaFailure, mapError, within } from './khayoota.service';
 import type { TranscriptV1 } from './khayoota.types';
@@ -20,6 +20,25 @@ import { previewFromTranscript } from './transcript-draft';
 /* ------------------------------------------------------------------ */
 /* calculator facts                                                    */
 /* ------------------------------------------------------------------ */
+
+describe('real-device findings (Gemma 4 on the HONOR phone)', () => {
+  it('a round line followed by a question sends only the countable group, never the whole sentence', () => {
+    const facts = calcFacts('R4: (2sc, inc) x 6 [24] اشرحلي أعمل الدور ده إزاي.');
+    expect(facts).toHaveLength(1);
+    expect(facts[0]).toMatchObject({ expr: '(2sc, inc) x 6 [24]', consumed: 18, produced: 24, declared: 24, mismatch: false, status: 'validated' });
+    expect(calcFacts('R5: something we cannot count at all, explain?')).toEqual([]);
+    expect(calcFacts('R4: (2sc, inc) x 6 [24]')[0]).toMatchObject({ produced: 24, status: 'validated' }); // a real pattern line is unchanged
+  });
+
+  it('answers in the language of the question, not the UI language; abbreviations do not make Arabic "English"', () => {
+    expect(messageLang('How do I make an invisible decrease in amigurumi?', 'ar')).toBe('en');
+    expect(messageLang('In UK crochet terms, what does tr mean?', 'ar')).toBe('en');
+    expect(messageLang('خيوطة، إيه الفرق بين sc و hdc؟', 'en')).toBe('ar');
+    expect(messageLang('R4: (2sc, inc) x 6 [24] اشرحلي أعمل الدور ده إزاي.', 'en')).toBe('ar');
+    expect(messageLang('(2sc, inc) x 6', 'ar')).toBe('ar'); // only stitch notation → keep the UI language
+    expect(messageLang('', 'en')).toBe('en');
+  });
+});
 
 describe('calcFacts — the parser counts, the model explains', () => {
   it('counts a repeat group in an Arabic question (the pilot case the model got wrong)', () => {

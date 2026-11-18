@@ -5,7 +5,7 @@
  * So before a question is sent, the app finds round expressions in the user's own message, runs them through the REAL
  * Smart Pattern Parser and sends the results as facts. The model explains; the parser counts.
  *
- * Pure function: no network, no store access.
+ * Pure functions: no network, no store access.
  */
 import { convertPatternText } from '../domain/smart-parser';
 
@@ -35,22 +35,49 @@ export function calcFacts(message: string): CalcFact[] {
   if (!found.length) for (const m of text.matchAll(GROUP_RE)) found.push(m[0].trim());
   const facts: CalcFact[] = [];
   const seen = new Set<string>();
-  for (const expr of found) {
-    if (facts.length >= MAX_FACTS || seen.has(expr)) continue;
+  const add = (expr: string, fallback: boolean): void => {
+    if (facts.length >= MAX_FACTS || seen.has(expr)) return;
     seen.add(expr);
-    const line = /^(?:r|rnd|round|row|الدور|دور)\s*[0-9٠-٩]/i.test(expr) ? expr : `R1: ${expr}`;
-    const conv = convertPatternText(line);
-    const round = conv.parts[0]?.rounds[0];
-    if (!round) continue;
-    facts.push({
-      expr: expr.slice(0, 200),
-      normalized: round.normalized.slice(0, 200),
-      consumed: round.consumed,
-      produced: round.calculated,
-      declared: round.expected,
-      mismatch: round.expected !== null && round.calculated !== null && round.expected !== round.calculated,
-      status: round.status,
-    });
-  }
+    const fact = factFor(expr);
+    if (!fact) return;
+    if (fact.status === 'unsupported' && fallback) {
+      // A round line followed by a question ("R4: (2sc, inc) x 6 [24] اشرحلي…") is not a pattern line: count only the
+      // repeat groups inside it. A line with nothing countable is not sent at all (no noise for the model).
+      for (const m of expr.matchAll(GROUP_RE)) add(m[0].trim(), false);
+      return;
+    }
+    facts.push(fact);
+  };
+  for (const expr of found) add(expr, true);
   return facts;
+}
+
+function factFor(expr: string): CalcFact | null {
+  const line = /^(?:r|rnd|round|row|الدور|دور)\s*[0-9٠-٩]/i.test(expr) ? expr : `R1: ${expr}`;
+  const round = convertPatternText(line).parts[0]?.rounds[0];
+  if (!round) return null;
+  return {
+    expr: expr.slice(0, 200),
+    normalized: round.normalized.slice(0, 200),
+    consumed: round.consumed,
+    produced: round.calculated,
+    declared: round.expected,
+    mismatch: round.expected !== null && round.calculated !== null && round.expected !== round.calculated,
+    status: round.status,
+  };
+}
+
+/** Crochet abbreviations and round markers: Latin letters that do not make a question "English". */
+const STITCH_WORDS = /(?<![A-Za-z])(?:sc|hdc|dc|tr|dtr|inc|dec|ch|sl|st|sts|mr|blo|flo|sk|r|rnd|x|us|uk)(?![A-Za-z])/gi;
+
+/**
+ * The language to answer in = the language of the QUESTION, not the app's UI language: an English question asked in the
+ * Arabic UI gets an English answer (found on the real device). Falls back to the UI language when there are no letters.
+ */
+export function messageLang(message: string, fallback: 'ar' | 'en'): 'ar' | 'en' {
+  const text = String(message ?? '').replace(STITCH_WORDS, ' ');
+  const arabic = (text.match(/[؀-ۿ]/g) ?? []).length;
+  const latin = (text.match(/[A-Za-z]/g) ?? []).length;
+  if (!arabic && !latin) return fallback;
+  return arabic >= latin * 0.5 ? 'ar' : 'en';
 }

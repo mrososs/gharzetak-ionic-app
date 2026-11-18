@@ -184,6 +184,24 @@ describe('Khayoota page', () => {
     expect(kh.chat).not.toHaveBeenCalled();
   });
 
+  it('the project card collapses to one slim row (remembered) and opens again', async () => {
+    localStorage.removeItem('gz.khayoota.ctxOpen');
+    await setup();
+    expect(host.querySelector('.kh-ctx')).not.toBeNull();
+    host.querySelector<HTMLButtonElement>('.kh-ctx-close')!.click();
+    detect();
+    expect(host.querySelector('.kh-ctx')).toBeNull();
+    const mini = host.querySelector<HTMLButtonElement>('.kh-ctx-mini')!;
+    expect(mini.getAttribute('aria-expanded')).toBe('false');
+    expect(localStorage.getItem('gz.khayoota.ctxOpen')).toBe('0');
+    await setup(); // a new visit keeps it collapsed
+    expect(host.querySelector('.kh-ctx-mini')).not.toBeNull();
+    host.querySelector<HTMLButtonElement>('.kh-ctx-mini')!.click();
+    detect();
+    expect(host.querySelector('.kh-ctx')).not.toBeNull();
+    localStorage.removeItem('gz.khayoota.ctxOpen');
+  });
+
   it('status line reflects the real state and never says "offline" while only consent is missing', async () => {
     const cases: [ReturnType<typeof fakeKhayoota>, string][] = [
       [fakeKhayoota(), 'متصلة'],

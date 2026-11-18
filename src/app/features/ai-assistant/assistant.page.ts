@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, injec
 import { IonContent, IonFooter, IonHeader, NavController } from '@ionic/angular';
 import { resolveAction, type ResolvedAction } from '../../core/ai/action-registry';
 import { AssistantService } from '../../core/ai/assistant.service';
-import { calcFacts } from '../../core/ai/calc';
+import { calcFacts, messageLang } from '../../core/ai/calc';
 import { buildKhayootaContext } from '../../core/ai/khayoota-context';
 import { KhayootaFailure, KhayootaService } from '../../core/ai/khayoota.service';
 import type { InlineImage, KhayootaErrorCode } from '../../core/ai/khayoota.types';
@@ -40,6 +40,15 @@ const MAX_B64 = 950_000;
  *  - Photos are resized/re-encoded on the device (EXIF dropped), sent inline, and never stored in chat history.
  *  - Actions are re-validated at render and at tap; none changes progress or saves anything.
  */
+const CTX_OPEN_KEY = 'gz.khayoota.ctxOpen';
+function readCtxOpen(): boolean {
+  try {
+    return localStorage.getItem(CTX_OPEN_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
 @Component({
   selector: 'gz-assistant',
   imports: [IonHeader, IonContent, IonFooter, IconComponent, PhotoComponent, SheetComponent, KhayootaReplyComponent],
@@ -52,6 +61,14 @@ const MAX_B64 = 950_000;
         <button type="button" class="gz-icb flat" (click)="sheet.set('menu')" [attr.aria-label]="i18n.q('خيارات خيوطة', 'Khayoota options')"><svg gzIcon="sliders" /></button>
       </div>
       <div class="kh-ctx-wrap" style="padding: 0 20px 8px">
+        @if (!ctxOpen()) {
+          <!-- Collapsed: one slim row, so the conversation gets the screen. Tap to open the card again. -->
+          <button type="button" class="kh-ctx-mini" (click)="toggleCtx()" aria-expanded="false" [attr.aria-label]="i18n.q('افتحي كارت المشروع', 'Show the project card') + ': ' + ctxView().name">
+            <span class="gz-xs gz-mute gz-b flex-none">{{ i18n.q('بتتكلمي عن', 'Talking about') }}</span>
+            <b class="truncate min-w-0 flex-1">{{ ctxView().name }}</b>
+            <svg gzIcon="chevd" size="s" aria-hidden="true" />
+          </button>
+        } @else {
         <div class="gz-card kh-ctx" style="padding: 10px 12px; border: 1.5px solid var(--gz-border); box-shadow: none">
           <div class="flex items-center gap-2.5">
             <gz-photo class="flex-none kh-ctx-photo" [tone]="ctxView().tone" [src]="ctxView().img" [storagePath]="ctxView().path" [alt]="ctxView().name" [showLabel]="false" iconSize="s" height="44px" width="44px" extraClass="r16" />
@@ -63,11 +80,13 @@ const MAX_B64 = 950_000;
             @if (useProject()) {
               <button type="button" class="gz-btn3" style="min-height: 44px; padding: 0 12px; font-size: 13px" (click)="explainCurrent()">{{ t().explainCur }}</button>
             }
+            <button type="button" class="kh-ctx-close" (click)="toggleCtx()" aria-expanded="true" [attr.aria-label]="i18n.q('صغّري كارت المشروع', 'Collapse the project card')"><svg gzIcon="chevd" size="s" /></button>
           </div>
           @if (activeProject()) {
             <button type="button" class="gz-btn-text gz-xs mt-1 kh-ctx-toggle" (click)="useProject.set(!useProject())">{{ useProject() ? i18n.q('اسألي سؤال عام بدل كده', 'Ask a general question instead') : i18n.q('اسألي عن المشروع ده', 'Ask about this project') }}</button>
           }
         </div>
+        }
       </div>
     </ion-header>
 
@@ -218,6 +237,16 @@ const MAX_B64 = 950_000;
       .kh-status[data-mode='consent'] .kh-dot,
       .kh-status[data-mode='soon'] .kh-dot { background: var(--gz-warning); }
       .kh-status[data-mode='offline'] .kh-dot { background: var(--gz-error); }
+      /* Project card: collapsible to a slim row so the messages get the screen (state remembered on this device). */
+      .kh-ctx-mini {
+        display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px;
+        color: var(--gz-text); background: var(--gz-surface); border: 1.5px solid var(--gz-border); border-radius: var(--gz-r-pill); cursor: pointer;
+      }
+      .kh-ctx-close {
+        flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; background: transparent; color: var(--gz-text-2);
+        display: flex; align-items: center; justify-content: center; cursor: pointer;
+      }
+      .kh-ctx-close svg { transform: rotate(180deg); }
       /* Short viewports (landscape, or the keyboard is open): keep the conversation visible. The project card keeps its
          name and the explain button; the photo, the round line, the label and the subtitle step aside. */
       @media (max-height: 560px) {
@@ -256,6 +285,18 @@ export class AssistantPage {
   protected readonly t = this.i18n.t;
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('file');
   private readonly content = viewChild(IonContent);
+
+  /** Project card open/collapsed — remembered on this device (a convenience only; storage may be unavailable). */
+  protected readonly ctxOpen = signal(readCtxOpen());
+  protected toggleCtx(): void {
+    const open = !this.ctxOpen();
+    this.ctxOpen.set(open);
+    try {
+      localStorage.setItem(CTX_OPEN_KEY, open ? '1' : '0');
+    } catch {
+      /* private mode / blocked storage: the toggle still works for this session */
+    }
+  }
   protected readonly input = signal('');
   protected readonly typing = signal(false);
   protected readonly busyText = signal('');
@@ -424,7 +465,7 @@ export class AssistantPage {
     try {
       const res = await this.kh.chat({
         message: text,
-        lang: this.i18n.lang(),
+        lang: messageLang(text, this.i18n.lang()),
         ...(images?.length ? { images, intent: 'diagnose-photo' as const } : {}),
         ...(history.length ? { history } : {}),
         ...(p ? { context: buildKhayootaContext(this.store, p, text) } : {}),
