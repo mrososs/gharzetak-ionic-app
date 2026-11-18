@@ -47,6 +47,7 @@ export interface AppEnv {
   AI_ALLOWED_EMAILS?: string;
   /** Upstream deadline per model call (ms). */
   AI_TIMEOUT_MS?: string;
+  AI_EXTRACT_TIMEOUT_MS?: string;
 }
 
 export interface AppBindings {

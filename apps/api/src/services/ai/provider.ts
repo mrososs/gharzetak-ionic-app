@@ -18,6 +18,8 @@ export interface ProviderRequest {
   schemaName: string;
   maxOutputTokens: number;
   temperature: number;
+  /** Per-call ceiling; defaults to the provider's (chat) timeout. */
+  timeoutMs?: number;
   /** The validated request (used ONLY by the fake provider to build a deterministic reply). */
   source: { purpose: 'chat'; req: ChatRequest } | { purpose: 'extract'; req: ExtractRequest } | { purpose: 'repair'; req?: ChatRequest };
 }
@@ -99,7 +101,7 @@ export class WorkersAiProvider implements AiProvider {
     try {
       // The model id is server-allowlisted (MODELS); the binding's generic typing does not know newer ids.
       const run = this.ai.run.bind(this.ai) as unknown as (model: string, inputs: unknown) => Promise<unknown>;
-      return normalize(await withTimeout(run(req.model, inputs), this.timeoutMs));
+      return normalize(await withTimeout(run(req.model, inputs), req.timeoutMs ?? this.timeoutMs));
     } catch (e) {
       throw classify(e);
     }

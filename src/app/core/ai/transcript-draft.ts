@@ -61,10 +61,35 @@ export function previewFromTranscript(t: TranscriptV1, id: string): PatternPrevi
   const lines = t.lines.filter((l) => l.kind !== 'other');
   if (!lines.length) return null;
   const sourceText = lines.map((l) => l.text).join('\n');
-  const conv: ConversionResult = convertPatternText(sourceText, { terms: t.terms === 'uk' ? 'uk' : t.terms === 'us' ? 'us' : 'auto' });
+  // Structure comes from the transcript's line kinds (device finding: colour/repeat notes such as "لون الخيط أصفر" were
+  // read by the converter as part headings). Only titles, headings and rounds go to the parser; notes and assembly lines
+  // stay attached to the part whose heading precedes them. Validity still comes from the parser alone.
+  const structural = lines.filter((l) => l.kind === 'title' || l.kind === 'part-heading' || l.kind === 'round');
+  const notesByHeading = new Map<string, string[]>();
+  const headings: string[] = [];
+  let current = '';
+  for (const l of lines) {
+    if (l.kind === 'part-heading') {
+      current = l.text.trim();
+      headings.push(current);
+    } else if (l.kind === 'note' || l.kind === 'assembly') {
+      const list = notesByHeading.get(current) ?? [];
+      list.push(l.text.trim());
+      notesByHeading.set(current, list);
+    }
+  }
+  const conv: ConversionResult = convertPatternText(structural.map((l) => l.text).join('\n'), { terms: t.terms === 'uk' ? 'uk' : t.terms === 'us' ? 'us' : 'auto' });
   const byText = new Map(lines.map((l) => [l.text.trim(), l]));
+  const used = new Set<string>();
+  const headingFor = (name: string): string | null => {
+    const h = headings.find((x) => !used.has(x) && (x === name || (!!name && x.includes(name))));
+    if (h) used.add(h);
+    return h ?? null;
+  };
 
-  const parts: PreviewPart[] = conv.parts.map((p) => {
+  const parts: PreviewPart[] = conv.parts.map((p, partIndex) => {
+    const heading = headingFor(p.name.trim());
+    const attached = [...(heading ? (notesByHeading.get(heading) ?? []) : []), ...(partIndex === 0 ? (notesByHeading.get('') ?? []) : [])];
     const rounds = p.rounds.map((r, i, all) => {
       const line = byText.get(r.original.trim());
       const codes = r.messages.map((m) => m.code);
@@ -80,6 +105,14 @@ export function previewFromTranscript(t: TranscriptV1, id: string): PatternPrevi
         status = worse(status, 'needs-review');
         codes.push('ai-chart');
       }
+      // Unbalanced brackets = the model mis-read a repeat group (device finding: the RTL "(" was dropped on every
+      // "(1 حشو، تزايد) ×6"). Never validated, whatever the model's confidence.
+      const opens = (r.original.match(/[(\[]/g) ?? []).length;
+      const closes = (r.original.match(/[)\]]/g) ?? []).length;
+      if (opens !== closes) {
+        status = worse(status, 'needs-review');
+        codes.push('ai-unbalanced');
+      }
       if (status === 'validated' && r.expected === null) {
         const prev = all[i - 1];
         const next = all[i + 1];
@@ -93,7 +126,7 @@ export function previewFromTranscript(t: TranscriptV1, id: string): PatternPrevi
       return { n: r.n, original: r.original, normalized: r.normalized, status, expected: r.expected, calculated: r.calculated, codes, uncertain: line?.uncertain ?? [], page: line?.page ?? null } satisfies PreviewRound;
     });
     const status = rounds.reduce<ConvStatus>((a, r) => worse(a, r.status), rounds.length ? 'validated' : 'needs-review');
-    return { name: p.name, quantity: p.quantity, rounds, notes: p.notes, status, text: p.text };
+    return { name: p.name, quantity: p.quantity, rounds, notes: [...p.notes, ...attached], status, text: p.text };
   });
 
   const all = parts.flatMap((p) => p.rounds);

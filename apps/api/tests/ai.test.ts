@@ -5,7 +5,7 @@
 import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import app from '../src/index';
-import { FakeAiProvider, FAKE_TRIGGERS } from '../src/services/ai/provider';
+import { FakeAiProvider, FAKE_TRIGGERS, WorkersAiProvider } from '../src/services/ai/provider';
 import { reserveNeurons, settle } from '../src/services/ai/quota';
 import { aiConfig } from '../src/services/ai/config';
 import { khayootaContext, sanitizeActions, toChatReply } from '../src/services/ai/contracts';
@@ -400,6 +400,20 @@ describe('multi-image (one related set per message)', () => {
     const four = buildChatMessages({ v: 1, lang: 'ar', message: 'x', images: [jpeg, jpeg, jpeg, jpeg] } as never);
     expect(estimateInputTokens(four) - estimateInputTokens(one)).toBeGreaterThanOrEqual(3 * IMAGE_TOKENS_UPPER);
     expect(JSON.stringify(four)).toContain('IMAGES: 4 photos of ONE related subject');
+  });
+});
+
+describe('extraction timeout (real-device finding: a full giraffe page timed out at 45 s)', () => {
+  it('a per-call timeout overrides the chat default; extraction gets 120 s and a 4000-token output cap', async () => {
+    const slowAi = { run: () => new Promise((r) => setTimeout(() => r({ choices: [{ message: { content: '{}' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), 60)) } as unknown as Ai;
+    const p = new WorkersAiProvider(slowAi, 20);
+    const req = { model: '@cf/google/gemma-4-26b-a4b-it', messages: [], jsonSchema: {}, schemaName: 's', maxOutputTokens: 10, temperature: 0, source: { purpose: 'repair' as const } };
+    await expect(p.generate(req)).rejects.toMatchObject({ kind: 'timeout' });
+    await expect(p.generate({ ...req, timeoutMs: 500 })).resolves.toMatchObject({ text: '{}' });
+    const cfg = aiConfig(aiEnv() as unknown as AppEnv);
+    expect(cfg.extractTimeoutMs).toBe(120_000);
+    expect(cfg.timeoutMs).toBe(45_000);
+    expect(cfg.maxOutputTokens.extract).toBe(4000);
   });
 });
 

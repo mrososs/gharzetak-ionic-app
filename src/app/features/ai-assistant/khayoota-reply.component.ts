@@ -192,6 +192,7 @@ export class KhayootaReplyComponent {
     const q = (ar: string, en: string) => this.i18n.q(ar, en);
     if (codes.includes('ai-unreadable')) return q('مش مقروء', 'unreadable');
     if (codes.includes('ai-uncertain')) return q('خيوطة مش متأكدة من القراءة', 'Khayoota was unsure reading it');
+    if (codes.includes('ai-unbalanced')) return q('قوس ناقص في القراءة — قارني بالصورة', 'a bracket is missing in the reading — compare with the photo');
     if (codes.includes('total-mismatch')) return q('المجموع المكتوب مش مطابق', 'written total does not match');
     if (codes.includes('chain')) return q('مش ماشي مع الدور اللي قبله', 'does not follow the previous round');
     if (codes.includes('joins')) return q('تجميع مع قطعة تانية', 'joins another piece');

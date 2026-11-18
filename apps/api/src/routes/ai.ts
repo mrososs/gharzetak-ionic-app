@@ -235,7 +235,7 @@ ai.post('/extract', async (c) => {
   const model = cfg.models.extract;
   const messages = buildExtractMessages(req);
   const call = (msgs: PromptMessage[], purpose: 'extract' | 'repair', maxOutputTokens: number) =>
-    callModel(c, cfg, provider, { model, messages: msgs, jsonSchema: TRANSCRIPT_JSON_SCHEMA, schemaName: 'pattern_transcript', maxOutputTokens, temperature: 0, source: purpose === 'extract' ? { purpose, req } : { purpose: 'repair' } }, day, purpose === 'extract' ? 'extract' : 'extract-repair', 'extract');
+    callModel(c, cfg, provider, { model, messages: msgs, jsonSchema: TRANSCRIPT_JSON_SCHEMA, schemaName: 'pattern_transcript', maxOutputTokens, temperature: 0, timeoutMs: cfg.extractTimeoutMs, source: purpose === 'extract' ? { purpose, req } : { purpose: 'repair' } }, day, purpose === 'extract' ? 'extract' : 'extract-repair', 'extract');
   const parse = (text: string) => {
     try {
       return toTranscript(modelTranscript.parse(extractJson(text)));

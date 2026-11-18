@@ -42,6 +42,8 @@ export interface AiConfig {
    */
   access: { all: boolean; ids: readonly string[]; emails: readonly string[] };
   timeoutMs: number;
+  /** Reading a full pattern page produces a long transcript: its own, longer ceiling (device finding: 45 s timed out). */
+  extractTimeoutMs: number;
   maxOutputTokens: { chat: number; image: number; extract: number; repair: number };
 }
 
@@ -93,7 +95,9 @@ export function aiConfig(env: AppEnv): AiConfig {
     consentVersion: int(env.AI_CONSENT_VERSION, 1, 1, 1000),
     access: accessList(env),
     timeoutMs: int(env.AI_TIMEOUT_MS, 45_000, 1000, 120_000),
-    maxOutputTokens: { chat: 600, image: 700, extract: 2500, repair: 600 },
+    extractTimeoutMs: int(env.AI_EXTRACT_TIMEOUT_MS, 120_000, 1000, 140_000),
+    // extract 4000: a dense page is ~60 lines of Arabic plus JSON fields (2500 truncated the JSON).
+    maxOutputTokens: { chat: 600, image: 700, extract: 4000, repair: 600 },
   };
 }
 
