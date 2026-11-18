@@ -44,6 +44,7 @@ import { DurationInputComponent } from '../../shared/ui/inputs/duration-input.co
             <div class="gz-sm gz-mute flex items-center gap-2.5" style="margin: 6px 0 8px"><span class="flex-1">{{ c.roundLabel }} · {{ c.lastText }}</span><span class="gz-b" style="color: var(--gz-primary); font-size: 16px">{{ c.pct }}%</span></div>
             <div class="gz-bar"><i [style.width.%]="c.pct"></i></div>
             <button type="button" class="gz-btn mt-4" (click)="resume()"><svg gzIcon="play" />{{ t().resumeProject }}</button>
+            <button type="button" class="gz-btn3 w mt-2" (click)="askKhayoota()"><svg gzIcon="sparkles" size="s" />{{ t().askKhayoota }}</button>
             <button type="button" class="gz-btn3 w mt-2" (click)="shareProgress()"><svg gzIcon="send" size="s" />{{ i18n.q('شاركي تقدّم المشروع', 'Share project progress') }}</button>
 
             <!-- a newer pattern / collection version exists: the project stays on its own version until the user updates -->
@@ -214,6 +215,11 @@ export class ProjectDetailPage {
   protected readonly i18n = inject(I18nService);
   protected readonly store = inject(AppStore);
   protected readonly nav = inject(NavController);
+
+  /** Opens Khayoota about this project (its pinned revision / active piece become the context). */
+  protected askKhayoota(): void {
+    void this.nav.navigateForward(['/tabs/assistant'], { queryParams: { project: this.id() } });
+  }
   protected readonly timer = inject(TimerService);
   private readonly ui = inject(UiFeedback);
   private readonly finishSvc = inject(ProjectFinishService);

@@ -1,0 +1,5 @@
+# Fixtures may contain photos of personal handwriting/work; results contain raw model output. Neither is committed.
+fixtures/*
+!fixtures/README.md
+results/
+# fixture renderer output and the esbuild cache live under fixtures/ and results/ (both ignored above)

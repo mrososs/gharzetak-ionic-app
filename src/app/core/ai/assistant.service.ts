@@ -16,11 +16,9 @@ export interface AssistantReply {
 }
 
 /**
- * AI assistant boundary.
- *  - Default: a clearly labelled DEMO mode — deterministic replies built from the user's own
- *    project data (port of the prototype's rule set). Stitch arithmetic is never delegated to a model.
- *  - Future: set GZ_AI_ENDPOINT to a Worker API path (e.g. /v1/assistant — not implemented yet). Only the
- *    question and a small, explicit project context are sent — never credentials or unrestricted DB access.
+ * Khayoota's OFFLINE helper: deterministic replies built from the user's own project data (port of the prototype's rule
+ * set). Used when hosted AI is not available (guest, offline, no backend, kill switch, limit reached) and always labelled as
+ * such. Stitch arithmetic is exact (strict parser). Hosted AI lives in KhayootaService.
  */
 @Injectable({ providedIn: 'root' })
 export class AssistantService {
@@ -30,15 +28,8 @@ export class AssistantService {
 
   readonly connected = !!environment.aiEndpoint && this.api.configured;
 
+  /** Offline answer (never calls the network). */
   async ask(question: string, hasImage = false): Promise<AssistantReply> {
-    if (this.connected) {
-      try {
-        const data = await this.api.post<{ text?: string }>(environment.aiEndpoint, { question, lang: this.i18n.lang(), context: this.context() });
-        if (data?.text) return { text: data.text, demo: false };
-      } catch {
-        /* fall back to demo rules */
-      }
-    }
     if (hasImage && !question.trim()) {
       return {
         demo: true,
@@ -51,23 +42,20 @@ export class AssistantService {
     return { text: this.demoReply(question), demo: true };
   }
 
-  /** Minimal context for a future server-side model. */
-  private context() {
-    const p = this.store.currentProject();
-    if (!p) return null;
-    const c = this.ctx(p);
-    return { project: p.name, mode: p.tracker.mode, round: c ? c.round.raw : `round ${p.tracker.simple.round}, ${p.tracker.simple.count}/${p.tracker.simple.target}` };
-  }
-
   private q(a: string, e: string): string {
     return this.i18n.q(a, e);
   }
 
+  /**
+   * The round the project is on, read from the revision the project FOLLOWS (pinned text / active piece snapshot via
+   * trackerView) — never the latest edit of a pattern the project is pinned away from.
+   */
   private ctx(p: Project): { pat: Pattern; round: ParsedRound } | null {
-    if (p.tracker.mode !== 'pattern') return null;
-    const pat = this.store.pattern(p.tracker.patternId);
-    if (!pat) return null;
-    const c = patternContext(parsePattern(pat.text), p.tracker.cursor);
+    const view = this.store.trackerView(p);
+    if (!view?.source || view.tracker.mode !== 'pattern') return null;
+    const live = view.source.id ? this.store.pattern(view.source.id) : null;
+    const pat: Pattern = { ...(live ?? ({} as Pattern)), name: view.source.name, text: view.source.text, terms: view.source.terms } as Pattern;
+    const c = patternContext(parsePattern(view.source.text), view.tracker.cursor);
     return c ? { pat, round: c.round } : null;
   }
 

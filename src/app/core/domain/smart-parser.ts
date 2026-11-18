@@ -170,8 +170,8 @@ const DUALS: ReadonlyArray<readonly [readonly string[], Tok]> = [
   [['نقصين', 'تنقيصين'], { t: 'shape', s: 'dec' }],
 ];
 
-const INC_WORDS = ['increase', 'inc', 'incs', 'زياده', 'زيادة', 'زوّد', 'زود'];
-const DEC_WORDS = ['decrease', 'dec', 'decs', 'نقص', 'انقاص', 'تنقيص', 'نقصان', 'تقليل'];
+const INC_WORDS = ['increase', 'inc', 'incs', 'زياده', 'زيادة', 'زوّد', 'زود', 'تزايد', 'تزويد'];
+const DEC_WORDS = ['decrease', 'dec', 'decs', 'نقص', 'انقاص', 'تنقيص', 'نقصان', 'تقليل', 'تناقص'];
 /** Arabic names of the magic ring, incl. the attached article / preposition (الحلقة السحرية، بالحلقة السحرية، الدائرة السحرية). */
 const MR_AR = `(?:ب?ال|ب)?حلقه\\s+(?:ال)?سحريه|(?:ب?ال)?دايره\\s+(?:ال)?سحريه|ماجيك\\s*رينج`;
 const MR_RE = new RegExp(`^(?:in\\s+(?:a\\s+|the\\s+)?)?(?:magic\\s*(?:ring|circle|loop)|adjustable\\s*ring|mr|ring|${MR_AR})${END}`);
@@ -247,7 +247,7 @@ export function normalizeLine(raw: string): string {
 /* 3. header (round number / range / declared total)                  */
 /* ------------------------------------------------------------------ */
 
-const ROUND_PFX = `(?:rounds?|rnds?|rows?|r|الادوار|ادوار|الدور|دور|الجولات|الجوله|جوله|الصفوف|صفوف|الصف|صف)`;
+const ROUND_PFX = `(?:rounds?|rnds?|rows?|r|الادوار|ادوار|الدور|دور|الجولات|الجوله|جوله|الصفوف|صفوف|الصف|صف|السطور|السطر|سطر)`;
 const NUMTOK = `(\\d+|${alt(Object.keys(ORDINALS))})`;
 const NUMTOK_NC = `(?:\\d+|${alt(Object.keys(ORDINALS))})`;
 /** End of a number: not followed by a letter or another digit. */
@@ -288,9 +288,10 @@ const TOTAL_RES: readonly RegExp[] = [
 export function splitTotal(body: string): { body: string; declared: number | null } {
   for (const re of TOTAL_RES) {
     const m = re.exec(body);
-    if (m && m.index !== undefined) return { body: body.slice(0, m.index).replace(/[\s,:=-]+$/, '').trim(), declared: parseInt(m[1], 10) };
+    // A sentence-ending full stop before the total ("6 حشو في دائرة سحرية. (6)", real giraffe sheet) is punctuation, not a stitch.
+    if (m && m.index !== undefined) return { body: body.slice(0, m.index).replace(/[\s,:=.۔،-]+$/, '').trim(), declared: parseInt(m[1], 10) };
   }
-  return { body: body.trim(), declared: null };
+  return { body: body.trim().replace(/\s*[.۔]+$/, ''), declared: null };
 }
 
 /* ------------------------------------------------------------------ */
@@ -872,6 +873,14 @@ function parseHeading(original: string): HeadingInfo {
       quantity = parseInt(m[1], 10);
       s = s.replace(m[0], ' ');
       break;
+    }
+  }
+  // Arabic dual: "الأذنان (قطعتان)", "القرون (قطعتين)" = 2 pieces (real giraffe sheet).
+  if (quantity === null) {
+    const dual = /\s*[(\[]\s*(?:عدد\s*)?(?:قطعتان|قطعتين|اتنين|اثنين|اثنان)\s*[)\]]\s*/.exec(s);
+    if (dual) {
+      quantity = 2;
+      s = s.replace(dual[0], ' ');
     }
   }
   return { name: s.replace(/[\s:：\-,]+$/, '').replace(/\s+/g, ' ').trim(), quantity: quantity && quantity >= 1 && quantity <= 99 ? quantity : null };

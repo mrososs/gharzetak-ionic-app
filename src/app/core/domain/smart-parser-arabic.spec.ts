@@ -412,3 +412,39 @@ describe('P5a · regression fixtures', () => {
     expect(first.original).toBe(src);
   });
 });
+
+describe('vocabulary found on a real Arabic pattern sheet read by Khayoota (P5a follow-up)', () => {
+  const rounds = (text: string) => convertPatternText(text).parts.flatMap((p) => p.rounds);
+
+  it('«السطر» is a round marker, including ranges', () => {
+    const r = rounds('السطر 1: 6 غرز قصيرة في دائرة سحرية (6)\nالسطر 2: تزايد في كل غرزة (12)\nالسطر 3–4: 12 غرزة قصيرة (12)');
+    expect(r.map((x) => [x.n, x.normalized, x.status])).toEqual([
+      [1, 'R1: 6sc in MR [6]', 'validated'],
+      [2, 'R2: 6inc [12]', 'validated'],
+      [3, 'R3: 12sc [12]', 'validated'],
+      [4, 'R4: 12sc [12]', 'validated'],
+    ]);
+  });
+
+  it('«تزايد» = inc and «تناقص» = dec', () => {
+    const r = rounds('الدور 1: 6 غرز قصيرة في الحلقة السحرية (6)\nالدور 2: تزايد في كل غرزة (12)\nالدور 3: (2 غرز قصيرة، تناقص) ×3 (9)');
+    expect(r.map((x) => x.normalized)).toEqual(['R1: 6sc in MR [6]', 'R2: 6inc [12]', 'R3: (2sc, dec) x 3 [9]']);
+    expect(r.every((x) => x.status === 'validated')).toBe(true);
+  });
+
+  it('a full stop before the written total (or at the end) is punctuation', () => {
+    expect(rounds('الدور 1: 6 غرز قصيرة في الحلقة السحرية. (6)')[0]).toMatchObject({ normalized: 'R1: 6sc in MR [6]', status: 'validated', expected: 6 });
+    expect(rounds('الدور 1: 6 غرز قصيرة في الحلقة السحرية (6)\nالدور 2: تزايد في كل غرزة.')[1]).toMatchObject({ normalized: 'R2: 6inc', calculated: 12 });
+  });
+
+  it('«حشو» still needs review (P5a rule unchanged), and an unbalanced group is never validated', () => {
+    expect(rounds('السطر 1: 6 حشو في دائرة سحرية. (6)')[0]).toMatchObject({ status: 'needs-review' });
+    const bad = rounds('الدور 1: 6 غرز قصيرة في الحلقة السحرية (6)\nالدور 2: 1 غرزة قصيرة، زيادة) ×6 (12)');
+    expect(bad[1]!.status).not.toBe('validated');
+  });
+
+  it('Arabic dual quantity in a heading: (قطعتان) / (قطعتين) = 2 pieces', () => {
+    const c = convertPatternText('الأذنان (قطعتان)\nالدور 1: 6 غرز قصيرة في الحلقة السحرية (6)\nالقرون (قطعتين)\nالدور 1: 5 غرز قصيرة في الحلقة السحرية (5)\nالأرجل (4 قطع)\nالدور 1: 7 غرز قصيرة في الحلقة السحرية (7)');
+    expect(c.parts.map((p) => [p.name, p.quantity])).toEqual([['الأذنان', 2], ['القرون', 2], ['الأرجل', 4]]);
+  });
+});
