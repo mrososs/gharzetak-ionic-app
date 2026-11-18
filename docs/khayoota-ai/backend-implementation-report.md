@@ -28,15 +28,15 @@ All responses: `Cache-Control: no-store`. No AI route exists outside `/v1`.
 7. Image checks: base64 size cap, and **magic-byte sniffing** (JPEG/PNG/WebP must match the declared MIME) → `415 ai_unsupported_image`.
 8. Burst window: weighted units per minute per user (chat 1, image 3, extract 6; 20 units/min) → `429 ai_rate_limited`.
 9. Per-user daily caps (chat 20, image 5, extract 3) → `429 ai_quota_exceeded {scope:'user', resetAt}`.
-10. Global daily request cap across all accounts (`AI_DAILY_REQUEST_CAP`, 300) → `429 ai_quota_exceeded {scope:'global'}`.
-11. Global daily Neuron budget (`AI_DAILY_NEURON_BUDGET`, 8,000 — under the 10,000 free allocation): the request's **worst-case** Neurons (input estimate + images upper bound + `max_tokens`) are reserved first; if they do not fit, the model is **not called**. After the call the reservation is settled to the actual usage.
+10. Global daily request cap across all accounts (`AI_DAILY_REQUEST_CAP`; code default 300, staging 100) → `429 ai_quota_exceeded {scope:'global'}`.
+11. Global daily Neuron budget (`AI_DAILY_NEURON_BUDGET`; code default 8,000, staging 3,000 — the 10,000 free Neurons are shared by the whole account): the request's **worst-case** Neurons (input estimate + images upper bound + `max_tokens`) are reserved first; if they do not fit, the model is **not called**. After the call the reservation is settled to the actual usage.
 
 Quota writes are **conditional upserts** in D1 (`... ON CONFLICT DO UPDATE ... WHERE count + n <= limit`), so concurrent requests can never exceed a cap (tested with 6 parallel requests against a cap of 3: exactly 3 succeed). A failed global step compensates the per-user step.
 
 ## 3. Model call
 
 - `WorkersAiProvider` uses the Worker binding `env.AI.run(model, inputs)` — no API token exists anywhere, and the Angular / Android app holds no Cloudflare credential or model id.
-- Models from config (`AI_CHAT_MODEL`, `AI_VISION_MODEL`, `AI_EXTRACT_MODEL`; staging: Gemma 4 26B for all three, see `model-decision.md`).
+- Models from config (`AI_MODEL_CHAT`, `AI_MODEL_VISION`, `AI_MODEL_EXTRACT`; staging: Gemma 4 26B for all three, see `model-decision.md`).
 - Request profile per model (`thinking` off for Gemma, `reasoning_effort: low` for Qwen), JSON-schema `response_format`, hard `max_tokens` per kind, timeout (45 s).
 - Error mapping: allocation exhausted (3036) → `429 ai_quota_exceeded {scope:'global'}`; capacity (3040) → one bounded retry, then `503 ai_busy`; timeout → `504 ai_timeout`; anything else → `502 ai_upstream_error`. **No unbounded retries anywhere.**
 - Output: parsed and validated with Zod. Invalid JSON → **one** repair call; still invalid → a degraded, plain-text, **action-free** reply (`degraded: true`), or `502 ai_bad_output` for extraction.
@@ -86,9 +86,11 @@ Applied: **local D1 only** (`wrangler d1 migrations apply gharzetak-db --local`)
 | `AI_ENABLED` | `true` | **`false`** (kill switch off) |
 | `AI_PROVIDER` | `fake` | `workers-ai` |
 | `AI_VISION_ENABLED` / `AI_EXTRACT_ENABLED` | `true` (fake only) | **`false`** |
-| `AI_CHAT_MODEL` etc. | — | `@cf/google/gemma-4-26b-a4b-it` |
-| `AI_DAILY_NEURON_BUDGET` | 8000 | 8000 |
-| `AI_DAILY_REQUEST_CAP` | 300 | 300 |
+| `AI_MODEL_CHAT` etc. | — | `@cf/google/gemma-4-26b-a4b-it` |
+| `AI_DAILY_NEURON_BUDGET` | 8000 (default) | **3000** |
+| `AI_DAILY_REQUEST_CAP` | 300 (default) | **100** |
+| `AI_USER_DAILY_IMAGE` / `_EXTRACT` | 5 / 3 (default) | **0 / 0** |
+| `AI_ALLOWED_USER_IDS` | unset = everyone (dev/test only) | **"" = nobody** (fail-closed) |
 | `AI_CONSENT_VERSION` | 1 | 1 |
 | `ai` binding | none (fake) | `AI` |
 
@@ -98,3 +100,5 @@ Turning staging on later = deploy + set `AI_ENABLED=true` — a separate, approv
 
 `apps/api/tests/ai.test.ts` — 21 `it` blocks / 29 checks covering access, kill switch, missing binding, consent (accept/withdraw/version/per-account), chat envelope, calculator facts, action sanitising, repair + degraded, provider failures, vision flag + magic bytes, per-user cap, global cap, Neuron budget, burst, concurrency, per-account isolation, extraction flag + transcript-only, log privacy.
 API suite: **8 files, 121 tests passed**. `tsc --noEmit` clean.
+
+> **Updated 2026-11-18 (staging-readiness review):** the fake provider is refused outside development/test; usage above a reservation is recorded; text-only chat bodies are capped at 64 KB while photos are off and the extraction flag is checked before reading the body; a fail-closed `AI_ALLOWED_USER_IDS` allowlist was added. See `staging-rollout-readiness.md` §1.

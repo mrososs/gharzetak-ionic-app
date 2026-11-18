@@ -45,3 +45,23 @@ See §6 of `implementation-progress.md`: the branch debug build installs and sta
 - iOS.
 - Accessibility pass with TalkBack on the new reply cards.
 - Load beyond the unit-level concurrency test.
+
+## 6. Staging-readiness pass (2026-11-18)
+
+Defects D1–D9 found in the readiness review (see `staging-rollout-readiness.md` §1) were fixed with tests.
+
+| Suite | Result |
+|---|---|
+| Frontend unit (`ng test`, all specs) | **39 files, 671 tests passed**, 0 failed (+4: asked-round context, `roundsMentioned`, client timeout, decline-consent) |
+| — parser / domain specs only (`src/app/core/domain`) | 7 files, 226 passed |
+| — Khayoota client specs (`core/ai`, `ai-assistant`) | 2 files, 33 passed |
+| API (Vitest + Workers pool, local D1) | **8 files, 128 tests passed**: ai 36 (+7), auth 13, google-auth 12, sync 25, collections 16, media 15, staging 8, mailer 3 |
+| Auth + sync end-to-end (`vitest.e2e.config.ts`: real Angular services against a local `wrangler dev`) | **3 files, 23 passed** |
+| Typecheck | app `tsc -p tsconfig.app.json` clean; API `tsc --noEmit` clean |
+| Production build | `ng build` OK (assistant chunk 47 kB raw / 14.2 kB transfer) |
+| Migration rehearsal (fresh local D1 in the staging state 0000–0003 + a user row) | 0004 applied alone; user intact; cascade delete works; rollback SQL leaves 0 `ai_*` objects; re-apply OK |
+| `wrangler deploy --env staging --dry-run` (local, no upload) | bindings exactly as intended; 496 KiB gzip |
+| Local browser (fake provider) | new consent text renders; decline → chip question answered offline, 0 `/v1/ai/chat` requests |
+| `scripts/smoke-ai-remote.mjs` | syntax-checked only — **not run remotely** (part of the approved Stage A) |
+
+No live model call was made in this pass.
