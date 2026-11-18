@@ -23,12 +23,12 @@ Credential: the already-authenticated Wrangler login (OAuth scope `ai (write)`),
 
 | | Requests | Estimated Neurons (runner) | Measured Neurons (Cloudflare analytics) |
 |---|---|---|---|
-| Gemma 4 26B | 16 (+1 rejected error probe) | 382 | MEASURED_GEMMA |
-| Qwen 3.8 27B | 6 | 928 | MEASURED_QWEN |
-| Llama 4 Scout 17B | 5 | 357 | MEASURED_LLAMA |
-| **Total** | **27** | **1,629** | **MEASURED_TOTAL** |
+| Gemma 4 26B | 16 (+1 rejected error probe) | 382 | 341.5 (16 req) |
+| Qwen 3.8 27B | 6 | 928 | 927.5 (6 req) |
+| Llama 4 Scout 17B | 5 | 357 | 357.5 (5 req) |
+| **Total** | **27** | **1,629** | **1,626.5 (27 req)** |
 
-The runner's estimate (reported tokens × catalogue price → Neurons) matched Cloudflare's measured figure exactly where analytics had caught up (first 13 Gemma requests: 258.9 measured vs ≈ 261 estimated; first 5 Qwen requests: 732.0 vs 732). Analytics lag a few minutes.
+Final measured read: GraphQL `aiInferenceAdaptiveGroups` for 2026-11-18 00:00 UTC → 20:31 UTC (after analytics caught up). The runner's estimate (reported tokens × catalogue price → Neurons) was within 0.2% of the measured total (1,629 vs 1,626.5); Gemma's estimate was 12% high (conservative). Measured total = **16% of the free daily allocation, 81% of the 2,000-Neuron target**. No request returned 3036 (allocation exhausted) or 5035 (paid-only). **No billable inference occurred:** usage stayed below the 10,000 free Neurons that apply on both plans.
 
 The rejected error probe (`max_tokens: -5`) returned HTTP 400 / code 8007 before inference.
 
