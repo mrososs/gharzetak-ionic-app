@@ -70,6 +70,23 @@ Statuses: `validated`, `needs-review`, `unsupported`. Never invents stitches; wr
 their reference and are never "validated"; `R4 >> R7 (24)` with no stitch type is an explicit flagged assumption. The ambiguous word
 «حشو» (stuffing vs stitch) is understood as sc but always sent to review.
 
+Arabic hardening (P5a, 2026-11-18 — details and probe results in `docs/khayoota-ai/p5a-parser-implementation-report.md`):
+
+* **Magic ring** in Arabic (`في حلقة سحرية`, `في الحلقة السحرية`, `بالحلقة السحرية`, `الدائرة السحرية`, `ماجيك رينج`) and `في MR`;
+  the ring may also be named first (`magic ring, 6 sc`, `حلقة سحرية، ٦ غرز قصيرة`) when nothing else in the line has a target.
+* **Arabic stitch names** in singular, plural and «غرزة …» forms (`غرز قصيرة`, `أعمدة`, `أنصاف أعمدة`, `أعمدة طويلة`, `غرز حشو` …) and duals
+  that name their stitch (`غرزتين قصيرتين`, `زيادتين`, `عمودين`). Descriptive Arabic names mean the same stitch in US and UK patterns;
+  transliterations (`دبل`, `ترابل`) still follow the terminology system. Every «حشو» form stays `needs-review`.
+* **Spaced ranges** (`R5 - 7:`, `الدور ٥ - ٧:`, `Rounds 5 – 7:`, `من الدور ٥ إلى ٧`, `الأدوار …`) — only when the header clearly ends after the
+  second number, so `R5 - 12 sc` stays one round. Reversed or longer-than-100-round ranges are one `unsupported` round (`range-invalid`).
+* **N stitches in each stitch**: `2 sc in each st` = an increase in every stitch of the previous round (stitch type kept: `2 hdc …` →
+  `hdc-inc`); `2 sc in each of next 3 sts` = 3 increases; `في نفس الغرزة` = same stitch. No previous round → `unsupported`; a previous
+  round that needs review → `needs-review` (`each-basis`) unless the line's written total confirms the result.
+* **Set-up lines** (`Start: ch 43`, `Ch 1, turn`, `Turn`, `سلسلة ٤٣`, `اقلبي الشغل`) are kept as piece notes — never a piece heading, never
+  a counted round. Chains, skips, slip stitches, loops and `*…*` repeats inside a round are still `unsupported`.
+
+The strict parser (`pattern-parser.ts`, what the tracker and saved patterns use) was not changed.
+
 ## Sync conflict rules added
 
 * progress of a multi-part project: on 409 the server returns its per-piece state; the stale device keeps a **backup**, merges piece by piece
