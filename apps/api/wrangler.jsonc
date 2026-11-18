@@ -71,7 +71,9 @@
         // Khayoota AI (docs/khayoota-ai/staging-rollout-readiness.md). Master switch OFF: Stage A deploys with it off;
         // Stage B flips ONLY AI_ENABLED after a separate approval. Photos and pattern extraction stay OFF (flags AND
         // zero quotas) until their quality gates pass. There is no third-party fallback provider in the code at all.
-        "AI_ENABLED": "false",
+        // Stage B (2026-11-18): ON for the controlled internal test. Only the tester in the AI_ALLOWED_EMAILS Worker SECRET
+        // (verified e-mail) can use it; every other account gets 403 ai_access_restricted. Set "false" to kill it.
+        "AI_ENABLED": "true",
         "AI_PROVIDER": "workers-ai",
         "AI_MODEL_CHAT": "@cf/google/gemma-4-26b-a4b-it",
         "AI_MODEL_VISION": "@cf/google/gemma-4-26b-a4b-it",
