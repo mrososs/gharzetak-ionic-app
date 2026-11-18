@@ -6,9 +6,10 @@
  *
  * Pipeline (every stage is a pure function):
  *   1. normalize   – digits, punctuation, Arabic letter variants, multiplication/range symbols
- *   2. classify    – per line: part heading · round line · assembly note · title
- *   3. header      – round number / ordinal word / range (R4 >> R7), declared total ([18] (18) = 18 غرزة)
- *   4. tokenize    – crochet vocabulary (US/UK, abbreviations, Arabic names, magic ring, repeat phrases)
+ *   2. classify    – per line: part heading · round line · assembly note · set-up line (foundation chain / turn) · title
+ *   3. header      – round number / ordinal word / range (R4 >> R7, R5-7, R5 - 7:, من الدور ٥ إلى ٧), declared total ([18] (18) = 18 غرزة)
+ *   4. tokenize    – crochet vocabulary (US/UK, abbreviations, Arabic names incl. plurals and duals, magic ring in Arabic and English,
+ *                    "2 sc in each st", "in the same stitch", repeat phrases)
  *   5. parse       – groups, repetitions, counts, shaping, joins → AST
  *   6. validate    – stitch arithmetic, declared totals, round-to-round continuity
  *   7. emit        – strict normalized text (cross-checked by re-parsing it with the strict parser)
@@ -18,6 +19,9 @@
  *   - Shaping keeps its stitch type: an HDC increase becomes `hdc-inc`, never a silent sc `inc`.
  *   - Stitches worked into another piece (`5sc in legs`) keep that reference and are flagged `needs-review`.
  *   - Anything not understood is `unsupported` and kept verbatim; the original text is always recoverable.
+ *   - "In each stitch" takes its count from the previous round only; without one the line is unsupported, and when that previous
+ *     round itself needs review the result needs review too (unless the line's own written total confirms it).
+ *   - Reversed or runaway ranges (R7 - R5, R1 - R500) are never expanded.
  */
 import { STITCH_IO, StitchKind, parsePattern } from './pattern-parser';
 
@@ -120,29 +124,57 @@ const NUMWORD_RE = new RegExp(`^(?:${alt(Object.keys(NUM_WORDS))})${END}`);
 const ORD_RE = new RegExp(`^(?:${alt(Object.keys(ORDINALS))})${END}`);
 
 type BaseKind = 'sc' | 'hdc' | 'dc' | 'tr';
+type BaseTable = ReadonlyArray<readonly [readonly string[], BaseKind, boolean?]>;
+
+/**
+ * Descriptive Arabic stitch names (singular, plural and the "غرزة …" forms). They describe the stitch itself — a column is a
+ * column — so they mean the same stitch in US and UK patterns. Transliterations (دبل، ترابل، سنجل، هاف دبل) are NOT here:
+ * they follow the terminology system like their English originals. Words are written in matching form (ة→ه, أ→ا).
+ */
+const BASE_AR: BaseTable = [
+  [['نص عمود', 'نصف عمود', 'انصاف اعمده', 'انصاف عمود', 'غرزه نص عمود', 'غرز نص عمود'], 'hdc'],
+  [['عمود', 'اعمده', 'غرزه عمود', 'غرز عمود'], 'dc'],
+  [['عمود مزدوج', 'عمود طويل', 'اعمده مزدوجه', 'اعمده طويله'], 'tr'],
+  [['غرزه قصيره', 'غرز قصيره', 'غرزات قصيره', 'غرزه عاديه', 'غرز عاديه'], 'sc'],
+  // Appears in the product's reference examples as the plain stitch, but literally means "stuffing": needs a human look.
+  [['حشو', 'غرزه حشو', 'غرز حشو'], 'sc', true],
+];
 
 /** Names of the basic stitches. `ambiguous` = the word may mean something else (flagged for review). */
-const BASE_US: ReadonlyArray<readonly [readonly string[], BaseKind, boolean?]> = [
-  [['half double crochet', 'half double', 'half-double', 'hdc', 'هاف دبل', 'نص عمود', 'نصف عمود', 'نصف دبل'], 'hdc'],
-  [['double crochet', 'dc', 'دبل كروشيه', 'دبل', 'عمود'], 'dc'],
-  [['treble crochet', 'treble', 'tr', 'ترابل', 'عمود مزدوج', 'عمود طويل'], 'tr'],
-  [['single crochet', 'single', 'sc', 'سنجل كروشيه', 'سنجل', 'غرزه قصيره', 'غرزه عاديه', 'غرزه سنجل'], 'sc'],
-  // Appears in the product's reference examples as the plain stitch, but literally means "stuffing": needs a human look.
-  [['حشو'], 'sc', true],
+const BASE_US: BaseTable = [
+  [['half double crochet', 'half double', 'half-double', 'hdc', 'هاف دبل', 'نصف دبل'], 'hdc'],
+  [['double crochet', 'dc', 'دبل كروشيه', 'دبل'], 'dc'],
+  [['treble crochet', 'treble', 'tr', 'ترابل'], 'tr'],
+  [['single crochet', 'single', 'sc', 'سنجل كروشيه', 'سنجل', 'غرزه سنجل'], 'sc'],
+  ...BASE_AR,
 ];
 /** UK names: "dc" = US sc, "htr" = US hdc, "tr" = US dc, "dtr" = US tr. */
-const BASE_UK: ReadonlyArray<readonly [readonly string[], BaseKind, boolean?]> = [
+const BASE_UK: BaseTable = [
   [['half treble crochet', 'half treble', 'htr', 'هاف تريبل'], 'hdc'],
   [['double treble crochet', 'double treble', 'dtr'], 'tr'],
   [['treble crochet', 'treble', 'tr', 'ترابل'], 'dc'],
   [['double crochet', 'dc', 'دبل كروشيه', 'دبل'], 'sc'],
-  [['single crochet', 'single', 'sc', 'سنجل كروشيه', 'سنجل', 'غرزه قصيره', 'غرزه عاديه'], 'sc'],
-  [['حشو'], 'sc', true],
+  [['single crochet', 'single', 'sc', 'سنجل كروشيه', 'سنجل'], 'sc'],
+  ...BASE_AR,
+];
+
+/**
+ * Arabic dual forms carry their own count ("غرزتين قصيرتين" = 2 sc, "زيادتين" = 2 increases). Only forms whose stitch is named
+ * are listed — a bare "غرزتين" (two stitches of an unnamed kind) stays unsupported rather than being guessed as sc.
+ */
+const DUALS: ReadonlyArray<readonly [readonly string[], Tok]> = [
+  [['غرزتين قصيرتين', 'غرزتين عاديتين'], { t: 'base', k: 'sc', ambiguous: false }],
+  [['غرزتين حشو'], { t: 'base', k: 'sc', ambiguous: true }],
+  [['عمودين'], { t: 'base', k: 'dc', ambiguous: false }],
+  [['زيادتين'], { t: 'shape', s: 'inc' }],
+  [['نقصين', 'تنقيصين'], { t: 'shape', s: 'dec' }],
 ];
 
 const INC_WORDS = ['increase', 'inc', 'incs', 'زياده', 'زيادة', 'زوّد', 'زود'];
 const DEC_WORDS = ['decrease', 'dec', 'decs', 'نقص', 'انقاص', 'تنقيص', 'نقصان', 'تقليل'];
-const MR_RE = new RegExp(`^(?:in\\s+(?:a\\s+|the\\s+)?)?(?:magic\\s*(?:ring|circle|loop)|adjustable\\s*ring|mr|ring)${END}`);
+/** Arabic names of the magic ring, incl. the attached article / preposition (الحلقة السحرية، بالحلقة السحرية، الدائرة السحرية). */
+const MR_AR = `(?:ب?ال|ب)?حلقه\\s+(?:ال)?سحريه|(?:ب?ال)?دايره\\s+(?:ال)?سحريه|ماجيك\\s*رينج`;
+const MR_RE = new RegExp(`^(?:in\\s+(?:a\\s+|the\\s+)?)?(?:magic\\s*(?:ring|circle|loop)|adjustable\\s*ring|mr|ring|${MR_AR})${END}`);
 
 interface KindDef {
   readonly kind: string;
@@ -215,13 +247,27 @@ export function normalizeLine(raw: string): string {
 /* 3. header (round number / range / declared total)                  */
 /* ------------------------------------------------------------------ */
 
-const ROUND_PFX = `(?:rounds?|rnds?|rows?|r|الدور|دور|الجوله|جوله|الصف|صف)`;
+const ROUND_PFX = `(?:rounds?|rnds?|rows?|r|الادوار|ادوار|الدور|دور|الجولات|الجوله|جوله|الصفوف|صفوف|الصف|صف)`;
 const NUMTOK = `(\\d+|${alt(Object.keys(ORDINALS))})`;
 const NUMTOK_NC = `(?:\\d+|${alt(Object.keys(ORDINALS))})`;
+/** End of a number: not followed by a letter or another digit. */
+const NUM_END = END.replace('a-z', 'a-z0-9');
+/**
+ * A SPACED dash range (`R5 - 7:`, `الدور ٥ - ٧:`) is only a range when the header clearly ends right after the second number
+ * (`:` `.` `)` `=`, end of line, or a bare total). Otherwise `R5 - 12 sc` would turn into rounds 5…12: there the dash is the
+ * separator and 12 is a stitch count.
+ */
+const RANGE_END = `\\s*(?:[:.)=]|$|[([]\\s*\\d+[^)\\]]*[)\\]]\\s*$)`;
+/** Longest range that is expanded. Anything longer is reported as an invalid range instead of producing hundreds of rounds. */
+export const MAX_RANGE_SPAN = 99;
 
+// Groups: 1 = first round · 2 / 3 / 4 / 5 = last round (one per range notation) · 6 = the rest of the line.
 const HEADER_RE = new RegExp(
-  `^(?:${ROUND_PFX})\\.?\\s*${NUMTOK}${END.replace('a-z', 'a-z0-9')}` +
-    `(?:\\s*(?:>>|->|=>|to|through|thru|الي|حتي)\\s*(?:${ROUND_PFX}\\.?\\s*)?${NUMTOK}${END.replace('a-z', 'a-z0-9')}|\\s*-\\s*${ROUND_PFX}\\.?\\s*${NUMTOK}${END.replace('a-z', 'a-z0-9')}|-${NUMTOK}(?![a-z${L}0-9]))?` +
+  `^(?:من\\s+)?(?:${ROUND_PFX})\\.?\\s*${NUMTOK}${NUM_END}` +
+    `(?:\\s*(?:>>|->|=>|to|through|thru|الي|حتي)\\s*(?:${ROUND_PFX}\\.?\\s*)?${NUMTOK}${NUM_END}` +
+    `|\\s*-\\s*${ROUND_PFX}\\.?\\s*${NUMTOK}${NUM_END}` +
+    `|-${NUMTOK}(?![a-z${L}0-9])` +
+    `|\\s*-\\s*${NUMTOK}${NUM_END}(?=${RANGE_END}))?` +
     `\\s*(?:[:.)=]|-(?=\\s)|(?=\\s|$|\\())?\\s*(.*)$`,
 );
 
@@ -264,6 +310,7 @@ type Tok =
   | { t: 'mr' }
   | { t: 'same' }
   | { t: 'each' }
+  | { t: 'eachN'; v: number }
   | { t: 'loop' }
   | { t: 'word'; text: string }
   | { t: 'unk'; text: string };
@@ -298,8 +345,13 @@ const SEP_RE = new RegExp(`^(?:,|\\+|&|;|and${END}|then${END}|after\\s+that${END
 const SHAPE_INC_RE = new RegExp(`^(?:${alt(INC_WORDS.map(normalizeLetters))})${END}`);
 const SHAPE_DEC_RE = new RegExp(`^(?:${alt(DEC_WORDS.map(normalizeLetters))})${END}`);
 const LOOP_RE = new RegExp(`^(?:(?:front|back)\\s+loops?(?:\\s+only)?|[fb]lo${END}|(?:الحلقه|حلقه)\\s+(?:الاماميه|الخلفيه)(?:\\s+فقط)?)`);
-const SAME_RE = new RegExp(`^(?:the\\s+)?(?:next|same|one|1)(?:\\s+(?:st|stitch|sts|stitches|غرزه|الغرزه))?${END}`);
+const SAME_RE = new RegExp(
+  `^(?:(?:the\\s+)?(?:next|same|one|1)(?:\\s+(?:st|stitch|sts|stitches|غرزه|الغرزه))?|نفس\\s+(?:ال)?غرزه|(?:ال)?غرزه\\s+(?:الجايه|التاليه|اللي\\s+بعدها))${END}`,
+);
+/** "each of (the) next 3 sts": a stitch worked into each of a STATED number of stitches. */
+const EACH_N_RE = new RegExp(`^(?:each|every)\\s+of\\s+(?:the\\s+)?next\\s+(\\d+)(?:\\s*(?:sts?|stitch(?:es)?))?${END}`);
 const EACH_RE = new RegExp(`^(?:each|every|كل)(?:\\s+(?:st|stitch|sts|stitches|غرزه|غرز))?${END}`);
+const DUAL_RES: ReadonlyArray<{ re: RegExp; tok: Tok }> = DUALS.flatMap(([words, tok]) => words.map((w) => ({ re: new RegExp(`^${alt([w])}${END}`), tok })));
 const AROUND_RE = new RegExp(`^(?:around|round|حول|دايري|بالدور)${END}`);
 const FILLER_RE = new RegExp(`^(?:work|make|crochet|the|a|an|of|your|اشتغلي|اشتغل|اعملي|شغلي)${END}`);
 const WORD_RE = new RegExp(`^[a-z${L}][a-z${L}'-]*`);
@@ -323,13 +375,23 @@ export function tokenize(body: string, terms: 'us' | 'uk'): Tok[] {
     if ((m = NUMWORD_RE.exec(s))) { out.push({ t: 'num', v: NUM_WORDS[m[0].replace(/\s+/g, ' ')] }); eat(m[0].length); continue; }
     if ((m = SEP_RE.exec(s))) { out.push({ t: 'sep' }); eat(m[0].length); continue; }
     if ((m = FILLER_RE.exec(s))) { eat(m[0].length); continue; }
-    if ((m = MR_RE.exec(s))) { out.push({ t: 'in' }, { t: 'mr' }); eat(m[0].length); continue; }
+    for (const d of DUAL_RES) {
+      if ((m = d.re.exec(s))) { out.push({ t: 'num', v: 2 }, d.tok); eat(m[0].length); continue outer; }
+    }
+    if ((m = MR_RE.exec(s))) {
+      // "في MR" / "into ring": the preposition was already read as its own token — never emit a second, dangling "in".
+      if (out[out.length - 1]?.t !== 'in') out.push({ t: 'in' });
+      out.push({ t: 'mr' });
+      eat(m[0].length);
+      continue;
+    }
     if ((m = /^(?:in|into|inside|في|داخل)(?![a-z0-9\u0621-\u064A])/.exec(s))) {
       out.push({ t: 'in' });
       eat(m[0].length);
       continue;
     }
     if ((m = LOOP_RE.exec(s))) { out.push({ t: 'loop' }); eat(m[0].length); continue; }
+    if ((m = EACH_N_RE.exec(s))) { out.push({ t: 'eachN', v: parseInt(m[1], 10) }); eat(m[0].length); continue; }
     if ((m = EACH_RE.exec(s))) { out.push({ t: 'each' }); eat(m[0].length); continue; }
     if ((m = AROUND_RE.exec(s))) { out.push({ t: 'each' }); eat(m[0].length); continue; }
     for (const sp of lex.specs) {
@@ -463,11 +525,19 @@ function parseTokens(tokens: Tok[], ctx: ParseCtx): Node[] {
     let mr = false;
     let ref: string | null = null;
     let each = false;
-    if (peek()?.t === 'each') {
-      i++;
-      each = true;
-      if (count !== 1) throw new ParseError('count with each');
-    }
+    /** "in each of next N sts": the number of target stitches is written in the line. */
+    let eachN: number | null = null;
+    const takeEach = (t: Tok | undefined): boolean => {
+      if (t?.t === 'each') { i++; each = true; return true; }
+      if (t?.t === 'eachN') {
+        i++;
+        if (t.v < 1 || t.v > 200) throw new ParseError('count');
+        eachN = t.v;
+        return true;
+      }
+      return false;
+    };
+    takeEach(peek());
     if (peek()?.t === 'in') {
       i++;
       const n = peek();
@@ -479,10 +549,8 @@ function parseTokens(tokens: Tok[], ctx: ParseCtx): Node[] {
           kind = SHAPED[base].inc;
           count = 1;
         } else throw new ParseError('multiple in one stitch');
-      } else if (n?.t === 'each') {
-        i++;
-        each = true;
-        if (count !== 1) throw new ParseError('count with each');
+      } else if (takeEach(n)) {
+        /* each / each of next N */
       } else if (n?.t === 'loop') throw new ParseError('loop');
       else if (n?.t === 'word') {
         i++;
@@ -494,6 +562,16 @@ function parseTokens(tokens: Tok[], ctx: ParseCtx): Node[] {
       if (peek()?.t === 'each') { i++; each = true; } // "in each st around"
     }
     if (peek()?.t === 'each') i++; // trailing "around"
+    if (each || eachN !== null) {
+      if (each && eachN !== null) throw new ParseError('each twice');
+      if (mr || ref) throw new ParseError('each with target');
+      if (count === 2 && base && kind === base) {
+        // "2 sc in each st" = an increase in every stitch (its own stitch type: 2 hdc in each st = hdc increases).
+        kind = SHAPED[base].inc;
+        count = 1;
+      } else if (count !== 1) throw new ParseError('count with each'); // 3+ into one stitch, or "2 inc in each st": no strict equivalent
+    }
+    if (eachN !== null) return { type: 'stitch', k: kind, n: eachN, mr, ref, each: false };
     return { type: 'stitch', k: kind, n: count, mr, ref, each };
   };
 
@@ -595,6 +673,20 @@ interface RoundCtx {
   readonly partKind: string | null;
   /** Stitches the previous round of THIS piece produced (null = unknown / first round). */
   readonly prevProd: number | null;
+  /** Status of that previous round (null = none). "In each stitch" only trusts a previous count that was itself validated. */
+  readonly prevStatus: ConvStatus | null;
+}
+
+/**
+ * "magic ring, 6 sc" / "حلقة سحرية، ٦ غرز قصيرة": the ring is named first and the stitches after it. Read as "6 sc in MR" only
+ * when nothing else in the line has a target of its own (no join, no "each", no group); otherwise the line stays unsupported.
+ */
+function applyLeadingMr(tokens: Tok[], ctx: ParseCtx): Node[] {
+  let start = 2;
+  while (tokens[start]?.t === 'sep') start++;
+  const nodes = parseTokens(tokens.slice(start), ctx);
+  if (!nodes.length || nodes.some((x) => x.type !== 'stitch' || x.ref || x.each)) throw new ParseError('leading mr');
+  return nodes.map((x) => ({ ...(x as StitchNode), mr: true }));
 }
 
 interface Converted {
@@ -622,7 +714,9 @@ function convertOneRound(n: number, original: string, bodyNorm: string, declared
 
   let nodes: Node[];
   try {
-    nodes = parseTokens(tokenize(body, ctx.terms), { partKind: ctx.partKind, flags });
+    const tokens = tokenize(body, ctx.terms);
+    const pctx: ParseCtx = { partKind: ctx.partKind, flags };
+    nodes = tokens[0]?.t === 'in' && tokens[1]?.t === 'mr' ? applyLeadingMr(tokens, pctx) : parseTokens(tokens, pctx);
     if (!nodes.length) throw new ParseError('empty');
   } catch (e) {
     const reason = e instanceof ParseError ? e.message : 'error';
@@ -670,6 +764,18 @@ function convertOneRound(n: number, original: string, bodyNorm: string, declared
     review(msg('warn', 'chain', `يستهلك ${t.cons} غرزة لكن الدور السابق أنتج ${ctx.prevProd}.`, `It uses ${t.cons} stitches but the previous round produced ${ctx.prevProd}.`));
   }
   if (flags.ambiguous) review(msg('warn', 'ambiguous', 'كلمة «حشو» قد تعني الحشو لا الغرزة القصيرة — اعتُبرت غرزة قصيرة، راجعيها.', 'The word "حشو" may mean stuffing rather than a stitch — read as single crochet, please confirm.'));
+  // "In each stitch" takes its count from the previous round. That count is only trusted when the previous round was itself
+  // validated — or when this line's own written total confirms the result.
+  if (nodes.some(hasEach) && ctx.prevStatus !== 'validated' && !(declared !== null && declared === t.prod)) {
+    review(
+      msg(
+        'warn',
+        'each-basis',
+        `«في كل غرزة» اتحسبت من الدور السابق (${ctx.prevProd} غرزة) وهو نفسه محتاج مراجعة — راجعي العدد.`,
+        `"In each stitch" was counted from the previous round (${ctx.prevProd} stitches), which itself needs review — please check the count.`,
+      ),
+    );
+  }
 
   // Defence in depth: the strict parser (what the tracker uses) must agree with the numbers we calculated.
   const strict = parsePattern(normalized).rounds[0];
@@ -704,6 +810,8 @@ interface RoundHead {
   readonly from: number;
   readonly to: number;
   readonly rest: string;
+  /** Set when the header names a range that cannot be expanded safely (reversed, or longer than MAX_RANGE_SPAN). */
+  readonly invalid?: 'reversed' | 'too-long';
 }
 
 function matchRoundHeader(norm: string): RoundHead | null {
@@ -711,11 +819,27 @@ function matchRoundHeader(norm: string): RoundHead | null {
   if (!m) return null;
   const from = numberOf(m[1]);
   if (!Number.isFinite(from)) return null;
-  const toTok = m[2] ?? m[3] ?? m[4];
+  const toTok = m[2] ?? m[3] ?? m[4] ?? m[5];
   const to = toTok ? numberOf(toTok) : from;
-  if (!Number.isFinite(to) || to < from || to - from > 99) return null;
-  return { from, to, rest: (m[5] ?? '').trim() };
+  if (!Number.isFinite(to)) return null;
+  const rest = (m[6] ?? '').trim();
+  if (to < from) return { from, to, rest, invalid: 'reversed' };
+  if (to - from > MAX_RANGE_SPAN) return { from, to, rest, invalid: 'too-long' };
+  return { from, to, rest };
 }
+
+/**
+ * Set-up lines that are not countable rounds: a foundation chain (`Start: ch 43`, `سلسلة ٤٣`) or a turn (`Ch 1, turn`, `Turn.`).
+ * They are kept verbatim as notes of the piece — never turned into a piece heading, never counted.
+ */
+const SETUP_RE = new RegExp(
+  // Matched against normalizeLine() output, so Arabic words are written in matching form (ابدئي → ابديي, سلسلة → سلسله).
+  `^(?:(?:(?:to\\s+)?start|begin|foundation(?:\\s+chain)?|base(?:\\s+chain)?|البدايه|بدايه|ابديي|ابدي|ابدا|اعملي|اعمل)\\s*[:\\-]?\\s*)?` +
+    `(?:(?:make\\s+(?:a\\s+)?)?(?:ch(?:ain)?|ب?سلسله)\\s*(?:من\\s*)?\\d+(?:\\s*(?:sts?|stitches|غرز[هة]?))?|\\d+\\s*(?:ch(?:ains?)?|سلسله))` +
+    `(?:\\s*[,.]?\\s*(?:and\\s+|ثم\\s+|و)?(?:turn|اقلب[يه]?))?\\s*[.]?$` +
+    `|^(?:ch\\s*\\d+\\s*[,.]?\\s*(?:and\\s+)?)?turn(?:\\s+(?:your\\s+)?work)?\\s*[.]?$` +
+    `|^اقلب[يه]?(?:\\s+(?:ال)?شغل)?\\s*[.]?$`,
+);
 
 const hasStitchWord = (norm: string, terms: 'us' | 'uk'): boolean => {
   const lex = lexicon(terms);
@@ -763,6 +887,7 @@ interface PartBuilder {
   rounds: ConvRound[];
   notes: string[];
   prevProd: number | null;
+  prevStatus: ConvStatus | null;
   lastN: number;
 }
 
@@ -786,8 +911,9 @@ export function convertPatternText(input: string, opts: ConvertOptions = {}): Co
   let title: string | null = null;
   let current: PartBuilder | null = null;
 
-  const classify = (line: string): 'round' | 'note' | 'label' => {
+  const classify = (line: string): 'round' | 'note' | 'label' | 'setup' => {
     const norm = normalizeLine(line);
+    if (SETUP_RE.test(norm)) return 'setup';
     const head = matchRoundHeader(norm);
     if (head) return NOTE_RE.test(head.rest) && !hasStitchWord(head.rest, terms) ? 'note' : 'round';
     if (!NOTE_RE.test(norm) && hasStitchWord(norm, terms) && /[\d(]/.test(norm)) return 'round';
@@ -795,6 +921,13 @@ export function convertPatternText(input: string, opts: ConvertOptions = {}): Co
     return 'label';
   };
   const kinds = lines.map((l) => classify(l));
+  /** The kind of the next line that is not a set-up line (a foundation chain between a heading and its rounds is transparent). */
+  const nextKind = (li: number) => {
+    let j = li + 1;
+    while (kinds[j] === 'setup') j++;
+    return { kind: kinds[j], isLast: j >= lines.length };
+  };
+  const newPart = (name: string, quantity: number | null): PartBuilder => ({ name, quantity, rounds: [], notes: [], prevProd: null, prevStatus: null, lastN: 0 });
 
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
@@ -802,8 +935,7 @@ export function convertPatternText(input: string, opts: ConvertOptions = {}): Co
     const kind = kinds[li];
 
     if (kind === 'label') {
-      const next = kinds[li + 1];
-      const isLast = li === lines.length - 1;
+      const { kind: next, isLast } = nextKind(li);
       const startsDoc = !parts.length && !current;
       // A label followed by another label, before any part exists, is the collection title.
       if (startsDoc && title === null && (next === 'label') && !/:\s*$/.test(line)) {
@@ -812,7 +944,7 @@ export function convertPatternText(input: string, opts: ConvertOptions = {}): Co
       }
       if (next === 'round' || next === 'label' || isLast || /[:：]\s*$/.test(line)) {
         const h = parseHeading(line);
-        current = { name: h.name || line, quantity: h.quantity, rounds: [], notes: [], prevProd: null, lastN: 0 };
+        current = newPart(h.name || line, h.quantity);
         parts.push(current);
         continue;
       }
@@ -821,17 +953,45 @@ export function convertPatternText(input: string, opts: ConvertOptions = {}): Co
       continue;
     }
 
-    if (kind === 'note') {
+    if (kind === 'note' || kind === 'setup') {
       (current ? current.notes : looseNotes).push(line);
       continue;
     }
 
     // ---- round line ----
     if (!current) {
-      current = { name: '', quantity: null, rounds: [], notes: [], prevProd: null, lastN: 0 };
+      current = newPart('', null);
       parts.push(current);
     }
     const head = matchRoundHeader(norm);
+    if (head?.invalid) {
+      // A reversed or runaway range is never expanded: one unsupported round, numbered as written, kept verbatim.
+      // The WHOLE line (header included) follows `R{n}:` so the strict parser cannot read it as one countable round either.
+      const reversed = head.invalid === 'reversed';
+      const r: ConvRound = {
+        n: head.from,
+        original: line,
+        normalized: `R${head.from}: ${line}`,
+        status: 'unsupported',
+        expected: null,
+        calculated: null,
+        consumed: null,
+        joins: [],
+        messages: [
+          msg(
+            'error',
+            'range-invalid',
+            reversed ? `نطاق الأدوار مقلوب (${head.from} ← ${head.to}) — اتحفظ السطر كما هو.` : `نطاق الأدوار طويل جدًا (${head.from}–${head.to}) — اتحفظ السطر كما هو.`,
+            reversed ? `The round range is reversed (${head.from} → ${head.to}) — the line is kept as written.` : `The round range is too long (${head.from}–${head.to}, more than ${MAX_RANGE_SPAN + 1} rounds) — the line is kept as written.`,
+          ),
+        ],
+      };
+      current.rounds.push(r);
+      current.prevProd = null;
+      current.prevStatus = 'unsupported';
+      current.lastN = head.from;
+      continue;
+    }
     let from: number;
     let to: number;
     let rest: string;
@@ -846,9 +1006,10 @@ export function convertPatternText(input: string, opts: ConvertOptions = {}): Co
     const sp = splitTotal(rest);
     const def = kindOf(current.name.replace(/\s*\(.*$/, '').split(/\s+/)[0] ?? '') ?? kindOf(current.name);
     for (let n = from; n <= to; n++) {
-      const c = convertOneRound(n, line, sp.body, sp.declared, { terms, partKind: def?.kind ?? null, prevProd: current.prevProd });
+      const c = convertOneRound(n, line, sp.body, sp.declared, { terms, partKind: def?.kind ?? null, prevProd: current.prevProd, prevStatus: current.prevStatus });
       current.rounds.push(c.round);
       current.prevProd = c.prod;
+      current.prevStatus = c.round.status;
       current.lastN = n;
     }
   }
