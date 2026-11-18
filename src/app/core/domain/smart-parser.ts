@@ -833,8 +833,9 @@ function matchRoundHeader(norm: string): RoundHead | null {
  * They are kept verbatim as notes of the piece — never turned into a piece heading, never counted.
  */
 const SETUP_RE = new RegExp(
-  `^(?:(?:(?:to\\s+)?start|begin|foundation(?:\\s+chain)?|base(?:\\s+chain)?|البدايه|بدايه|ابدئي|ابدي|ابدا)\\s*[:\\-]?\\s*)?` +
-    `(?:(?:make\\s+(?:a\\s+)?)?(?:ch(?:ain)?|سلسله)\\s*(?:من\\s*)?\\d+(?:\\s*(?:sts?|stitches|غرز[هة]?))?|\\d+\\s*(?:ch(?:ains?)?|سلسله))` +
+  // Matched against normalizeLine() output, so Arabic words are written in matching form (ابدئي → ابديي, سلسلة → سلسله).
+  `^(?:(?:(?:to\\s+)?start|begin|foundation(?:\\s+chain)?|base(?:\\s+chain)?|البدايه|بدايه|ابديي|ابدي|ابدا|اعملي|اعمل)\\s*[:\\-]?\\s*)?` +
+    `(?:(?:make\\s+(?:a\\s+)?)?(?:ch(?:ain)?|ب?سلسله)\\s*(?:من\\s*)?\\d+(?:\\s*(?:sts?|stitches|غرز[هة]?))?|\\d+\\s*(?:ch(?:ains?)?|سلسله))` +
     `(?:\\s*[,.]?\\s*(?:and\\s+|ثم\\s+|و)?(?:turn|اقلب[يه]?))?\\s*[.]?$` +
     `|^(?:ch\\s*\\d+\\s*[,.]?\\s*(?:and\\s+)?)?turn(?:\\s+(?:your\\s+)?work)?\\s*[.]?$` +
     `|^اقلب[يه]?(?:\\s+(?:ال)?شغل)?\\s*[.]?$`,
@@ -965,11 +966,12 @@ export function convertPatternText(input: string, opts: ConvertOptions = {}): Co
     const head = matchRoundHeader(norm);
     if (head?.invalid) {
       // A reversed or runaway range is never expanded: one unsupported round, numbered as written, kept verbatim.
+      // The WHOLE line (header included) follows `R{n}:` so the strict parser cannot read it as one countable round either.
       const reversed = head.invalid === 'reversed';
       const r: ConvRound = {
         n: head.from,
         original: line,
-        normalized: `R${head.from}: ${line.replace(/^[^:]*:\s*/, '')}`.trim(),
+        normalized: `R${head.from}: ${line}`,
         status: 'unsupported',
         expected: null,
         calculated: null,

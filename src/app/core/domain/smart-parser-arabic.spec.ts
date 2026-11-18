@@ -207,6 +207,9 @@ describe('P5a · 3. spaced round ranges', () => {
     expect(rs).toHaveLength(2);
     expect(rs[1]).toMatchObject({ n, status: 'unsupported', calculated: null, original: line });
     expect(codes(rs[1])).toEqual(['range-invalid']);
+    // The tracker must not count it as a single round either.
+    const strict = parsePattern(rs[1].normalized).rounds[0];
+    expect(strict).toMatchObject({ n, ok: false });
   });
 
   it(`negative: a runaway range (more than ${MAX_RANGE_SPAN + 1} rounds) is not expanded`, () => {
@@ -214,6 +217,17 @@ describe('P5a · 3. spaced round ranges', () => {
     expect(rs).toHaveLength(2);
     expect(rs[1]).toMatchObject({ n: 2, status: 'unsupported' });
     expect(codes(rs[1])).toEqual(['range-invalid']);
+    expect(parsePattern(rs[1].normalized).rounds[0].ok).toBe(false);
+  });
+
+  it('a spaced range with only a bare total is read as a range (the existing "work even" assumption), never validated', () => {
+    const rs = rounds(R1.replace('6sc', '12sc').replace('[6]', '[12]') + 'R2 - 4 [12]');
+    expect(rs.slice(1).map((r) => [r.n, r.status])).toEqual([
+      [2, 'needs-review'],
+      [3, 'needs-review'],
+      [4, 'needs-review'],
+    ]);
+    expect(codes(rs[1])).toContain('assumed-sc');
   });
 
   it(`the longest allowed range (${MAX_RANGE_SPAN + 1} rounds) still expands`, () => {
@@ -311,7 +325,7 @@ describe('P5a · set-up lines, rows and unsupported syntax', () => {
     expect(res.parts[0].rounds.map((r) => r.n)).toEqual([1, 2]);
   });
 
-  it.each(['Turn', 'Ch 1, turn', 'ch 1 and turn.', 'اقلبي الشغل', 'سلسلة ٤٣', 'Foundation chain: 43 ch'])(
+  it.each(['Turn', 'Ch 1, turn', 'ch 1 and turn.', 'اقلبي الشغل', 'سلسلة ٤٣', 'ابدئي بسلسلة ٤٣', 'اعملي سلسلة من ٤٣ غرزة', 'Foundation chain: 43 ch'])(
     '«%s» between rows is a note, not a new piece',
     (setup) => {
       const res = convertPatternText(`Dress:\nRow 1: 42 sc\n${setup}\nRow 2: 42 sc`);
