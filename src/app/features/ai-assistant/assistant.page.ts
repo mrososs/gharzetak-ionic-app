@@ -145,7 +145,7 @@ function readCtxOpen(): boolean {
               @for (a of tray(); track a.id; let i = $index) {
                 <div class="kh-tray-item">
                   <img [src]="a.dataUrl" [alt]="i18n.q('صورة ', 'Photo ') + (i + 1)" />
-                  <span class="kh-tray-n gz-ltr">{{ i + 1 }}</span>
+                  <span class="kh-tray-n">{{ i + 1 }}</span>
                   <button type="button" class="kh-tray-x" (click)="removeShot(a.id)" [attr.aria-label]="i18n.q('شيلي الصورة ', 'Remove photo ') + (i + 1)"><svg gzIcon="x" size="s" /></button>
                   @if (i > 0) {
                     <button type="button" class="kh-tray-mv" (click)="moveShot(i, -1)" [attr.aria-label]="i18n.q('قدّمي الصورة ', 'Move photo earlier ') + (i + 1)"><svg gzIcon="chevr" size="s" /></button>

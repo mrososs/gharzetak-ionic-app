@@ -69,6 +69,30 @@ describe('transcript structure (real giraffe-sheet findings, synthetic fixture)'
     expect(p.parts[0]!.rounds[0]!.status).toBe('unsupported'); // chains = P5b, never validated
   });
 
+  it('numbered-list rounds ("1. 6sc in MR (6)", "3-4. 12sc (12)") from several pages are validated by the parser; count jumps stay flagged', () => {
+    const p = previewFromTranscript(
+      {
+        schema: 'gz.pattern-transcript', v: 1, sourceClass: 'written', title: null, language: 'en', terms: 'us', warnings: [],
+        lines: [
+          { ...L('part-heading', 'Body:'), page: 1 },
+          { ...L('round', '1. 6sc in MR (6)'), page: 1 },
+          { ...L('round', '2. 6inc (12)'), page: 1 },
+          { ...L('round', '3-4. 12sc (12)'), page: 2 },
+          { ...L('note', 'Fold the piece in half.'), page: 2 },
+          { ...L('round', '5. 6sc (6)'), page: 2 },
+        ],
+      },
+      'x',
+    )!;
+    expect(p.parts[0]!.rounds.map((r) => [r.normalized, r.status, r.page])).toEqual([
+      ['R1: 6sc in MR [6]', 'validated', 1],
+      ['R2: 6inc [12]', 'validated', 1],
+      ['R3: 12sc [12]', 'validated', 2],
+      ['R4: 12sc [12]', 'validated', 2],
+      ['R5: 6sc [6]', 'needs-review', 2],
+    ]);
+  });
+
   it('a repeat group with a dropped bracket is never validated (ai-unbalanced)', () => {
     const r = pv().parts[1]!.rounds[1]!;
     expect(r.status).not.toBe('validated');

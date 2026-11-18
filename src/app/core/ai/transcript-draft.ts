@@ -66,16 +66,26 @@ export function previewFromTranscript(t: TranscriptV1, id: string): PatternPrevi
   // stay attached to the part whose heading precedes them. Validity still comes from the parser alone.
   // A 'round' line WITHOUT its own round marker that follows a round is the same instruction wrapped over several
   // lines (device finding: one ear instruction became four parts). It is joined to that round, never made a heading.
-  const ROUND_MARK = /^\s*(?:r|rnd|round|row|الدور|دور|السطر|سطر|الصف|صف|الجولة|جولة)\s*[0-9٠-٩]/i;
+  // A round marker is a round word with a number ("R4", "السطر 4") OR a bare round number list item ("4.", "8-15.",
+  // "٤:") — not a count inside a sentence ("3 حشو.").
+  const ROUND_MARK = /^\s*(?:(?:r|rnd|round|row|الدور|دور|السطر|سطر|الصف|صف|الجولة|جولة)\s*[0-9٠-٩]|[0-9٠-٩]{1,3}(?:\s*[-–]\s*[0-9٠-٩]{1,3})?\s*[.:)])/i;
   const structural: { text: string }[] = [];
+  /** Line actually given to the parser → the transcript line it came from (page, legibility). */
+  const origin = new Map<string, TranscriptV1['lines'][number]>();
   for (const l of lines) {
     if (l.kind !== 'title' && l.kind !== 'part-heading' && l.kind !== 'round') continue;
     const prev = structural.at(-1) as ({ text: string; round?: boolean } | undefined);
     if (l.kind === 'round' && prev?.round && !ROUND_MARK.test(l.text)) {
+      const first = origin.get(prev.text.trim());
       prev.text = `${prev.text.replace(/[،,]\s*$/, '')}، ${l.text.trim()}`;
+      if (first) origin.set(prev.text.trim(), first);
       continue;
     }
-    structural.push({ text: l.text, round: l.kind === 'round' } as { text: string; round: boolean });
+    // A round written as a bare list item ("1. 8sc in MR (8)", "8-15. 48sc (48)", real chicken pages) gets the strict
+    // "R" header the parser knows; only for lines the transcript labels as rounds (pasted text is not affected).
+    const text = l.kind === 'round' ? l.text.replace(/^\s*([0-9٠-٩]{1,3}(?:\s*[-–]\s*[0-9٠-٩]{1,3})?)\s*[.)]\s+/, (_m, n: string) => `R${n.replace(/\s+/g, '')}: `) : l.text;
+    origin.set(text.trim(), l);
+    structural.push({ text, round: l.kind === 'round' } as { text: string; round: boolean });
   }
   const notesByHeading = new Map<string, string[]>();
   const headings: string[] = [];
@@ -103,7 +113,7 @@ export function previewFromTranscript(t: TranscriptV1, id: string): PatternPrevi
     const heading = headingFor(p.name.trim());
     const attached = [...(heading ? (notesByHeading.get(heading) ?? []) : []), ...(partIndex === 0 ? (notesByHeading.get('') ?? []) : [])];
     const rounds = p.rounds.map((r, i, all) => {
-      const line = byText.get(r.original.trim());
+      const line = byText.get(r.original.trim()) ?? origin.get(r.original.trim());
       const codes = r.messages.map((m) => m.code);
       let status = r.status;
       if (line?.legibility === 'unreadable') {
