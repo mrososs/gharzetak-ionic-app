@@ -22,6 +22,8 @@ export interface PreviewRound {
   /** Parser message codes plus AI codes: 'ai-uncertain', 'ai-unreadable', 'ai-no-checksum', 'ai-chart'. */
   readonly codes: readonly string[];
   readonly uncertain: readonly string[];
+  /** Source image (1-based) the line was read from, for multi-image submissions. */
+  readonly page: number | null;
 }
 
 export interface PreviewPart {
@@ -46,6 +48,8 @@ export interface PatternPreview {
   readonly target: 'pattern' | 'collection';
   /** Small data-URL thumbnail of the photo the user attached (memory only, never persisted). */
   readonly thumb?: string;
+  /** How many photos were analysed together. */
+  readonly images?: number;
 }
 
 const rank: Record<ConvStatus, number> = { validated: 0, 'needs-review': 1, unsupported: 2 };
@@ -86,7 +90,7 @@ export function previewFromTranscript(t: TranscriptV1, id: string): PatternPrevi
           codes.push('ai-no-checksum');
         }
       }
-      return { n: r.n, original: r.original, normalized: r.normalized, status, expected: r.expected, calculated: r.calculated, codes, uncertain: line?.uncertain ?? [] } satisfies PreviewRound;
+      return { n: r.n, original: r.original, normalized: r.normalized, status, expected: r.expected, calculated: r.calculated, codes, uncertain: line?.uncertain ?? [], page: line?.page ?? null } satisfies PreviewRound;
     });
     const status = rounds.reduce<ConvStatus>((a, r) => worse(a, r.status), rounds.length ? 'validated' : 'needs-review');
     return { name: p.name, quantity: p.quantity, rounds, notes: p.notes, status, text: p.text };

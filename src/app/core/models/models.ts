@@ -182,6 +182,8 @@ export interface ChatMessage {
   readonly text: string;
   /** Shown in the bubble only; NEVER persisted (setChat drops it). */
   readonly img?: string;
+  /** All photos of a multi-image message, in order (memory only; never persisted). */
+  readonly imgs?: readonly string[];
   /** Where a bot message came from: hosted Khayoota ('ai'), the server's demo provider ('demo') or the offline rules ('offline'). */
   readonly source?: 'ai' | 'demo' | 'offline';
   /** Typed action proposals (re-validated by the action registry at render AND at tap). */

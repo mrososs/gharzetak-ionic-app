@@ -30,6 +30,13 @@ import { KhayootaReplyComponent } from './khayoota-reply.component';
 type PhotoPurpose = 'diagnose' | 'pattern';
 /** Base64 cap per image (matches the server contract). */
 const MAX_B64 = 950_000;
+/** Photos per message (tester release); the server enforces the same limit and budgets every image. */
+const MAX_IMAGES = 4;
+interface Shot {
+  readonly id: string;
+  readonly dataUrl: string;
+  readonly image: InlineImage;
+}
 
 /**
  * GZ-S21 Khayoota (خيوطة) — Gharzetak's AI-powered crochet companion.
@@ -94,7 +101,11 @@ function readCtxOpen(): boolean {
       <div class="flex min-h-full flex-col justify-end gap-2.5" style="padding: 6px 20px 8px" aria-live="polite">
         @for (m of messages(); track m.id) {
           <div class="flex flex-col gap-1" [style.align-items]="(m.role === 'user') === i18n.isAr() ? 'flex-start' : 'flex-end'">
-            @if (m.img) {
+            @if (m.imgs && m.imgs.length > 1) {
+              <div class="kh-msg-grid" [attr.aria-label]="m.imgs.length + ' ' + i18n.q('صور', 'photos')">
+                @for (src of m.imgs; track $index) { <img [src]="src" [alt]="t().attached + ' ' + ($index + 1)" /> }
+              </div>
+            } @else if (m.img) {
               <div class="r20 overflow-hidden bg-lavender-200" style="width: 150px; height: 150px"><img [src]="m.img" [alt]="t().attached" class="h-full w-full object-cover" /></div>
             }
             @if (m.text) {
@@ -127,7 +138,28 @@ function readCtxOpen(): boolean {
         }
         <!-- Suggestions: one contained, RTL-aware scroll rail (no negative margins), hidden while typing so the
              composer keeps the space. Chips stay single-line; long ones end in an ellipsis and keep a full label. -->
-        @if (!input().trim() && !typing()) {
+        @if (tray().length) {
+          <div class="kh-tray" role="group" [attr.aria-label]="i18n.q('الصور المرفقة', 'Attached photos')">
+            <span class="gz-badge" [class.peach]="trayPurpose() === 'pattern'">{{ trayPurpose() === 'pattern' ? i18n.q('قراية باترون', 'Read pattern') : i18n.q('سؤال عن شغلي', 'About my work') }} · {{ tray().length }}/{{ maxImages }}</span>
+            <div class="kh-tray-row">
+              @for (a of tray(); track a.id; let i = $index) {
+                <div class="kh-tray-item">
+                  <img [src]="a.dataUrl" [alt]="i18n.q('صورة ', 'Photo ') + (i + 1)" />
+                  <span class="kh-tray-n gz-ltr">{{ i + 1 }}</span>
+                  <button type="button" class="kh-tray-x" (click)="removeShot(a.id)" [attr.aria-label]="i18n.q('شيلي الصورة ', 'Remove photo ') + (i + 1)"><svg gzIcon="x" size="s" /></button>
+                  @if (i > 0) {
+                    <button type="button" class="kh-tray-mv" (click)="moveShot(i, -1)" [attr.aria-label]="i18n.q('قدّمي الصورة ', 'Move photo earlier ') + (i + 1)"><svg gzIcon="chevr" size="s" /></button>
+                  }
+                </div>
+              }
+              @if (tray().length < maxImages) {
+                <button type="button" class="kh-tray-add" (click)="addMore()" [attr.aria-label]="i18n.q('ضيفي صور', 'Add photos')"><svg gzIcon="plus" /></button>
+                <button type="button" class="kh-tray-add" (click)="shootPhoto()" [attr.aria-label]="i18n.q('صوّري', 'Take a photo')"><svg gzIcon="camera" /></button>
+              }
+            </div>
+          </div>
+        }
+        @if (!input().trim() && !typing() && !tray().length) {
           <div class="kh-rail" role="group" [attr.aria-label]="i18n.q('أسئلة مقترحة', 'Suggested questions')">
             @for (q of suggestions(); track q) {
               <button type="button" class="gz-chip sm tint kh-chip" [attr.title]="q" (click)="send(q)">{{ q }}</button>
@@ -136,7 +168,8 @@ function readCtxOpen(): boolean {
         }
         <div class="kh-composer">
           <button type="button" class="gz-icb flat" (click)="photoTap()" [attr.aria-label]="t().attachPhoto"><svg gzIcon="camera" /></button>
-          <input #file class="gz-sr" type="file" accept="image/*" (change)="onPhoto($event)" />
+          <input #file class="gz-sr" type="file" accept="image/*" multiple (change)="onPhoto($event)" />
+          <input #cam class="gz-sr" type="file" accept="image/*" capture="environment" (change)="onPhoto($event)" />
           <label class="kh-field">
             <span class="gz-sr">{{ t().askPh }}</span>
             <textarea
@@ -150,7 +183,7 @@ function readCtxOpen(): boolean {
               maxlength="2000"
             ></textarea>
           </label>
-          <button type="button" class="gz-icb pur" (click)="send(input())" [disabled]="typing() || !input().trim()" [attr.aria-label]="t().send"><svg gzIcon="send" /></button>
+          <button type="button" class="gz-icb pur" (click)="sendDraft()" [disabled]="typing() || (!input().trim() && !tray().length)" [attr.aria-label]="t().send"><svg gzIcon="send" /></button>
         </div>
         <!-- One compact status line from the real backend/provider state; details live in the options sheet. -->
         <button type="button" class="kh-status" [attr.data-mode]="mode()" (click)="sheet.set('menu')" [attr.aria-label]="statusLine() + ' — ' + i18n.q('التفاصيل', 'details')">
@@ -177,7 +210,8 @@ function readCtxOpen(): boolean {
     <gz-sheet [open]="sheet() === 'photo'" [title]="i18n.q('هتعملي إيه بالصورة؟', 'What should Khayoota do with the photo?')" (closed)="sheet.set(null)">
       <div class="flex flex-col gap-2">
         <button type="button" class="gz-btn2" [disabled]="!kh.features().vision" (click)="pickPhoto('diagnose')"><svg gzIcon="search" size="s" />{{ i18n.q('شوفي شغلي', 'Look at my work') }}</button>
-        <button type="button" class="gz-btn2" [disabled]="!kh.features().extract" (click)="pickPhoto('pattern')"><svg gzIcon="notes" size="s" />{{ i18n.q('اقري باترون', 'Read a pattern') }}</button>
+        <button type="button" class="gz-btn2" [disabled]="!kh.features().extract" (click)="pickPhoto('pattern')"><svg gzIcon="notes" size="s" />{{ i18n.q('اقري باترون (لحد ٤ صفحات)', 'Read a pattern (up to 4 pages)') }}</button>
+        <p class="gz-xs gz-mute m-0">{{ i18n.q('تقدري تختاري لحد ٤ صور مع بعض، وترتبيها وتشيلي أي صورة قبل الإرسال.', 'You can pick up to 4 photos at once, reorder them and remove any before sending.') }}</p>
         <p class="gz-xs gz-mute m-0">{{ i18n.q('الصورة بتتصغّر على موبايلك، وبتتبعت للتحليل ومش بتتخزن. نور كويس وصفحة واحدة في الصورة.', 'The photo is resized on your phone, sent for analysis and not stored. Good light, one page per photo.') }}</p>
         @if (!kh.features().vision && !kh.features().extract) {
           <p class="gz-xs m-0">{{ i18n.q('تحليل الصور لسه مش متاح.', 'Photo analysis is not available yet.') }}</p>
@@ -232,6 +266,20 @@ function readCtxOpen(): boolean {
       }
       .kh-status > .truncate { min-width: 0; }
       .kh-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--gz-text-3); }
+      /* Multi-photo tray: its own scroll row above the composer; never covers the field or Send. */
+      .kh-tray { display: flex; flex-direction: column; gap: 6px; padding: 0 var(--gz-screen-pad, 20px) 8px; }
+      .kh-tray > .gz-badge { align-self: flex-start; }
+      .kh-tray-row { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding-top: 6px; }
+      .kh-tray-row::-webkit-scrollbar { display: none; }
+      .kh-tray-item { position: relative; flex: none; width: 64px; height: 64px; }
+      .kh-tray-item > img { width: 64px; height: 64px; border-radius: 14px; object-fit: cover; border: 1.5px solid var(--gz-border); }
+      .kh-tray-n { position: absolute; inset-block-end: 4px; inset-inline-start: 4px; min-width: 18px; height: 18px; border-radius: 9px; background: rgba(0,0,0,.55); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+      .kh-tray-x, .kh-tray-mv { position: absolute; width: 26px; height: 26px; border-radius: 50%; border: 0; background: var(--gz-surface); box-shadow: var(--gz-shadow-card); display: flex; align-items: center; justify-content: center; color: var(--gz-text); }
+      .kh-tray-x { inset-block-start: -6px; inset-inline-end: -6px; }
+      .kh-tray-mv { inset-block-end: -6px; inset-inline-end: -6px; }
+      .kh-tray-add { flex: none; width: 64px; height: 64px; border-radius: 14px; border: 1.5px dashed var(--gz-border); background: transparent; color: var(--gz-text-2); display: flex; align-items: center; justify-content: center; }
+      .kh-msg-grid { display: grid; grid-template-columns: repeat(2, 84px); gap: 4px; }
+      .kh-msg-grid > img { width: 84px; height: 84px; border-radius: 12px; object-fit: cover; }
       .kh-status[data-mode='ai'] .kh-dot { background: var(--gz-mint-ink); }
       .kh-status[data-mode='demo'] .kh-dot,
       .kh-status[data-mode='consent'] .kh-dot,
@@ -285,6 +333,12 @@ export class AssistantPage {
   protected readonly t = this.i18n.t;
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('file');
   private readonly content = viewChild(IonContent);
+  private readonly camInput = viewChild<ElementRef<HTMLInputElement>>('cam');
+
+  /** Photos waiting to be sent together (memory only), their order, and what they are for. */
+  protected readonly maxImages = MAX_IMAGES;
+  protected readonly tray = signal<readonly Shot[]>([]);
+  protected readonly trayPurpose = signal<PhotoPurpose>('diagnose');
 
   /** Project card open/collapsed — remembered on this device (a convenience only; storage may be unavailable). */
   protected readonly ctxOpen = signal(readCtxOpen());
@@ -415,28 +469,38 @@ export class AssistantPage {
   protected onEnter(ev: KeyboardEvent): void {
     if (ev.shiftKey || ev.isComposing) return;
     ev.preventDefault();
-    if (this.input().trim()) void this.send(this.input());
+    if (this.input().trim() || this.tray().length) void this.sendDraft();
   }
 
   /* ------------------------------------------------------------------ */
   /* sending                                                             */
   /* ------------------------------------------------------------------ */
 
-  protected async send(text: string, img?: { dataUrl: string; image: InlineImage }, purpose: PhotoPurpose = 'diagnose'): Promise<void> {
+  protected async send(text: string, shots: readonly Shot[] = [], purpose: PhotoPurpose = 'diagnose'): Promise<void> {
     const clean = (text || '').trim().slice(0, 2000);
-    if ((!clean && !img) || this.typing()) return;
+    if ((!clean && !shots.length) || this.typing()) return;
     if (this.kh.needsConsent()) {
       // Ask first; the question is sent only after an explicit "Agree".
-      this.pendingAfterConsent = () => void this.send(clean, img, purpose);
-      this.pendingQuestion = { text: clean, hadImage: !!img };
+      this.pendingAfterConsent = () => void this.send(clean, shots, purpose);
+      this.pendingQuestion = { text: clean, hadImage: shots.length > 0 };
       this.sheet.set('consent');
       return;
     }
     this.pendingQuestion = null;
     this.input.set('');
-    await this.push({ id: uuid(), role: 'user', text: clean, img: img?.dataUrl });
-    this.lastQuestion.set({ text: clean, images: img ? [img.image] : undefined, img: img?.dataUrl, purpose });
-    await this.answer(clean, img ? [img.image] : undefined, purpose);
+    const images = shots.length ? shots.map((s) => s.image) : undefined;
+    const urls = shots.map((s) => s.dataUrl);
+    await this.push({ id: uuid(), role: 'user', text: clean, img: urls[0], ...(urls.length > 1 ? { imgs: urls } : {}) });
+    this.lastQuestion.set({ text: clean, images, img: urls[0], purpose });
+    await this.answer(clean, images, purpose);
+  }
+
+  /** Composer Send / Enter: the typed text plus every photo in the tray, as ONE message. */
+  protected async sendDraft(): Promise<void> {
+    const shots = this.tray();
+    if (!this.input().trim() && !shots.length) return;
+    this.tray.set([]);
+    await this.send(this.input(), shots, this.trayPurpose());
   }
 
   protected async retry(): Promise<void> {
@@ -497,7 +561,7 @@ export class AssistantPage {
     try {
       const res = await this.kh.extract({ images }, this.i18n.lang());
       const found = previewFromTranscript(res.transcript, uuid());
-      const pv = found && thumbUrl ? { ...found, thumb: thumbUrl } : found;
+      const pv = found ? { ...found, ...(thumbUrl ? { thumb: thumbUrl } : {}), images: images.length } : found;
       if (!pv) {
         const cls = res.transcript.sourceClass;
         await this.push({
@@ -520,8 +584,8 @@ export class AssistantPage {
         source: this.kh.demoProvider() ? 'demo' : 'ai',
         previewId: pv.id,
         text: this.i18n.q(
-          `لقيت ${pv.title ? `«${pv.title}»` : 'باترون'} 🧶 — فيه ${pv.parts.length} ${pv.parts.length > 1 ? 'أجزاء' : 'جزء'} و${pv.counts.rounds} سطر${review ? `، و${review} منهم محتاجين مراجعة` : ''}.`,
-          `I found ${pv.title ? `“${pv.title}”` : 'a pattern'} 🧶 — ${pv.parts.length} part${pv.parts.length > 1 ? 's' : ''} and ${pv.counts.rounds} lines${review ? `; ${review} need review` : ''}.`,
+          `${pv.images && pv.images > 1 ? `حللت ${pv.images} صور و` : ''}لقيت ${pv.title ? `«${pv.title}»` : 'باترون'} 🧶 — فيه ${pv.parts.length} ${pv.parts.length > 1 ? 'أجزاء' : 'جزء'} و${pv.counts.rounds} سطر${review ? `، و${review} منهم محتاجين مراجعة` : ''}.`,
+          `${pv.images && pv.images > 1 ? `I read ${pv.images} photos and found ` : 'I found '}${pv.title ? `“${pv.title}”` : 'a pattern'} 🧶 — ${pv.parts.length} part${pv.parts.length > 1 ? 's' : ''} and ${pv.counts.rounds} lines${review ? `; ${review} need review` : ''}.`,
         ),
       });
     } catch (e) {
@@ -632,23 +696,62 @@ export class AssistantPage {
   protected pickPhoto(purpose: PhotoPurpose): void {
     this.photoPurpose = purpose;
     this.sheet.set(null);
+    if (this.tray().length && this.trayPurpose() !== purpose) this.tray.set([]); // one purpose per batch
+    this.trayPurpose.set(purpose);
     this.fileInput()?.nativeElement.click();
+  }
+
+  /** "+" in the tray: more photos for the same batch (same purpose). */
+  protected addMore(): void {
+    this.photoPurpose = this.trayPurpose();
+    this.fileInput()?.nativeElement.click();
+  }
+
+  /** Camera tile in the tray: a new photo straight from the camera, added to the same batch. */
+  protected shootPhoto(): void {
+    this.photoPurpose = this.trayPurpose();
+    this.camInput()?.nativeElement.click();
+  }
+
+  protected removeShot(id: string): void {
+    this.tray.update((t) => t.filter((s) => s.id !== id));
+  }
+
+  /** Reorder: move photo i one place earlier (dir -1) or later (+1). Order is what the model is told. */
+  protected moveShot(i: number, dir: -1 | 1): void {
+    this.tray.update((t) => {
+      const j = i + dir;
+      if (j < 0 || j >= t.length) return t;
+      const next = [...t];
+      [next[i], next[j]] = [next[j]!, next[i]!];
+      return next;
+    });
   }
 
   protected async onPhoto(ev: Event): Promise<void> {
     const el = ev.target as HTMLInputElement;
-    const f = el.files?.[0];
+    const files = Array.from(el.files ?? []);
     el.value = '';
-    if (!f) return;
-    // Re-encoded through a canvas: EXIF/GPS metadata is dropped; size is bounded before sending.
-    const edge = this.photoPurpose === 'pattern' ? 1568 : 1280;
-    let r = await readImageFile(f, edge, this.photoPurpose === 'pattern' ? 0.85 : 0.8);
-    if (!('error' in r) && r.dataUrl.length > MAX_B64 + 32) r = await readImageFile(f, 1280, 0.7);
-    if ('error' in r) return this.ui.toast(this.t()[r.error]);
-    const data = r.dataUrl.slice(r.dataUrl.indexOf(',') + 1);
-    if (data.length > MAX_B64) return this.ui.say('الصورة كبيرة قوي — جرّبي صورة تانية.', 'The photo is too large — try another one.');
-    const text = this.input().trim();
-    await this.send(text, { dataUrl: r.dataUrl, image: { mime: 'image/jpeg', data } }, this.photoPurpose);
+    if (!files.length) return;
+    this.trayPurpose.set(this.photoPurpose);
+    const room = this.maxImages - this.tray().length;
+    if (files.length > room) await this.ui.say(`أقصى ${this.maxImages} صور في الرسالة — خدت أول ${Math.max(room, 0)}.`, `Up to ${this.maxImages} photos per message — I kept the first ${Math.max(room, 0)}.`);
+    for (const f of files.slice(0, Math.max(room, 0))) {
+      // Re-encoded through a canvas: EXIF/GPS metadata is dropped; size is bounded before sending.
+      const edge = this.photoPurpose === 'pattern' ? 1568 : 1280;
+      let r = await readImageFile(f, edge, this.photoPurpose === 'pattern' ? 0.85 : 0.8);
+      if (!('error' in r) && r.dataUrl.length > MAX_B64 + 32) r = await readImageFile(f, 1280, 0.7);
+      if ('error' in r) {
+        this.ui.toast(this.t()[r.error]);
+        continue;
+      }
+      const data = r.dataUrl.slice(r.dataUrl.indexOf(',') + 1);
+      if (data.length > MAX_B64) {
+        await this.ui.say('صورة منهم كبيرة قوي — جرّبي صورة تانية.', 'One photo is too large — try another one.');
+        continue;
+      }
+      this.tray.update((t) => [...t, { id: uuid(), dataUrl: r.dataUrl, image: { mime: 'image/jpeg', data } }]);
+    }
   }
 
   /* ------------------------------------------------------------------ */

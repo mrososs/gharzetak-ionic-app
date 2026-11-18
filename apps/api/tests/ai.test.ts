@@ -9,7 +9,7 @@ import { FakeAiProvider, FAKE_TRIGGERS } from '../src/services/ai/provider';
 import { reserveNeurons, settle } from '../src/services/ai/quota';
 import { aiConfig } from '../src/services/ai/config';
 import { khayootaContext, sanitizeActions, toChatReply } from '../src/services/ai/contracts';
-import { PROMPT_VERSION, REPLY_JSON_SCHEMA, SYSTEM_PROMPT } from '../src/services/ai/prompts';
+import { IMAGE_TOKENS_UPPER, PROMPT_VERSION, REPLY_JSON_SCHEMA, SYSTEM_PROMPT, buildChatMessages, estimateInputTokens } from '../src/services/ai/prompts';
 import type { AppEnv } from '../src/env';
 import { JPEG, ORIGIN, PNG, signUp, type TestUser } from './helpers';
 
@@ -155,7 +155,7 @@ describe('chat', () => {
     ['message too long', { message: 'x'.repeat(2001) }],
     ['empty message without image', { message: '   ' }],
     ['unknown field (strict)', { message: 'hi', model: '@cf/other/model' }],
-    ['three images', { message: 'hi', images: [jpeg, jpeg, jpeg] }],
+    ['five images', { message: 'hi', images: [jpeg, jpeg, jpeg, jpeg, jpeg] }],
     ['data: prefix instead of plain base64', { message: 'hi', images: [{ mime: 'image/jpeg', data: `data:image/jpeg;base64,${jpeg.data}` }] }],
     ['unsupported mime', { message: 'hi', images: [{ mime: 'image/gif', data: jpeg.data }] }],
     ['an oversized context field', { message: 'hi', context: { ...ctx, round: { ...ctx.round, text: 'y'.repeat(301) } } }],
@@ -381,6 +381,25 @@ describe('project.openPart (real-device finding: offered the current finished pi
     for (const bad of ['body', 'arm1', 'elsewhere']) expect(sanitizeActions([{ id: 'project.openPart', payload: { projectId: 'prj', partInstanceId: bad } }], c as never), bad).toEqual([]);
     expect(sanitizeActions([{ id: 'tracker.openCurrentRound', payload: { projectId: 'prj', partInstanceId: 'body' } }], c as never)).toHaveLength(1); // the counter at the current piece is fine
     expect(khayootaContext.safeParse(c).success).toBe(true);
+  });
+});
+
+describe('multi-image (one related set per message)', () => {
+  it('up to 4 photos in one chat message reach the model together; a 5th is refused before inference', async () => {
+    const u = await consented('multi');
+    const four = await chat(u, { message: 'look at all of these', images: [jpeg, jpeg, jpeg, jpeg] });
+    expect(four.status).toBe(200);
+    expect(FakeAiProvider.calls).toBe(1); // ONE request with all images, not four
+    const five = await chat(u, { message: 'x', images: [jpeg, jpeg, jpeg, jpeg, jpeg] });
+    expect(five.status).toBe(400);
+    expect(FakeAiProvider.calls).toBe(1);
+  });
+
+  it('the Neuron reservation grows with every image (four photos never cost the same as one)', () => {
+    const one = buildChatMessages({ v: 1, lang: 'ar', message: 'x', images: [jpeg] } as never);
+    const four = buildChatMessages({ v: 1, lang: 'ar', message: 'x', images: [jpeg, jpeg, jpeg, jpeg] } as never);
+    expect(estimateInputTokens(four) - estimateInputTokens(one)).toBeGreaterThanOrEqual(3 * IMAGE_TOKENS_UPPER);
+    expect(JSON.stringify(four)).toContain('IMAGES: 4 photos of ONE related subject');
   });
 });
 

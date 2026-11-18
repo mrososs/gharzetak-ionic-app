@@ -217,6 +217,35 @@ describe('Khayoota page', () => {
     }
   });
 
+  it('multi-image: the tray keeps order (reorder/remove), sends ONE request with all photos, and the preview knows the source photo of every line', async () => {
+    const page = await setup(fakeKhayoota({ extract: true, vision: true }));
+    const P = page as unknown as { tray: { set(v: unknown[]): void; (): { id: string }[] }; trayPurpose: { set(v: string): void }; moveShot(i: number, d: number): void; removeShot(id: string): void; sendDraft(): Promise<void> };
+    const shot = (id: string) => ({ id, dataUrl: `data:image/jpeg;base64,${id}`, image: { mime: 'image/jpeg', data: `/9j/${id}` } });
+    P.tray.set([shot('a'), shot('b'), shot('c')]);
+    P.trayPurpose.set('pattern');
+    P.moveShot(2, -1); // c before b
+    P.removeShot('a');
+    expect(P.tray().map((s) => s.id)).toEqual(['c', 'b']);
+    const t: TranscriptV1 = { schema: 'gz.pattern-transcript', v: 1, sourceClass: 'written', title: 'Chick', language: 'en', terms: 'us', warnings: [], lines: [
+      { page: 1, text: 'Head', kind: 'part-heading', legibility: 'clear', uncertain: [] },
+      { page: 1, text: 'R1: 6 sc in MR (6)', kind: 'round', legibility: 'clear', uncertain: [] },
+      { page: 2, text: 'R2: inc x 6 (12)', kind: 'round', legibility: 'clear', uncertain: [] },
+    ] };
+    kh.extract.mockResolvedValue({ requestId: 'r', transcript: t, usage: { remaining: { chat: 20, image: 5, extract: 2 }, resetAt: '' } });
+    await P.sendDraft();
+    await flush();
+    expect(kh.extract).toHaveBeenCalledTimes(1);
+    expect(kh.extract.mock.calls[0][0].images.map((i: { data: string }) => i.data)).toEqual(['/9j/c', '/9j/b']); // the user's order
+    expect(P.tray()).toEqual([]);
+    const user = page.messages().find((m) => m.role === 'user' && (m as unknown as { imgs?: string[] }).imgs)!;
+    expect((user as unknown as { imgs: string[] }).imgs).toHaveLength(2);
+    const msg = page.messages().at(-1)!;
+    expect(msg.text).toContain('2 صور');
+    const pv = page.previews()[msg.previewId!] as unknown as { images: number; parts: { rounds: { page: number | null }[] }[] };
+    expect(pv.images).toBe(2);
+    expect(pv.parts.flatMap((p) => p.rounds.map((r) => r.page))).toEqual([1, 2]);
+  });
+
   it('image → pattern: preview from the deterministic parser, then the REAL editor opens with an unsaved draft', async () => {
     const page = await setup(fakeKhayoota({ extract: true, vision: true }));
     const t: TranscriptV1 = {
@@ -228,7 +257,7 @@ describe('Khayoota page', () => {
     };
     kh.extract.mockResolvedValue({ requestId: 'r', transcript: t, usage: { remaining: { chat: 20, image: 5, extract: 2 }, resetAt: '' } });
     const before = store.patterns().length;
-    await (page as unknown as { send(t: string, img: unknown, purpose: string): Promise<void> }).send('', { dataUrl: 'data:image/jpeg;base64,/9j/', image: { mime: 'image/jpeg', data: '/9j/4AAQ' } }, 'pattern');
+    await (page as unknown as { send(t: string, shots: unknown[], purpose: string): Promise<void> }).send('', [{ id: 's1', dataUrl: 'data:image/jpeg;base64,/9j/', image: { mime: 'image/jpeg', data: '/9j/4AAQ' } }], 'pattern');
     await flush();
     const msg = page.messages().at(-1)!;
     expect(msg.text).toContain('2');

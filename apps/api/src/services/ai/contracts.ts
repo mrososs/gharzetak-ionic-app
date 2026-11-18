@@ -19,11 +19,12 @@ export const AI_LIMITS = {
   historyTurns: 8,
   historyChars: 6000,
   contextBytes: 6 * 1024,
-  chatImages: 2,
+  /** One related set per message (tester release). Each image is budgeted separately (IMAGE_TOKENS_UPPER each). */
+  chatImages: 4,
   extractImages: 4,
   /** Base64 characters per image (~700 KB of bytes). The app resizes to ≤ 1568 px JPEG before sending. */
   imageBase64Chars: 950_000,
-  chatBodyBytes: 1_500_000 + 64 * 1024,
+  chatBodyBytes: 3_800_000 + 64 * 1024,
   /** Text-only chat (photos off): message + history + context + calc, with room for multi-byte Arabic. */
   chatTextBodyBytes: 64 * 1024,
   extractBodyBytes: 3_800_000 + 64 * 1024,
@@ -184,6 +185,10 @@ export const transcriptWarning = z.enum([
   'missing-rounds',
   'non-pattern-text',
   'possible-instruction-in-source',
+  'mixed-patterns',
+  'duplicate-page',
+  'missing-page',
+  'page-order',
 ]);
 
 /** What the model is asked to return for extraction: a faithful transcript, NO stitch maths. */

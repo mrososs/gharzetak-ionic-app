@@ -68,7 +68,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
           <div class="flex min-w-0 flex-1 flex-col">
             <span class="gz-xs gz-mute gz-b">{{ pv.parts.length > 1 ? i18n.q('باترون متعدد الأجزاء', 'Multi-part pattern') : i18n.q('باترون', 'Pattern') }}</span>
             <b class="kh-title">{{ pv.title || i18n.q('باترون من الصورة', 'Pattern from the photo') }}</b>
-            <span class="gz-xs gz-mute">{{ i18n.q(pv.parts.length + ' جزء · ' + pv.counts.rounds + ' سطر', pv.parts.length + ' parts · ' + pv.counts.rounds + ' lines') }}</span>
+            <span class="gz-xs gz-mute">{{ i18n.q((pv.images && pv.images > 1 ? pv.images + ' صور · ' : '') + pv.parts.length + ' جزء · ' + pv.counts.rounds + ' سطر', (pv.images && pv.images > 1 ? pv.images + ' photos · ' : '') + pv.parts.length + ' parts · ' + pv.counts.rounds + ' lines') }}</span>
           </div>
         </div>
         <div class="mt-2 flex flex-wrap gap-1.5" aria-label="validation">
@@ -97,7 +97,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
             }
             <ul class="kh-rounds">
               @for (r of p.rounds; track $index) {
-                <li [class]="r.status"><span class="gz-code">{{ r.normalized }}</span>@if (r.status !== 'validated') { <span class="gz-xs"> — {{ reason(r.codes) }}</span> }</li>
+                <li [class]="r.status">@if (pv.images && pv.images > 1 && r.page) { <span class="gz-badge gz-ltr kh-src" [attr.aria-label]="i18n.q('من صورة ', 'from photo ') + r.page">📷{{ r.page }}</span> }<span class="gz-code">{{ r.normalized }}</span>@if (r.status !== 'validated') { <span class="gz-xs"> — {{ reason(r.codes) }}</span> }</li>
               }
             </ul>
           }
@@ -123,6 +123,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
       .kh-rounds li.needs-review { background: var(--gz-warning-bg); }
       .kh-rounds li.unsupported { background: var(--gz-error-bg); }
       .kh-rounds li { overflow-wrap: anywhere; }
+      .kh-src { margin-inline-end: 6px; font-size: 11px; padding: 1px 6px; }
       .kh-thumb { width: 52px; height: 52px; border-radius: 14px; object-fit: cover; flex: none; }
       .kh-title { font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
       .kh-parts-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
