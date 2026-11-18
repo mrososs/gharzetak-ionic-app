@@ -536,3 +536,51 @@ export const mediaObjects = sqliteTable(
   ],
 );
 
+
+/* ------------------------------------------------------------------ */
+/* Khayoota AI: consent and usage accounting (no prompts, replies,     */
+/* images or project content are ever stored)                          */
+/* ------------------------------------------------------------------ */
+
+/** Hosted-AI consent per account. `consent_version` must equal the server's AI_CONSENT_VERSION. */
+export const aiUserState = sqliteTable('ai_user_state', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  consentVersion: integer('consent_version').notNull().default(0),
+  consentAt: integer('consent_at'),
+  updatedAt: integer('updated_at').notNull().default(now),
+});
+
+/**
+ * Daily counters per UTC day. `scope` is a user id, or '__all__' for the account-wide row (global request cap and Neuron
+ * budget). Reservations are conditional upserts, so concurrent requests can never overshoot a cap. Counts and token
+ * totals only — never content.
+ */
+export const aiUsageDaily = sqliteTable(
+  'ai_usage_daily',
+  {
+    scope: text('scope').notNull(),
+    day: text('day').notNull(),
+    chat: integer('chat').notNull().default(0),
+    image: integer('image').notNull().default(0),
+    extract: integer('extract').notNull().default(0),
+    requests: integer('requests').notNull().default(0),
+    tokensIn: integer('tokens_in').notNull().default(0),
+    tokensOut: integer('tokens_out').notNull().default(0),
+    neuronsReserved: integer('neurons_reserved').notNull().default(0),
+    neuronsUsed: integer('neurons_used').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.scope, t.day] }), index('ai_usage_daily_day_idx').on(t.day)],
+);
+
+/** Burst limiter: weighted units per user per minute window (chat 1, photo 3, extraction 6). */
+export const aiRate = sqliteTable(
+  'ai_rate',
+  {
+    userId: text('user_id').notNull(),
+    windowStart: integer('window_start').notNull(),
+    units: integer('units').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.windowStart] })],
+);

@@ -29,7 +29,13 @@
     // Origins allowed by CORS and Better Auth CSRF/origin checks. Capacitor WebViews use
     // http(s)://localhost (Android) and capacitor://localhost (iOS); the custom scheme is the deep link.
     "APP_ORIGINS": "http://localhost:4200,http://localhost,https://localhost,capacitor://localhost,com.gharzetak.app://",
-    "REQUIRE_EMAIL_VERIFICATION": "false"
+    "REQUIRE_EMAIL_VERIFICATION": "false",
+    // Khayoota AI, LOCAL ONLY: the offline fake provider (deterministic demo replies, never a real model).
+    // There is no AI binding here on purpose: ordinary dev and tests can never call Workers AI.
+    "AI_ENABLED": "true",
+    "AI_PROVIDER": "fake",
+    "AI_VISION_ENABLED": "true",
+    "AI_EXTRACT_ENABLED": "true"
   },
 
   // ---------------------------------------------------------------------------------------------
@@ -61,8 +67,22 @@
         // Only the installed app's own origins: Android Capacitor WebView (https://localhost), iOS (capacitor://localhost) and the deep-link scheme. No dev-server origin.
         "APP_ORIGINS": "https://localhost,capacitor://localhost,com.gharzetak.app://",
         // Turn on once a mail provider exists (otherwise nobody could ever sign in).
-        "REQUIRE_EMAIL_VERIFICATION": "false"
-      }
+        "REQUIRE_EMAIL_VERIFICATION": "false",
+        // Khayoota AI: kill switch OFF until a separately approved staging release. Vision and extraction stay OFF
+        // until their benchmark gates pass (docs/khayoota-ai/model-decision.md).
+        "AI_ENABLED": "false",
+        "AI_PROVIDER": "workers-ai",
+        "AI_MODEL_CHAT": "@cf/google/gemma-4-26b-a4b-it",
+        "AI_MODEL_VISION": "@cf/google/gemma-4-26b-a4b-it",
+        "AI_MODEL_EXTRACT": "@cf/google/gemma-4-26b-a4b-it",
+        "AI_VISION_ENABLED": "false",
+        "AI_EXTRACT_ENABLED": "false",
+        "AI_DAILY_NEURON_BUDGET": "8000",
+        "AI_DAILY_REQUEST_CAP": "300",
+        "AI_CONSENT_VERSION": "1"
+      },
+      // Workers AI binding (inactive while AI_ENABLED is "false"). Only takes effect on an approved deploy.
+      "ai": { "binding": "AI" }
     }
   }
 }
