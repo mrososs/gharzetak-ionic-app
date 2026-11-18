@@ -40,6 +40,42 @@ describe('real-device findings (Gemma 4 on the HONOR phone)', () => {
   });
 });
 
+describe('transcript structure (real giraffe-sheet findings, synthetic fixture)', () => {
+  const L = (kind: 'title' | 'part-heading' | 'round' | 'note', text: string) => ({ page: 1, text, kind, legibility: 'clear' as const, uncertain: [] });
+  const pv = () =>
+    previewFromTranscript(
+      {
+        schema: 'gz.pattern-transcript', v: 1, sourceClass: 'written', title: 'Toy', language: 'ar', terms: 'us', warnings: [],
+        lines: [
+          L('title', 'Toy'),
+          L('part-heading', 'الأذنان (قطعتان)'),
+          L('note', 'الخيط: اللون البني'),
+          L('round', 'السطر 1: نعمل 5 غرز سلسلة،'),
+          L('round', 'بدءاً من ثاني سلسلة من الإبرة:'),
+          L('round', 'نغلق بغرزة منزلقة.'),
+          L('note', 'تغيير لون الخيط إلى الأصفر.'),
+          L('part-heading', 'الفم'),
+          L('round', 'السطر 1: 6 غرز قصيرة في دائرة سحرية. (6)'),
+          L('round', 'السطر 2: 1 غرزة قصيرة، تزايد) ×3. (9)'),
+        ],
+      },
+      'x',
+    )!;
+
+  it('notes stay attached to their part; colour lines never become parts; wrapped instruction lines join their round', () => {
+    const p = pv();
+    expect(p.parts.map((x) => [x.name, x.quantity, x.rounds.length])).toEqual([['الأذنان', 2, 1], ['الفم', 1, 2]]);
+    expect(p.parts[0]!.notes).toEqual(['الخيط: اللون البني', 'تغيير لون الخيط إلى الأصفر.']);
+    expect(p.parts[0]!.rounds[0]!.status).toBe('unsupported'); // chains = P5b, never validated
+  });
+
+  it('a repeat group with a dropped bracket is never validated (ai-unbalanced)', () => {
+    const r = pv().parts[1]!.rounds[1]!;
+    expect(r.status).not.toBe('validated');
+    expect(r.codes).toContain('ai-unbalanced');
+  });
+});
+
 describe('calcFacts — the parser counts, the model explains', () => {
   it('counts a repeat group in an Arabic question (the pilot case the model got wrong)', () => {
     expect(calcFacts('يعني إيه (2sc, inc) x 6 وهيطلع كام غرزة؟')).toEqual([

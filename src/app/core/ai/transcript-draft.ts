@@ -64,7 +64,19 @@ export function previewFromTranscript(t: TranscriptV1, id: string): PatternPrevi
   // Structure comes from the transcript's line kinds (device finding: colour/repeat notes such as "لون الخيط أصفر" were
   // read by the converter as part headings). Only titles, headings and rounds go to the parser; notes and assembly lines
   // stay attached to the part whose heading precedes them. Validity still comes from the parser alone.
-  const structural = lines.filter((l) => l.kind === 'title' || l.kind === 'part-heading' || l.kind === 'round');
+  // A 'round' line WITHOUT its own round marker that follows a round is the same instruction wrapped over several
+  // lines (device finding: one ear instruction became four parts). It is joined to that round, never made a heading.
+  const ROUND_MARK = /^\s*(?:r|rnd|round|row|الدور|دور|السطر|سطر|الصف|صف|الجولة|جولة)\s*[0-9٠-٩]/i;
+  const structural: { text: string }[] = [];
+  for (const l of lines) {
+    if (l.kind !== 'title' && l.kind !== 'part-heading' && l.kind !== 'round') continue;
+    const prev = structural.at(-1) as ({ text: string; round?: boolean } | undefined);
+    if (l.kind === 'round' && prev?.round && !ROUND_MARK.test(l.text)) {
+      prev.text = `${prev.text.replace(/[،,]\s*$/, '')}، ${l.text.trim()}`;
+      continue;
+    }
+    structural.push({ text: l.text, round: l.kind === 'round' } as { text: string; round: boolean });
+  }
   const notesByHeading = new Map<string, string[]>();
   const headings: string[] = [];
   let current = '';
