@@ -160,6 +160,8 @@ const lenient = (max: number) => z.string().transform((s) => s.slice(0, max));
 
 /** What the model is asked to return for chat / photo turns. Extra keys are stripped; actions are re-validated below. */
 export const modelReply = z.object({
+  /** The model's own scope call. false → the server guard strips actions/citations (see toChatReply). */
+  inScope: z.boolean().optional(),
   text: lenient(AI_LIMITS.replyTextChars * 2),
   observations: z.array(lenient(300)).max(6).optional(),
   hypotheses: z.array(lenient(300)).max(6).optional(),
@@ -218,6 +220,8 @@ export interface ChatReplyV1 {
   actions: ActionProposal[];
   /** true when the model's JSON could not be used and only its text (or nothing) is returned. */
   degraded: boolean;
+  /** The model judged the request out of scope: the reply is a short refusal and the guard removed any action/citation. */
+  outOfScope?: true;
 }
 
 export interface TranscriptV1 {
@@ -285,6 +289,8 @@ export const plainText = (s: string, max: number): string =>
 
 export function toChatReply(model: ModelReply, ctx: KhayootaContext | undefined, lang: 'ar' | 'en'): ChatReplyV1 {
   const arr = (x: string[] | undefined) => (x ?? []).map((s) => plainText(s, 300)).filter(Boolean);
+  // APPLICATION GUARD: an out-of-scope reply never carries an action card, citation or photo analysis, whatever the model added.
+  if (model.inScope === false) return { v: 1, lang, text: plainText(model.text, AI_LIMITS.replyTextChars), actions: [], degraded: false, outOfScope: true };
   const reply: ChatReplyV1 = { v: 1, lang, text: plainText(model.text, AI_LIMITS.replyTextChars), actions: sanitizeActions(model.actions, ctx), degraded: false };
   const obs = arr(model.observations);
   const hyp = arr(model.hypotheses);

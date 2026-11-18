@@ -8,6 +8,8 @@ import app from '../src/index';
 import { FakeAiProvider, FAKE_TRIGGERS } from '../src/services/ai/provider';
 import { reserveNeurons, settle } from '../src/services/ai/quota';
 import { aiConfig } from '../src/services/ai/config';
+import { toChatReply } from '../src/services/ai/contracts';
+import { PROMPT_VERSION, REPLY_JSON_SCHEMA, SYSTEM_PROMPT } from '../src/services/ai/prompts';
 import type { AppEnv } from '../src/env';
 import { JPEG, ORIGIN, PNG, signUp, type TestUser } from './helpers';
 
@@ -350,6 +352,24 @@ describe('staging readiness', () => {
     expect(out.status).toBe(200);
     expect((await chat(u, { message: 'b' })).status).toBe(401);
     expect(FakeAiProvider.calls).toBe(1);
+  });
+});
+
+describe('out-of-domain policy (real-device finding: refusals carried action cards, app name misspelt)', () => {
+  it('APPLICATION GUARD: a reply the model marks inScope:false never carries actions, citations or photo analysis', () => {
+    const r = toChatReply({ inScope: false, text: 'أنا خيوطة 🧶، بساعدك في الكروشيه واستخدام غرزتك بس.', actions: [{ id: 'learn.explainStitch', payload: { stitch: 'sc' } }], citations: [{ roundN: 7 }], observations: ['x'] }, ctx as never, 'ar');
+    expect(r).toEqual({ v: 1, lang: 'ar', text: 'أنا خيوطة 🧶، بساعدك في الكروشيه واستخدام غرزتك بس.', actions: [], degraded: false, outOfScope: true });
+    const inScope = toChatReply({ inScope: true, text: 'ok', actions: [{ id: 'learn.explainStitch', payload: { stitch: 'sc' } }] }, ctx as never, 'ar');
+    expect(inScope.actions).toHaveLength(1);
+    expect(inScope.outOfScope).toBeUndefined();
+  });
+
+  it('prompt v3 spells the app name and asks for the scope flag; the schema requires it', () => {
+    expect(PROMPT_VERSION).toBe(3);
+    expect(SYSTEM_PROMPT).toContain('غرزتك');
+    expect(SYSTEM_PROMPT).toContain('never "جرزتك"');
+    expect(SYSTEM_PROMPT).toContain('"inScope": false');
+    expect(REPLY_JSON_SCHEMA.required).toContain('inScope');
   });
 });
 

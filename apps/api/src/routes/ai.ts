@@ -194,9 +194,12 @@ ai.post('/chat', async (c) => {
 
   let reply: ChatReplyV1 | null = null;
   let repaired = false;
+  let modelActions = 0;
   const tryParse = (text: string) => {
     try {
-      return toChatReply(modelReply.parse(extractJson(text)), req.context, req.lang);
+      const parsed = modelReply.parse(extractJson(text));
+      modelActions = parsed.actions?.length ?? 0;
+      return toChatReply(parsed, req.context, req.lang);
     } catch {
       return null;
     }
@@ -214,7 +217,7 @@ ai.post('/chat', async (c) => {
       reply = { v: 1, lang: req.lang, text: prose.replace(/<[^>]{0,200}>/g, '').trim().slice(0, AI_LIMITS.replyTextChars), actions: [], degraded: true };
     }
   }
-  aiLog({ requestId: c.get('requestId'), route: 'chat', kind, status: 'reply', degraded: reply.degraded, repaired, actions: reply.actions.length, images: images.length });
+  aiLog({ requestId: c.get('requestId'), route: 'chat', kind, status: 'reply', degraded: reply.degraded, repaired, actions: reply.actions.length, modelActions, scope: reply.outOfScope ? 'out' : 'in', images: images.length });
   return c.json({ requestId: c.get('requestId'), reply, usage: await remaining(c, cfg, day) });
 });
 

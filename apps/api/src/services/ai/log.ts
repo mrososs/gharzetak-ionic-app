@@ -2,7 +2,7 @@
  * Khayoota AI — the ONLY logger used by the AI routes. It accepts a fixed set of operational fields and drops everything
  * else, so prompts, replies, images, pattern text, tokens or e-mail addresses cannot reach Workers Logs by accident.
  */
-const ALLOWED = ['requestId', 'route', 'kind', 'model', 'provider', 'status', 'code', 'latencyMs', 'tokensIn', 'tokensOut', 'neurons', 'images', 'degraded', 'repaired', 'actions'] as const;
+const ALLOWED = ['requestId', 'route', 'kind', 'model', 'provider', 'status', 'code', 'latencyMs', 'tokensIn', 'tokensOut', 'neurons', 'images', 'degraded', 'repaired', 'actions', 'modelActions', 'scope'] as const;
 type Field = (typeof ALLOWED)[number];
 export type AiLogEvent = Partial<Record<Field, string | number | boolean | null>>;
 
