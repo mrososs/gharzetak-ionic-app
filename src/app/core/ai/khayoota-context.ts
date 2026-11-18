@@ -65,11 +65,14 @@ export function buildKhayootaContext(store: StoreView, p: Project | null, questi
     const inst = view.instance;
     const sameKind = p.parts.filter((i) => i.partId === inst.partId && !i.retired);
     ctx.part = { instanceId: inst.id, name: clip(view.snapshot?.name ?? view.source?.name ?? '', 80), index: Math.max(1, sameKind.indexOf(inst) + 1), of: Math.max(1, sameKind.length) };
-    const unfinished = p.parts
-      .filter((i) => !i.retired && !instanceProgress(i, (p.partSnapshots ?? []).find((s) => s.partId === i.partId)).done)
-      .slice(0, 10)
-      .map((i) => ({ instanceId: i.id, label: clip(instanceLabel(i, (p.partSnapshots ?? []).find((s) => s.partId === i.partId), siblingsOf(p.parts ?? [], i)), 100) }));
+    const snap = (i: (typeof p.parts)[number]) => (p.partSnapshots ?? []).find((s) => s.partId === i.partId);
+    const label = (i: (typeof p.parts)[number]) => ({ instanceId: i.id, label: clip(instanceLabel(i, snap(i), siblingsOf(p.parts ?? [], i)), 100) });
+    const live = p.parts.filter((i) => !i.retired);
+    const unfinished = live.filter((i) => !instanceProgress(i, snap(i)).done).slice(0, 10).map(label);
+    // Finished pieces too (labels only), so "open the second arm" can be answered with "it's already done" (device finding).
+    const finished = live.filter((i) => instanceProgress(i, snap(i)).done).slice(0, 10).map(label);
     if (unfinished.length) ctx.unfinishedParts = unfinished;
+    if (finished.length) ctx.finishedParts = finished;
   }
 
   const tracker = view?.tracker ?? p.tracker;

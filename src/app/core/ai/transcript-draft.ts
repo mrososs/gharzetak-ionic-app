@@ -44,6 +44,8 @@ export interface PatternPreview {
   /** The transcript exactly as read (kept as the pattern's sourceText). */
   readonly sourceText: string;
   readonly target: 'pattern' | 'collection';
+  /** Small data-URL thumbnail of the photo the user attached (memory only, never persisted). */
+  readonly thumb?: string;
 }
 
 const rank: Record<ConvStatus, number> = { validated: 0, 'needs-review': 1, unsupported: 2 };

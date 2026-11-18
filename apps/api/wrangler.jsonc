@@ -78,11 +78,14 @@
         "AI_MODEL_CHAT": "@cf/google/gemma-4-26b-a4b-it",
         "AI_MODEL_VISION": "@cf/google/gemma-4-26b-a4b-it",
         "AI_MODEL_EXTRACT": "@cf/google/gemma-4-26b-a4b-it",
-        "AI_VISION_ENABLED": "false",
-        "AI_EXTRACT_ENABLED": "false",
-        "AI_USER_DAILY_CHAT": "20",
-        "AI_USER_DAILY_IMAGE": "0",
-        "AI_USER_DAILY_EXTRACT": "0",
+        // Vision + extraction ON for the controlled internal test only: the deny-all allowlist (verified tester e-mail)
+        // is checked before these flags, so no other account can reach them. Not a release decision (gates not passed).
+        "AI_VISION_ENABLED": "true",
+        "AI_EXTRACT_ENABLED": "true",
+        // 60 for the single allowlisted tester during real-device QA; the 3,000-Neuron global budget still caps the day.
+        "AI_USER_DAILY_CHAT": "60",
+        "AI_USER_DAILY_IMAGE": "10",
+        "AI_USER_DAILY_EXTRACT": "6",
         // The free 10,000 Neurons/day are shared by the WHOLE Cloudflare account (every Worker, the dashboard
         // playground, scripts). 3,000 (~75-95 text chats) leaves 7,000 for anything else on the account.
         "AI_DAILY_NEURON_BUDGET": "3000",

@@ -66,7 +66,7 @@ describe('Khayoota page', () => {
         LocalDb,
         ImportDraftService,
         { provide: KhayootaService, useValue: kh },
-        { provide: AuthService, useValue: { scope: signal('user:test'), signedIn: signal(true), guest: signal(false) } },
+        { provide: AuthService, useValue: { scope: signal('user:test'), signedIn: signal(true), guest: signal(false), expire: vi.fn(async () => undefined) } },
         { provide: NavController, useValue: nav },
         { provide: TrackerNavigator, useValue: { open: vi.fn(async () => 'opened') } },
         { provide: UiFeedback, useValue: { say: vi.fn(), toast: vi.fn(), confirm: vi.fn() } },

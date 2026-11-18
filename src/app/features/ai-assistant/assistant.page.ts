@@ -326,6 +326,11 @@ export class AssistantPage {
     void this.kh.refreshStatus();
   }
 
+  /** Opening the chat lands on the latest message, not the oldest (device finding). */
+  ionViewDidEnter(): void {
+    void this.content()?.scrollToBottom(0);
+  }
+
   /** The project Khayoota talks about: the one passed in the URL, else the current one. */
   protected readonly activeProject = computed(() => {
     const id = this.project();
@@ -444,7 +449,7 @@ export class AssistantPage {
     this.busyText.set(images?.length && purpose === 'pattern' ? this.i18n.q('خيوطة بتقرا الصورة…', 'Khayoota is reading the photo…') : this.t().aiThinking);
     try {
       if (this.kh.ready() && (!images?.length || (purpose === 'pattern' ? this.kh.features().extract : this.kh.features().vision))) {
-        if (images?.length && purpose === 'pattern') await this.extractPattern(images);
+        if (images?.length && purpose === 'pattern') await this.extractPattern(images, this.lastQuestion()?.img);
         else await this.hostedChat(text, images);
       } else {
         await this.offline(text, !!images?.length);
@@ -488,10 +493,11 @@ export class AssistantPage {
     }
   }
 
-  private async extractPattern(images: InlineImage[]): Promise<void> {
+  private async extractPattern(images: InlineImage[], thumbUrl?: string): Promise<void> {
     try {
       const res = await this.kh.extract({ images }, this.i18n.lang());
-      const pv = previewFromTranscript(res.transcript, uuid());
+      const found = previewFromTranscript(res.transcript, uuid());
+      const pv = found && thumbUrl ? { ...found, thumb: thumbUrl } : found;
       if (!pv) {
         const cls = res.transcript.sourceClass;
         await this.push({
@@ -514,8 +520,8 @@ export class AssistantPage {
         source: this.kh.demoProvider() ? 'demo' : 'ai',
         previewId: pv.id,
         text: this.i18n.q(
-          `لقيت باترون فيه ${pv.counts.rounds} دور${review ? `، و${review} منهم محتاجين مراجعة` : ''}. تحبي نجهزه للإضافة؟ 🧶`,
-          `I found a pattern with ${pv.counts.rounds} rounds${review ? `; ${review} need review` : ''}. Shall I prepare it for you? 🧶`,
+          `لقيت ${pv.title ? `«${pv.title}»` : 'باترون'} 🧶 — فيه ${pv.parts.length} ${pv.parts.length > 1 ? 'أجزاء' : 'جزء'} و${pv.counts.rounds} سطر${review ? `، و${review} منهم محتاجين مراجعة` : ''}.`,
+          `I found ${pv.title ? `“${pv.title}”` : 'a pattern'} 🧶 — ${pv.parts.length} part${pv.parts.length > 1 ? 's' : ''} and ${pv.counts.rounds} lines${review ? `; ${review} need review` : ''}.`,
         ),
       });
     } catch (e) {

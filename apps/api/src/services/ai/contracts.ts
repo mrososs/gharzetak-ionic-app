@@ -75,6 +75,8 @@ export const khayootaContext = z
       .optional(),
     nearby: z.array(z.object({ n: z.number().int().min(0).max(1000), text: shortText(300) })).max(4).optional(),
     unfinishedParts: z.array(z.object({ instanceId: id, label: shortText(100) })).max(10).optional(),
+    /** Finished pieces (labels only matter): lets Khayoota say "that piece is already done" instead of opening the wrong one. */
+    finishedParts: z.array(z.object({ instanceId: id, label: shortText(100) })).max(10).optional(),
     percent: z.number().min(0).max(100).optional(),
   })
   .strict();
@@ -273,6 +275,9 @@ export function sanitizeActions(raw: ModelReply['actions'], ctx: KhayootaContext
     const p = parsed.data as Record<string, unknown>;
     if (typeof p['projectId'] === 'string' && !projectIds.has(p['projectId'])) continue;
     if (typeof p['partInstanceId'] === 'string' && !instanceIds.has(p['partInstanceId'])) continue;
+    // project.openPart opens a piece still to be made: only an UNFINISHED piece of this request's context qualifies
+    // (on the device the model offered the current, finished piece when asked for "the second arm").
+    if (actionId === 'project.openPart' && !(ctx?.unfinishedParts ?? []).some((u) => u.instanceId === p['partInstanceId'])) continue;
     if (out.some((x) => x.id === actionId && JSON.stringify(x.payload) === JSON.stringify(p))) continue;
     out.push({ id: actionId, v: 1, payload: p });
   }

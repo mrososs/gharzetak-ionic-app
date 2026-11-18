@@ -8,7 +8,7 @@ import app from '../src/index';
 import { FakeAiProvider, FAKE_TRIGGERS } from '../src/services/ai/provider';
 import { reserveNeurons, settle } from '../src/services/ai/quota';
 import { aiConfig } from '../src/services/ai/config';
-import { toChatReply } from '../src/services/ai/contracts';
+import { khayootaContext, sanitizeActions, toChatReply } from '../src/services/ai/contracts';
 import { PROMPT_VERSION, REPLY_JSON_SCHEMA, SYSTEM_PROMPT } from '../src/services/ai/prompts';
 import type { AppEnv } from '../src/env';
 import { JPEG, ORIGIN, PNG, signUp, type TestUser } from './helpers';
@@ -370,6 +370,17 @@ describe('out-of-domain policy (real-device finding: refusals carried action car
     expect(SYSTEM_PROMPT).toContain('never "جرزتك"');
     expect(SYSTEM_PROMPT).toContain('"inScope": false');
     expect(REPLY_JSON_SCHEMA.required).toContain('inScope');
+  });
+});
+
+describe('project.openPart (real-device finding: offered the current finished piece for "the second arm")', () => {
+  const c = { v: 1, project: { id: 'prj', name: 'Bunny', kind: 'collection' }, part: { instanceId: 'body', name: 'Body', index: 1, of: 1 }, unfinishedParts: [{ instanceId: 'arm2', label: 'Arm 2/2' }], finishedParts: [{ instanceId: 'arm1', label: 'Arm 1/2' }] };
+  it('only an unfinished piece from the context can be opened', () => {
+    const ok = sanitizeActions([{ id: 'project.openPart', payload: { projectId: 'prj', partInstanceId: 'arm2' } }], c as never);
+    expect(ok.map((a) => a.payload['partInstanceId'])).toEqual(['arm2']);
+    for (const bad of ['body', 'arm1', 'elsewhere']) expect(sanitizeActions([{ id: 'project.openPart', payload: { projectId: 'prj', partInstanceId: bad } }], c as never), bad).toEqual([]);
+    expect(sanitizeActions([{ id: 'tracker.openCurrentRound', payload: { projectId: 'prj', partInstanceId: 'body' } }], c as never)).toHaveLength(1); // the counter at the current piece is fine
+    expect(khayootaContext.safeParse(c).success).toBe(true);
   });
 });
 

@@ -58,25 +58,57 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
       </div>
     }
     @if (preview(); as pv) {
-      <div class="gz-card focus kh-preview">
-        <div class="flex items-center gap-2"><svg gzIcon="notes" /><b class="flex-1 truncate">{{ pv.title || i18n.q('باترون من الصورة', 'Pattern from the photo') }}</b></div>
-        <div class="mt-2 flex flex-wrap gap-1.5">
-          <span class="gz-badge sage">✓ {{ pv.counts.validated }} {{ i18n.q('مراجعة تمام', 'checked') }}</span>
+      <div class="gz-card focus kh-preview" role="group" [attr.aria-label]="i18n.q('معاينة الباترون', 'Pattern preview')">
+        <div class="flex items-center gap-2.5">
+          @if (pv.thumb) {
+            <img class="kh-thumb" [src]="pv.thumb" [alt]="i18n.q('صورة الباترون', 'Pattern photo')" />
+          } @else {
+            <div class="gz-tile t-lav kh-thumb"><svg gzIcon="notes" /></div>
+          }
+          <div class="flex min-w-0 flex-1 flex-col">
+            <span class="gz-xs gz-mute gz-b">{{ pv.parts.length > 1 ? i18n.q('باترون متعدد الأجزاء', 'Multi-part pattern') : i18n.q('باترون', 'Pattern') }}</span>
+            <b class="kh-title">{{ pv.title || i18n.q('باترون من الصورة', 'Pattern from the photo') }}</b>
+            <span class="gz-xs gz-mute">{{ i18n.q(pv.parts.length + ' جزء · ' + pv.counts.rounds + ' سطر', pv.parts.length + ' parts · ' + pv.counts.rounds + ' lines') }}</span>
+          </div>
+        </div>
+        <div class="mt-2 flex flex-wrap gap-1.5" aria-label="validation">
+          <span class="gz-badge sage">✓ {{ pv.counts.validated }} {{ i18n.q('اتراجع', 'checked') }}</span>
           @if (pv.counts.needsReview) { <span class="gz-badge peach">⚠ {{ pv.counts.needsReview }} {{ i18n.q('محتاج مراجعة', 'need review') }}</span> }
           @if (pv.counts.unsupported) { <span class="gz-badge rose">✕ {{ pv.counts.unsupported }} {{ i18n.q('مش مدعوم', 'unsupported') }}</span> }
         </div>
-        @for (p of pv.parts; track $index) {
-          @if (pv.parts.length > 1) { <div class="gz-xs gz-b mt-2">{{ p.name }} × {{ p.quantity }}</div> }
-          <ul class="kh-rounds">
-            @for (r of p.rounds; track $index) {
-              <li [class]="r.status"><span class="gz-code">{{ r.normalized }}</span>@if (r.status !== 'validated') { <span class="gz-xs"> — {{ reason(r.codes) }}</span> }</li>
+        @if (pv.counts.needsReview || pv.counts.unsupported || pv.warnings.length) {
+          <div class="gz-note peach mt-2" role="note"><div class="flex-1 gz-xs">{{ i18n.q('القراءة مش كاملة: راجعي السطور المعلّمة في المحرر قبل الحفظ.', 'The reading is incomplete: check the flagged lines in the editor before saving.') }}</div></div>
+        }
+        <ul class="kh-parts-list">
+          @for (p of pv.parts; track $index) {
+            <li>
+              <span class="kh-dot" [class]="p.status" aria-hidden="true"></span>
+              <span class="flex-1 truncate">{{ p.name || i18n.q('الباترون', 'Pattern') }}</span>
+              @if (p.quantity > 1) { <span class="gz-badge gz-ltr">× {{ p.quantity }}</span> }
+              <span class="gz-xs gz-mute">{{ p.rounds.length }} {{ i18n.q('سطر', 'lines') }}</span>
+            </li>
+          }
+        </ul>
+        @if (details()) {
+          @for (p of pv.parts; track $index) {
+            <div class="gz-xs gz-b mt-2">{{ p.name }}@if (p.quantity > 1) { × {{ p.quantity }} }</div>
+            @if (p.notes.length) {
+              <ul class="kh-notes">@for (n of p.notes; track $index) {<li>{{ n }}</li>}</ul>
             }
-          </ul>
+            <ul class="kh-rounds">
+              @for (r of p.rounds; track $index) {
+                <li [class]="r.status"><span class="gz-code">{{ r.normalized }}</span>@if (r.status !== 'validated') { <span class="gz-xs"> — {{ reason(r.codes) }}</span> }</li>
+              }
+            </ul>
+          }
         }
         <p class="gz-xs gz-mute" style="margin: 8px 0 0">{{ i18n.q('خيوطة قرت الصورة؛ الحساب من آلة غرزتك. مفيش حاجة هتتحفظ غير لما تدوسي حفظ.', 'Khayoota read the photo; the arithmetic is Gharzetak’s parser. Nothing is saved until you press Save.') }}</p>
-        <div class="mt-2 flex flex-wrap gap-2">
-          <button type="button" class="gz-btn" style="min-height: 44px" (click)="addDraft.emit(pv)"><svg gzIcon="plus" size="s" />{{ i18n.q('إضافة لغرزتك', 'Add to Gharzetak') }}</button>
-          <button type="button" class="gz-btn-text" (click)="dismissPreview.emit()">{{ i18n.q('إلغاء', 'Cancel') }}</button>
+        <div class="mt-2 flex flex-col gap-2">
+          <button type="button" class="gz-btn" style="min-height: 46px" (click)="addDraft.emit(pv)"><svg gzIcon="plus" size="s" />{{ i18n.q('إضافة إلى الباترونات', 'Add to Patterns') }}</button>
+          <div class="flex gap-2">
+            <button type="button" class="gz-btn3 flex-1" style="min-height: 42px" [attr.aria-expanded]="details()" (click)="details.set(!details())">{{ details() ? i18n.q('إخفاء التفاصيل', 'Hide details') : i18n.q('مراجعة الباترون', 'Review the pattern') }}</button>
+            <button type="button" class="gz-btn-text" (click)="dismissPreview.emit()">{{ i18n.q('إلغاء', 'Cancel') }}</button>
+          </div>
         </div>
       </div>
     }
@@ -90,6 +122,15 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
       .kh-rounds li { padding: 4px 8px; border-radius: 10px; background: var(--gz-mint-200); }
       .kh-rounds li.needs-review { background: var(--gz-warning-bg); }
       .kh-rounds li.unsupported { background: var(--gz-error-bg); }
+      .kh-rounds li { overflow-wrap: anywhere; }
+      .kh-thumb { width: 52px; height: 52px; border-radius: 14px; object-fit: cover; flex: none; }
+      .kh-title { font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+      .kh-parts-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+      .kh-parts-list li { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 10px; border-radius: 12px; background: var(--gz-surface); border: 1px solid var(--gz-border); font-size: 14px; }
+      .kh-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--gz-mint-ink); }
+      .kh-dot.needs-review { background: var(--gz-warning); }
+      .kh-dot.unsupported { background: var(--gz-error); }
+      .kh-notes { margin: 4px 0 0; padding-inline-start: 18px; color: var(--gz-text-2); font-size: 12px; }
     `,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -106,6 +147,8 @@ export class KhayootaReplyComponent {
   readonly dismissPreview = output<void>();
 
   private readonly shownStitch = signal<{ stitch: string; topic: string | null } | null>(null);
+  /** "مراجعة الباترون": every round with its parser status, plus yarn/colour/assembly notes. */
+  protected readonly details = signal(false);
 
   readonly lookup: ActionLookup = {
     project: (id) => this.store.project(id) ?? null,

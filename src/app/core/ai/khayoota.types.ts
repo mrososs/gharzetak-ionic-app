@@ -25,6 +25,7 @@ export interface KhayootaContextV1 {
   };
   nearby?: { n: number; text: string }[];
   unfinishedParts?: { instanceId: string; label: string }[];
+  finishedParts?: { instanceId: string; label: string }[];
   percent?: number;
 }
 
