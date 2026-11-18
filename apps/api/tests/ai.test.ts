@@ -365,7 +365,8 @@ describe('out-of-domain policy (real-device finding: refusals carried action car
   });
 
   it('prompt v3 spells the app name and asks for the scope flag; the schema requires it', () => {
-    expect(PROMPT_VERSION).toBe(3);
+    expect(PROMPT_VERSION).toBe(4);
+    expect(SYSTEM_PROMPT).toContain("الصورة فيها فرخة مش أرنوبة"); // photo before context (device finding)
     expect(SYSTEM_PROMPT).toContain('غرزتك');
     expect(SYSTEM_PROMPT).toContain('never "جرزتك"');
     expect(SYSTEM_PROMPT).toContain('"inScope": false');

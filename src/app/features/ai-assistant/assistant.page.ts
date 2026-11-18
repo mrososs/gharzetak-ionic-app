@@ -212,7 +212,7 @@ function readCtxOpen(): boolean {
         <button type="button" class="gz-btn2" [disabled]="!kh.features().vision" (click)="pickPhoto('diagnose')"><svg gzIcon="search" size="s" />{{ i18n.q('شوفي شغلي', 'Look at my work') }}</button>
         <button type="button" class="gz-btn2" [disabled]="!kh.features().extract" (click)="pickPhoto('pattern')"><svg gzIcon="notes" size="s" />{{ i18n.q('اقري باترون (لحد ٤ صفحات)', 'Read a pattern (up to 4 pages)') }}</button>
         <p class="gz-xs gz-mute m-0">{{ i18n.q('تقدري تختاري لحد ٤ صور مع بعض، وترتبيها وتشيلي أي صورة قبل الإرسال.', 'You can pick up to 4 photos at once, reorder them and remove any before sending.') }}</p>
-        <p class="gz-xs gz-mute m-0">{{ i18n.q('الصورة بتتصغّر على موبايلك، وبتتبعت للتحليل ومش بتتخزن. نور كويس وصفحة واحدة في الصورة.', 'The photo is resized on your phone, sent for analysis and not stored. Good light, one page per photo.') }}</p>
+        <p class="gz-xs gz-mute m-0">{{ i18n.q('الصورة بتتصغّر على موبايلك، وبتتبعت للتحليل ومش بتتخزن. نور كويس وصفحة واحدة في كل صورة.', 'The photo is resized on your phone, sent for analysis and not stored. Good light, one page per photo.') }}</p>
         @if (!kh.features().vision && !kh.features().extract) {
           <p class="gz-xs m-0">{{ i18n.q('تحليل الصور لسه مش متاح.', 'Photo analysis is not available yet.') }}</p>
         }
