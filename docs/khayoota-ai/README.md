@@ -5,6 +5,8 @@
 
 ## Documents
 
+**Current state: [`release-status.md`](release-status.md)** (live staging config, tester-only access, verification, known limitations).
+
 | File | Contents |
 |---|---|
 | [current-state-audit.md](current-state-audit.md) | What exists in the code today, with file references, and what to reuse |

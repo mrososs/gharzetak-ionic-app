@@ -30,14 +30,9 @@ Nothing merged, no PR, nothing deployed, no billing change.
 
 Row/garment syntax from `p5a-parser-implementation-report.md` §6 stays **Unsupported** or **Needs Review**: chains as stitches and foundation chains, skips, turning chains ("counts / does not count as a stitch"), slip stitches and slip-stitch joins, working into chain spaces, joins between garment pieces, rows vs rounds, `*…*` repeats, front/back-loop stitches, shells / clusters / popcorns. AI extraction does not make any of them valid; the preview shows them with a reason. P5b should be its own parser/tracker workstream.
 
-## 4. What enabling staging would take (each step needs your approval)
+## 4. Staging rollout
 
-1. D1 Time Travel bookmark on `gharzetak-db-staging`, then `wrangler d1 migrations apply gharzetak-db-staging --remote --env staging` (adds 3 tables).
-2. `wrangler deploy --env staging` (the `AI` binding is already declared; `AI_ENABLED=false`).
-3. Smoke-test with the kill switch off, then set `AI_ENABLED=true` for staging only (vision/extraction flags stay off).
-4. Build the APK with `GZ_AI_ENDPOINT=/v1/ai`, test hosted chat on the phone, watch GraphQL Neurons.
-
-Cost guard on staging even when enabled: 8,000 Neurons/day budget (< 10,000 free), 300 requests/day, 20 chats per user.
+Executed on 2026-11-18 with approval (backup → migration 0004 → deploy AI-off → AI on for the verified tester only). Current state, limits and operating notes: [`release-status.md`](release-status.md).
 
 ## 5. Local-only files created (git-ignored, not committed)
 
@@ -45,13 +40,4 @@ Cost guard on staging even when enabled: 8,000 Neurons/day budget (< 10,000 free
 
 ## 6. Real Android device
 
-HONOR DNY-NX9 (Android 16) over USB, 2026-11-18. No emulator used. Nothing uninstalled or cleared.
-
-| Step | Result |
-|---|---|
-| Debug APK built from `8b49d41` with `scripts/android-debug.ps1`, pointed at the **existing** staging API (`GZ_AI_ENDPOINT=/v1/ai`) | BUILD SUCCESSFUL |
-| `adb install -r` over the installed 1.1.0-test build | Success; app data kept (same debug signing key) |
-| Launch | Process and WebView start; the app shows its own **fingerprint lock** ("افتحيها بالبصمة علشان تكمّلي"); the phone itself was locked (keyguard on, dozing) |
-| Khayoota on device | **Not tested.** Both locks need you. Staging has no `/v1/ai` yet (not deployed), so the most the device could show today is the built-in-rules fallback. |
-
-**No real-device Khayoota test has passed.** The phone now runs this branch's debug build; to go back, install `release/Gharzetak-Client-Test-1.1.0-test-e753481.apk` with `adb install -r` (data kept).
+Superseded: the first attempt (phone locked, nothing tested) was followed by a full real-device pass with real Gemma 4 — see [`real-android-ai-qa.md`](real-android-ai-qa.md) and [`real-vision-pattern-qa.md`](real-vision-pattern-qa.md). Hosted Khayoota passed on the HONOR for the allowlisted tester; limitations in [`release-status.md`](release-status.md) §3.

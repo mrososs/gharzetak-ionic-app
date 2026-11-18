@@ -297,11 +297,29 @@ export const plainText = (s: string, max: number): string =>
     .trim()
     .slice(0, max);
 
+/** Sentences that tell the user to tap a button ("دوسي على الزرار تحت", "tap the button below"). */
+const BUTTON_REF = /(?<![؀-ۿ])(?:ال)?(?:زر|زرار|أزرار|ازرار)(?![؀-ۿ])|\bbuttons?\b|\btap (?:below|here)\b/i;
+
+/**
+ * CONSISTENCY GUARD: when no action survived validation (the model proposed an unavailable or finished piece, a foreign
+ * id, ...), the reply must not tell the user to tap a button that will not be shown. Sentences that mention a button
+ * are removed; if nothing is left, a neutral line says where to go instead. Never adds facts.
+ */
+export function withoutDanglingButtonRefs(text: string, lang: 'ar' | 'en'): string {
+  if (!BUTTON_REF.test(text)) return text;
+  const parts = text.split(/(?<=[.!؟?])\s+|\n+/).filter((p) => p.trim());
+  const kept = parts.filter((p) => !BUTTON_REF.test(p));
+  if (kept.length) return kept.join(' ').trim();
+  return lang === 'ar' ? 'مش قادرة أفتحلك ده من هنا — افتحيه من صفحة المشروع.' : 'I can’t open that from here — open it from the project page.';
+}
+
 export function toChatReply(model: ModelReply, ctx: KhayootaContext | undefined, lang: 'ar' | 'en'): ChatReplyV1 {
   const arr = (x: string[] | undefined) => (x ?? []).map((s) => plainText(s, 300)).filter(Boolean);
   // APPLICATION GUARD: an out-of-scope reply never carries an action card, citation or photo analysis, whatever the model added.
   if (model.inScope === false) return { v: 1, lang, text: plainText(model.text, AI_LIMITS.replyTextChars), actions: [], degraded: false, outOfScope: true };
-  const reply: ChatReplyV1 = { v: 1, lang, text: plainText(model.text, AI_LIMITS.replyTextChars), actions: sanitizeActions(model.actions, ctx), degraded: false };
+  const actions = sanitizeActions(model.actions, ctx);
+  const text = plainText(model.text, AI_LIMITS.replyTextChars);
+  const reply: ChatReplyV1 = { v: 1, lang, text: actions.length ? text : withoutDanglingButtonRefs(text, lang), actions, degraded: false };
   const obs = arr(model.observations);
   const hyp = arr(model.hypotheses);
   const cc = arr(model.cannotConfirm);

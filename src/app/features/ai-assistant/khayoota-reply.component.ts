@@ -47,6 +47,10 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
         }
       </div>
     }
+    @if (msg().actions?.length && actions().length < (msg().actions?.length ?? 0)) {
+      <!-- A proposed shortcut no longer resolves (the project changed or the piece is finished): say so instead of leaving the text pointing at nothing. -->
+      <p class="gz-xs gz-mute kh-gone" role="note">{{ i18n.q('اختصار مقترح مبقاش متاح دلوقتي.', 'A suggested shortcut is no longer available.') }}</p>
+    }
     @if (card(); as k) {
       <div class="gz-card soft kh-stitch">
         <div class="flex items-center gap-2"><span class="gz-badge pur gz-ltr">{{ k.us }}</span><b>{{ i18n.isAr() ? k.arName : k.usN }}</b><span class="gz-xs gz-mute gz-ltr">UK: {{ k.uk }}</span></div>
@@ -123,6 +127,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
       .kh-rounds li.needs-review { background: var(--gz-warning-bg); }
       .kh-rounds li.unsupported { background: var(--gz-error-bg); }
       .kh-rounds li { overflow-wrap: anywhere; }
+      .kh-gone { margin: 0; }
       .kh-src { margin-inline-end: 6px; font-size: 11px; padding: 1px 6px; }
       .kh-thumb { width: 52px; height: 52px; border-radius: 14px; object-fit: cover; flex: none; }
       .kh-title { font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }

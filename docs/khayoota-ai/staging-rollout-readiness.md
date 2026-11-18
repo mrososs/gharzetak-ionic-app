@@ -1,9 +1,12 @@
 # Khayoota AI — Staging Rollout Readiness
 
-Date 2026-11-18. Prepared on `feat/khayoota-ai-implementation` (worktree `.claude/worktrees/affectionate-bhabha-5ddac5`).
-**Nothing in this document has been executed remotely.** Every remote step below needs your explicit approval.
-
-**Status: READY for Stage A** (deploy with AI off) once you approve it. **Stage B (live text chat) is BLOCKED** on three things: billing verification, a Stage A pass and your approvals (§14).
+> **HISTORICAL PLAN — superseded by [`release-status.md`](release-status.md).** This document was written before anything was
+> deployed. What actually happened differs from the plan below: the migration was applied and the Worker deployed on 2026-11-18
+> (Stage A, then B) with explicit approval; the allowlist is **not** the ID-only `AI_ALLOWED_USER_IDS` described here but a
+> verified-e-mail allowlist held in the `AI_ALLOWED_EMAILS` Worker secret (deny-all by default); vision and extraction were
+> switched on for the tester only; staging budgets were set to 3,000 Neurons/100 requests per day. "Nothing has been executed
+> remotely" and the Stage A/B "blocked" statuses below are no longer true. Keep this file for the review findings (D1–D8), the
+> CPU/privacy analysis and the rollback procedure.
 
 ---
 

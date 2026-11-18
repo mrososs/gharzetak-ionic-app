@@ -8,7 +8,7 @@ import app from '../src/index';
 import { FakeAiProvider, FAKE_TRIGGERS, WorkersAiProvider } from '../src/services/ai/provider';
 import { reserveNeurons, settle } from '../src/services/ai/quota';
 import { aiConfig } from '../src/services/ai/config';
-import { khayootaContext, sanitizeActions, toChatReply } from '../src/services/ai/contracts';
+import { khayootaContext, sanitizeActions, toChatReply, withoutDanglingButtonRefs } from '../src/services/ai/contracts';
 import { IMAGE_TOKENS_UPPER, PROMPT_VERSION, REPLY_JSON_SCHEMA, SYSTEM_PROMPT, buildChatMessages, estimateInputTokens } from '../src/services/ai/prompts';
 import type { AppEnv } from '../src/env';
 import { JPEG, ORIGIN, PNG, signUp, type TestUser } from './helpers';
@@ -415,6 +415,29 @@ describe('extraction timeout (real-device finding: a full giraffe page timed out
     expect(cfg.extractTimeoutMs).toBe(120_000);
     expect(cfg.timeoutMs).toBe(45_000);
     expect(cfg.maxOutputTokens.extract).toBe(4000);
+  });
+});
+
+describe('no dangling button references (real-device finding: reply said "tap the button" after the server dropped the action)', () => {
+  const c = { v: 1, project: { id: 'prj', name: 'Bunny', kind: 'collection' }, part: { instanceId: 'body', name: 'Body', index: 1, of: 1 }, unfinishedParts: [{ instanceId: 'arm2', label: 'Arm 2/2' }], finishedParts: [{ instanceId: 'arm1', label: 'Arm 1/2' }] };
+
+  it('an unavailable action is dropped AND the sentence telling the user to tap it is removed', () => {
+    const r = toChatReply({ text: 'الإيد التانية اتعملت خلاص. دوسي على الزرار تحت علشان يفتح لك الجزء.', actions: [{ id: 'project.openPart', payload: { projectId: 'prj', partInstanceId: 'arm1' } }] }, c as never, 'ar');
+    expect(r.actions).toEqual([]);
+    expect(r.text).toBe('الإيد التانية اتعملت خلاص.');
+    const en = toChatReply({ text: 'That piece is finished. Tap the button below to open it.', actions: [{ id: 'project.openPart', payload: { projectId: 'prj', partInstanceId: 'body' } }] }, c as never, 'en');
+    expect(en.actions).toEqual([]);
+    expect(en.text).toBe('That piece is finished.');
+  });
+
+  it('when only the button sentence existed, a neutral line replaces it; a valid action keeps its wording', () => {
+    expect(withoutDanglingButtonRefs('دوسي على الزرار تحت.', 'ar')).toContain('صفحة المشروع');
+    expect(withoutDanglingButtonRefs('Tap the button below.', 'en')).toContain('project page');
+    const ok = toChatReply({ text: 'دوسي على الزرار تحت علشان يفتح العداد.', actions: [{ id: 'project.openPart', payload: { projectId: 'prj', partInstanceId: 'arm2' } }] }, c as never, 'ar');
+    expect(ok.actions).toHaveLength(1);
+    expect(ok.text).toContain('الزرار');
+    // words that merely contain the letters are not button references
+    expect(withoutDanglingButtonRefs('الزراعة والزرع مش علاقتهم بالكروشيه. Bottom row is fine.', 'ar')).toContain('الزراعة');
   });
 });
 
