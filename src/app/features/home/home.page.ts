@@ -167,7 +167,7 @@ export class HomePage {
     const q = (a: string, e: string) => this.i18n.q(a, e);
     return [
       { label: q('عدّاد الغرز', 'Stitch tracker'), icon: 'counter', tone: 'lav', go: () => this.nav.navigateRoot('/tabs/tracker') },
-      { label: q('المساعد الذكي', 'AI assistant'), icon: 'sparkles', tone: 'blush', go: () => this.nav.navigateRoot('/tabs/assistant') },
+      { label: q('خيوطة', 'Khayoota'), icon: 'sparkles', tone: 'blush', go: () => this.nav.navigateRoot('/tabs/assistant') },
       { label: q('قارئ الباترن', 'Pattern reader'), icon: 'file', tone: 'sage', go: () => this.nav.navigateForward('/tabs/home/patterns') },
       { label: q('محوّل المصطلحات', 'Terminology'), icon: 'convert', tone: 'peach', go: () => this.nav.navigateForward('/tabs/home/terms') },
       { label: q('فيديوهات تعليمية', 'Video tutorials'), icon: 'film', tone: 'lav', go: () => this.nav.navigateRoot('/tabs/learn') },

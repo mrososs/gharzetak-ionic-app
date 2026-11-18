@@ -57,6 +57,12 @@ export class TrackerPage {
   protected readonly i18n = inject(I18nService);
   protected readonly store = inject(AppStore);
   protected readonly nav = inject(NavController);
+
+  /** Opens Khayoota about THIS project (its pinned revision / active piece become the context). */
+  protected askKhayoota(): void {
+    const p = this.p();
+    if (p) void this.nav.navigateForward(['/tabs/assistant'], { queryParams: { project: p.id } });
+  }
   protected readonly timer = inject(TimerService);
   private readonly ui = inject(UiFeedback);
   private readonly finishSvc = inject(ProjectFinishService);

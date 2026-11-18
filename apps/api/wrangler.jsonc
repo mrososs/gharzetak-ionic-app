@@ -29,12 +29,18 @@
     // Origins allowed by CORS and Better Auth CSRF/origin checks. Capacitor WebViews use
     // http(s)://localhost (Android) and capacitor://localhost (iOS); the custom scheme is the deep link.
     "APP_ORIGINS": "http://localhost:4200,http://localhost,https://localhost,capacitor://localhost,com.gharzetak.app://",
-    "REQUIRE_EMAIL_VERIFICATION": "false"
+    "REQUIRE_EMAIL_VERIFICATION": "false",
+    // Khayoota AI, LOCAL ONLY: the offline fake provider (deterministic demo replies, never a real model).
+    // There is no AI binding here on purpose: ordinary dev and tests can never call Workers AI.
+    "AI_ENABLED": "true",
+    "AI_PROVIDER": "fake",
+    "AI_VISION_ENABLED": "true",
+    "AI_EXTRACT_ENABLED": "true"
   },
 
   // ---------------------------------------------------------------------------------------------
-  // STAGING (for the `development` branch). NOTHING here exists remotely yet: creating the D1 database,
-  // setting the secret and deploying are approval-gated (docs/cloudflare-migration/staging-readiness.md).
+  // STAGING: Worker gharzetak-api-staging + D1 gharzetak-db-staging exist and are live for the test APK.
+  // Every deploy and remote migration is approval-gated (docs/khayoota-ai/staging-rollout-readiness.md).
   // Deploy with `--env staging` ONLY. Wrangler does not inherit bindings/vars into an env, so they are repeated.
   // The Worker refuses to serve while any REPLACE_* placeholder below is still present.
   // ---------------------------------------------------------------------------------------------
@@ -61,8 +67,35 @@
         // Only the installed app's own origins: Android Capacitor WebView (https://localhost), iOS (capacitor://localhost) and the deep-link scheme. No dev-server origin.
         "APP_ORIGINS": "https://localhost,capacitor://localhost,com.gharzetak.app://",
         // Turn on once a mail provider exists (otherwise nobody could ever sign in).
-        "REQUIRE_EMAIL_VERIFICATION": "false"
-      }
+        "REQUIRE_EMAIL_VERIFICATION": "false",
+        // Khayoota AI (docs/khayoota-ai/staging-rollout-readiness.md). Master switch OFF: Stage A deploys with it off;
+        // Stage B flips ONLY AI_ENABLED after a separate approval. Photos and pattern extraction stay OFF (flags AND
+        // zero quotas) until their quality gates pass. There is no third-party fallback provider in the code at all.
+        // Stage B (2026-11-18): ON for the controlled internal test. Only the tester in the AI_ALLOWED_EMAILS Worker SECRET
+        // (verified e-mail) can use it; every other account gets 403 ai_access_restricted. Set "false" to kill it.
+        "AI_ENABLED": "true",
+        "AI_PROVIDER": "workers-ai",
+        "AI_MODEL_CHAT": "@cf/google/gemma-4-26b-a4b-it",
+        "AI_MODEL_VISION": "@cf/google/gemma-4-26b-a4b-it",
+        "AI_MODEL_EXTRACT": "@cf/google/gemma-4-26b-a4b-it",
+        // Vision + extraction ON for the controlled internal test only: the deny-all allowlist (verified tester e-mail)
+        // is checked before these flags, so no other account can reach them. Not a release decision (gates not passed).
+        "AI_VISION_ENABLED": "true",
+        "AI_EXTRACT_ENABLED": "true",
+        // 60 for the single allowlisted tester during real-device QA; the 3,000-Neuron global budget still caps the day.
+        "AI_USER_DAILY_CHAT": "60",
+        "AI_USER_DAILY_IMAGE": "10",
+        "AI_USER_DAILY_EXTRACT": "6",
+        // The free 10,000 Neurons/day are shared by the WHOLE Cloudflare account (every Worker, the dashboard
+        // playground, scripts). 3,000 (~75-95 text chats) leaves 7,000 for anything else on the account.
+        "AI_DAILY_NEURON_BUDGET": "3000",
+        "AI_DAILY_REQUEST_CAP": "100",
+        "AI_CONSENT_VERSION": "1",
+        // Controlled internal test: comma-separated staging user ids. EMPTY = nobody (fail-closed); "*" = every account.
+        "AI_ALLOWED_USER_IDS": ""
+      },
+      // Workers AI binding (inactive while AI_ENABLED is "false"). Only takes effect on an approved deploy.
+      "ai": { "binding": "AI" }
     }
   }
 }

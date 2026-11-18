@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Benchmark fixture renderer</title>
+<style>body{font:14px system-ui;margin:16px} canvas{border:1px solid #ccc;margin:6px;max-width:300px}</style>
+</head>
+<body>
+<h1>Synthetic fixture renderer</h1>
+<p>Renders printed pattern pages from the benchmark's own source texts and one labelled synthetic illustration. Not handwriting, not photographs.</p>
+<button id="go">Render pilot fixtures</button>
+<pre id="log"></pre>
+<div id="out"></div>
+<script>
+const log = (s) => (document.getElementById('log').textContent += s + '\n');
+
+/** Printed page: plain paper, one instruction per line, Arabic right-aligned. */
+function printedPage(text, { width = 900, rtl = false, fontSize = 30 } = {}) {
+  const lines = text.split('\n');
+  const lh = Math.round(fontSize * 1.55);
+  const c = document.createElement('canvas');
+  c.width = width;
+  c.height = 60 + lines.length * lh;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fbfaf6';
+  g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#1d1d1d';
+  g.direction = rtl ? 'rtl' : 'ltr';
+  g.textAlign = rtl ? 'right' : 'left';
+  g.textBaseline = 'top';
+  lines.forEach((l, i) => {
+    g.font = `${i === 0 ? 'bold ' : ''}${fontSize}px Tahoma, Arial, sans-serif`;
+    g.fillText(l, rtl ? width - 40 : 40, 30 + i * lh);
+  });
+  return c;
+}
+
+/** Synthetic ILLUSTRATION (not a photograph) of two crocheted arms; the right one is visibly wider. */
+function twoArmsIllustration() {
+  const c = document.createElement('canvas');
+  c.width = 640; c.height = 480;
+  const g = c.getContext('2d');
+  g.fillStyle = '#e9e4da'; g.fillRect(0, 0, 640, 480);
+  const arm = (cx, w) => {
+    const top = 70, h = 330;
+    g.fillStyle = '#f2b8c6';
+    g.beginPath(); g.ellipse(cx, top + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#d98ea2'; g.lineWidth = 2;
+    for (let y = top + 18; y < top + h - 10; y += 16) {
+      const half = (w / 2) * Math.sqrt(Math.max(0, 1 - ((y - (top + h / 2)) / (h / 2)) ** 2));
+      for (let x = cx - half + 8; x < cx + half - 8; x += 12) {
+        g.beginPath(); g.moveTo(x - 4, y - 4); g.lineTo(x, y + 4); g.lineTo(x + 4, y - 4); g.stroke();
+      }
+    }
+  };
+  arm(200, 110);
+  arm(440, 165);
+  return c;
+}
+
+const toBlob = (c, type, q) => new Promise((r) => c.toBlob(r, type, q));
+async function save(name, canvas, type = 'image/jpeg', q = 0.85) {
+  const blob = await toBlob(canvas, type, q);
+  const res = await fetch('/save?name=' + encodeURIComponent(name), { method: 'POST', body: blob });
+  log(`${name}: ${res.status} ${await res.text()}`);
+  canvas.title = name;
+  document.getElementById('out').appendChild(canvas);
+}
+
+document.getElementById('go').onclick = async () => {
+  const m = await (await fetch('/cases.json')).json();
+  // Tiny probe for the image-input contract (one short printed line).
+  await save('PROBE-01.png', printedPage('R1: 6sc in MR [6]', { width: 420, fontSize: 28 }), 'image/png');
+  await save('PA-01.jpg', printedPage(m.sharedTexts.ballAr, { rtl: true }));
+  await save('US-01.png', printedPage(m.sharedTexts.ballUs), 'image/png');
+  await save('TR-01.synthetic.jpg', twoArmsIllustration());
+  log('DONE');
+};
+</script>
+</body>
+</html>

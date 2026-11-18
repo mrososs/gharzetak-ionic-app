@@ -9,6 +9,7 @@ import { requireUser } from './middleware/auth';
 import { entities } from './routes/entities';
 import { withPrefix } from './services/prefixed-bucket';
 import { media } from './routes/media';
+import { ai } from './routes/ai';
 
 const app = new Hono<AppBindings>();
 
@@ -55,6 +56,7 @@ const v1 = new Hono<AppBindings>();
 v1.use('*', requireUser);
 v1.route('/', entities);
 v1.route('/media', media);
+v1.route('/ai', ai);
 app.route('/v1', v1);
 
 app.notFound((c) => c.json({ error: { code: 'not_found', message: 'Route not found' } }, 404));

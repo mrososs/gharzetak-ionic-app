@@ -15,7 +15,7 @@ export const TABS: readonly Tab[] = [
   { id: 'projects', icon: 'folder', ar: 'مشاريعي', en: 'Projects' },
   { id: 'tracker', icon: 'counter', ar: 'العداد', en: 'Tracker', mid: true },
   { id: 'learn', icon: 'book', ar: 'تعلّمي', en: 'Learn' },
-  { id: 'assistant', icon: 'sparkles', ar: 'المساعد الذكي', en: 'AI Assistant' },
+  { id: 'assistant', icon: 'sparkles', ar: 'خيوطة', en: 'Khayoota' },
 ];
 
 /** The tab a URL belongs to: `/tabs/projects/42?x=1` → `projects`. Unknown / non-tab URLs → `null`. */

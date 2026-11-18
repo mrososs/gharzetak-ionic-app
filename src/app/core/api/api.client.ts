@@ -13,6 +13,8 @@ export class ApiError extends Error {
     message: string,
     /** Present on 409: the server's current revision of the item. */
     readonly current?: ConflictCurrent,
+    /** Extra top-level fields of the error body (e.g. scope / resetAt / retryAfterSec on AI limits). */
+    readonly extra?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -103,10 +105,11 @@ function toParams(p?: Params): HttpParams | undefined {
 export function toApiError(e: unknown): ApiError {
   if (e instanceof ApiError) return e;
   if (e instanceof HttpErrorResponse) {
-    const b = (typeof e.error === 'object' && e.error ? e.error : {}) as { error?: { code?: string; message?: string }; code?: string; message?: string; current?: ConflictCurrent };
+    const b = (typeof e.error === 'object' && e.error ? e.error : {}) as { error?: { code?: string; message?: string }; code?: string; message?: string; current?: ConflictCurrent } & Record<string, unknown>;
     const code = b.error?.code ?? b.code ?? (e.status === 0 ? 'network' : `http_${e.status}`);
     const message = b.error?.message ?? b.message ?? e.message;
-    return new ApiError(e.status, String(code), message, b.current);
+    const { error: _e, code: _c, message: _m, current: _cur, ...extra } = b;
+    return new ApiError(e.status, String(code), message, b.current, Object.keys(extra).length ? extra : undefined);
   }
   return new ApiError(0, 'network', e instanceof Error ? e.message : String(e));
 }

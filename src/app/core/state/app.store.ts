@@ -560,7 +560,22 @@ export class AppStore {
   async setChat(chat: ChatMessage[]): Promise<void> {
     const trimmed = chat.slice(-40);
     this.chat.set(trimmed);
-    await this.saveDocs({ chat: trimmed.map((m) => ({ id: m.id, role: m.role, text: m.text })) });
+    // Persisted: text and small structured reply parts. Never: photos, errors, extraction previews.
+    await this.saveDocs({
+      chat: trimmed
+        .filter((m) => !m.error)
+        .map((m) => ({
+          id: m.id,
+          role: m.role,
+          text: m.text,
+          ...(m.source ? { source: m.source } : {}),
+          ...(m.actions?.length ? { actions: m.actions } : {}),
+          ...(m.observations?.length ? { observations: m.observations } : {}),
+          ...(m.hypotheses?.length ? { hypotheses: m.hypotheses } : {}),
+          ...(m.cannotConfirm?.length ? { cannotConfirm: m.cannotConfirm } : {}),
+          ...(m.citations?.length ? { citations: m.citations } : {}),
+        })),
+    });
   }
 
   async setStoreInterest(email: string, notified: boolean): Promise<void> {

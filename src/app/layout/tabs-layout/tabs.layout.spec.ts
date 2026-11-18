@@ -50,10 +50,10 @@ describe('TabsLayout', () => {
     const i18n = TestBed.inject(I18nService);
     i18n.lang.set('ar');
     fixture.detectChanges();
-    expect(buttons().map((b) => b.querySelector('.gz-nv-label')?.textContent?.trim())).toEqual(['الرئيسية', 'مشاريعي', 'العداد', 'تعلّمي', 'المساعد الذكي']);
+    expect(buttons().map((b) => b.querySelector('.gz-nv-label')?.textContent?.trim())).toEqual(['الرئيسية', 'مشاريعي', 'العداد', 'تعلّمي', 'خيوطة']);
     i18n.lang.set('en');
     fixture.detectChanges();
-    expect(buttons().map((b) => b.querySelector('.gz-nv-label')?.textContent?.trim())).toEqual(['Home', 'Projects', 'Tracker', 'Learn', 'AI Assistant']);
+    expect(buttons().map((b) => b.querySelector('.gz-nv-label')?.textContent?.trim())).toEqual(['Home', 'Projects', 'Tracker', 'Learn', 'Khayoota']);
   });
 
   it('has an accessible tab-bar landmark label', async () => {
