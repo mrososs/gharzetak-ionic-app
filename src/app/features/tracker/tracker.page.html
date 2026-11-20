@@ -1,6 +1,6 @@
 <ion-header class="gz-header ion-no-border">
   <div class="gz-top" style="padding-top: calc(18px + var(--gz-safe-top))">
-    <button type="button" class="gz-reset flex min-h-[46px] min-w-0 flex-1 flex-col justify-center text-start" (click)="sheet.set('picker')" [attr.aria-label]="t().pickProject">
+    <button type="button" class="gz-reset flex min-h-[46px] min-w-0 flex-1 flex-col justify-center text-start" [gzTour]="'tracker.project-picker'" (click)="sheet.set('picker')" [attr.aria-label]="t().pickProject">
       <span class="gz-xs gz-mute">{{ t().trackerFor }}</span>
       <span class="gz-hd flex items-center gap-1.5" style="font-size: 16px">
         <span class="truncate" style="max-width: 170px">{{ p()?.name ?? '—' }}</span><svg gzIcon="chevd" size="s" />
@@ -19,11 +19,12 @@
   <gz-joy-banner slot="fixed" />
   <gz-joy-milestone slot="fixed" />
   <div class="gz-pad">
+    <gz-tour-offer [tours]="tourOffers()" />
     @if (p(); as project) {
       @if (inst(); as cur) {
         <!-- multi-part project: switch between pieces; each has its own position, undo history and time -->
         @if (completion(); as c) {
-          <div class="flex items-center justify-between gap-2" style="margin: 2px 0 6px">
+          <div class="flex items-center justify-between gap-2" [gzTour]="'tracker.completion'" style="margin: 2px 0 6px">
             <span class="gz-sm gz-b">{{ i18n.q('اكتمال المشروع ', 'Project ') }}<span class="gz-ltr" style="color: var(--gz-primary)">{{ c.percent }}%</span> · <span class="gz-ltr">{{ c.doneCount }}/{{ c.total }}</span> {{ i18n.q('قطعة', 'pieces') }}</span>
             @if (nextOpen(); as n) {
               @if (n.id !== cur.id) {
@@ -33,7 +34,7 @@
           </div>
           <div class="gz-bar thin" style="margin-bottom: 8px"><i [style.width.%]="c.percent"></i></div>
         }
-        <div class="gz-hs" role="tablist" [attr.aria-label]="i18n.q('قطع المشروع', 'Project pieces')" style="margin-bottom: 4px">
+        <div class="gz-hs" role="tablist" [gzTour]="'tracker.piece-tabs'" [attr.aria-label]="i18n.q('قطع المشروع', 'Project pieces')" style="margin-bottom: 4px">
           @for (r of partRows(); track r.id) {
             <button type="button" role="tab" class="gz-chip sm" [class.on]="r.active" [attr.aria-selected]="r.active" (click)="switchPart(r.id)">
               @if (r.done) { <svg gzIcon="check" size="s" /> }<span>{{ r.label }}</span><span class="gz-ltr gz-xs">{{ r.pct }}%</span>
@@ -51,7 +52,7 @@
         <!-- ================= SIMPLE (GZ-S14 / GZ-T03) ================= -->
         @if (sm(); as sm) {
           <div class="flex flex-col items-center">
-            <gz-ring [fraction]="sm.frac" [done]="sm.done" [size]="236" [stroke]="15" style="margin: 2px 0 6px">
+            <gz-ring [fraction]="sm.frac" [done]="sm.done" [size]="236" [stroke]="15" [gzTour]="'tracker.ring'" style="margin: 2px 0 6px">
               <span class="gz-xs gz-mute gz-b">{{ sm.roundLabel }}</span>
               <span class="gz-hd gz-ltr gz-num" style="font-size: 68px; line-height: 1.05">{{ sm.s.count }}</span>
               <span class="gz-mute gz-b gz-ltr" style="font-size: 16px">/ {{ sm.s.target }} {{ t().stitchesU }}</span>
@@ -66,8 +67,8 @@
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <button type="button" class="gz-icb lg" (click)="undo()" [attr.aria-label]="t().undo"><svg gzIcon="undo" /></button>
-            <button type="button" class="gz-bigbtn flex-1" [class.done]="sm.done" [disabled]="sm.last" (click)="tap()">
+            <button type="button" class="gz-icb lg" [gzTour]="'tracker.undo'" (click)="undo()" [attr.aria-label]="t().undo"><svg gzIcon="undo" /></button>
+            <button type="button" class="gz-bigbtn flex-1" [gzTour]="'tracker.tap'" [class.done]="sm.done" [disabled]="sm.last" (click)="tap()">
               <svg [gzIcon]="sm.btnIcon" size="l" [flip]="sm.btnIcon === 'arrow'" /><span class="gz-ltr" style="direction: inherit">{{ sm.btnLabel }}</span>
             </button>
             <button type="button" class="gz-icb lg" (click)="sheet.set('reset')" [attr.aria-label]="t().reset"><svg gzIcon="reset" /></button>
@@ -85,12 +86,12 @@
             <span class="gz-sm gz-b flex-1">{{ pt.name }}</span>
             <button type="button" class="gz-lnk gz-sm" (click)="openSource()">{{ t().openReader }}</button>
           </div>
-          <div class="gz-hs" style="margin-bottom: 2px">
+          <div class="gz-hs" [gzTour]="'tracker.round-pills'" style="margin-bottom: 2px">
             @for (r of pt.rounds; track r.i) {
               <button type="button" class="gz-pill {{ r.cls }}" (click)="jump(r.i)" [attr.aria-label]="t().roundWord + ' ' + r.n" [attr.aria-current]="r.cls === 'cur' ? 'step' : null">R{{ r.n }}</button>
             }
           </div>
-          <div class="gz-card" style="padding: 14px 16px">
+          <div class="gz-card" [gzTour]="'tracker.instruction'" style="padding: 14px 16px">
             <div class="flex items-center justify-between"><span class="gz-badge dark">{{ t().roundWord }} {{ pt.n }}</span><span class="gz-badge {{ pt.okCls }}">{{ pt.okText }}</span></div>
             <div class="gz-code" style="margin: 8px 0 2px; font-size: 18px">{{ pt.code }}</div>
             <div class="gz-xs gz-mute"><span class="gz-ltr">{{ pt.sumText }}</span></div>
@@ -113,7 +114,7 @@
           @if (pt.st.roundComplete) {
             <div class="gz-note sage gz-pulse mb-2.5" role="status"><svg gzIcon="check" /><span class="gz-b">{{ pt.doneMsg }}</span></div>
           } @else {
-            <div class="gz-card soft" style="padding: 12px 14px">
+            <div class="gz-card soft" [gzTour]="'tracker.current-step'" style="padding: 12px 14px">
               <div class="gz-xs gz-mute gz-b">{{ t().currentStep }}</div>
               <div class="flex items-center gap-2.5" style="margin: 2px 0 6px"><span class="gz-hd" style="font-size: 20px">{{ pt.curLabel }}</span><span class="gz-badge peach gz-ltr">{{ pt.curIO }}</span></div>
               <div class="flex flex-wrap gap-1.5">
@@ -125,12 +126,12 @@
             </div>
           }
           <span class="gz-lbl" style="margin: 14px 0 6px">{{ t().countBy }}</span>
-          <div class="gz-seg">
+          <div class="gz-seg" [gzTour]="'tracker.count-by'">
             @for (m of modes(); track m.id) {
               <button type="button" [class.on]="pt.mode === m.id" (click)="setCountMode(m.id)" style="font-size: 13px">{{ m.label }}</button>
             }
           </div>
-          <div class="mt-3.5 flex items-center gap-3">
+          <div class="mt-3.5 flex items-center gap-3" [gzTour]="'tracker.tap-row'">
             <button type="button" class="gz-icb lg" (click)="undo()" [attr.aria-label]="t().undo"><svg gzIcon="undo" /></button>
             <button type="button" class="gz-bigbtn flex-1" style="font-size: 20px" [class.done]="pt.st.roundComplete" [disabled]="pt.disabled" (click)="tap()">
               <svg [gzIcon]="pt.btnIcon" size="l" [flip]="pt.btnIcon === 'arrow'" /><span>{{ pt.btnLabel }}</span>

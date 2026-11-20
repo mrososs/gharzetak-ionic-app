@@ -1,17 +1,21 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { AssistantService } from '../../core/ai/assistant.service';
-import { parsePattern } from '../../core/domain/pattern-parser';
+import { countedTotal, parsePattern } from '../../core/domain/pattern-parser';
 import { displayInTerms } from '../../core/domain/terminology';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { AppStore } from '../../core/state/app.store';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
+import { TourCoordinator } from '../../core/tour/tour-coordinator.service';
+import type { TourId } from '../../core/tour/tour-ids';
+import { TourOfferComponent } from '../../shared/ui/tour/tour-offer.component';
+import { TourTargetDirective } from '../../shared/ui/tour/tour-target.directive';
 
 /** GZ-S17 — round-by-round pattern reader with saved reading position. */
 @Component({
   selector: 'gz-pattern-reader',
-  imports: [IonHeader, IonContent, IconComponent],
+  imports: [IonHeader, IonContent, IconComponent, TourOfferComponent, TourTargetDirective],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top">
@@ -28,6 +32,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
     <ion-content class="gz-scroll">
       @if (pat(); as pat) {
         <div class="gz-pad">
+          <gz-tour-offer [tours]="tourOffers()" />
           <div class="flex flex-wrap gap-1.5" style="margin: 2px 0 10px">
             <span class="gz-badge {{ pat.isSample ? 'sage' : '' }}">{{ pat.isSample ? i18n.q('نموذج', 'Sample') : pat.source.toUpperCase() }}</span>
             <span class="gz-badge">{{ store.levelName(pat.level) }}</span>
@@ -71,7 +76,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
             </div>
 
             @if (cur(); as r) {
-              <div class="gz-card focus mt-2">
+              <div class="gz-card focus mt-2" [gzTour]="'reader.focus-card'">
                 <div class="flex items-center justify-between"><span class="gz-badge dark">{{ t().readingMode }}</span><span class="gz-xs gz-b" style="color: var(--gz-mint-ink)">{{ i18n.q('اتحفظ موضع القراءة · R', 'Position saved · R') }}{{ r.n }}</span></div>
                 <div class="flex items-center gap-2" style="margin: 10px 0 4px"><span class="gz-hd" style="font-size: 28px; color: var(--gz-primary)">R{{ r.n }}</span><span class="gz-xs gz-mute flex-1">{{ pos() + 1 }} / {{ parsed().rounds.length }}</span></div>
                 <div class="gz-code" style="font-size: 20px">{{ code(r.raw) }}</div>
@@ -80,12 +85,15 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
                 <div class="mt-2.5 flex flex-wrap gap-1.5">
                   @if (r.ok) {
                     <span class="gz-badge peach gz-ltr">{{ i18n.q('مستهلك: ', 'In: ') }}{{ r.cons }}</span><span class="gz-badge sage gz-ltr">{{ i18n.q('ناتج: ', 'Out: ') }}{{ r.prod }}</span>
+                    @if (r.chains) {
+                      <span class="gz-badge lav gz-ltr">{{ i18n.q('سلاسل: ', 'Chains: ') }}{{ r.chains }}</span>
+                    }
                   }
                   <span class="gz-badge {{ chainCls() }}">{{ chainText() }}</span>
                 </div>
                 <div class="mt-3.5 flex gap-2.5">
                   <button type="button" class="gz-btn3" style="width: 58px; padding: 0" (click)="setPos(pos() - 1)" [disabled]="pos() === 0" [attr.aria-label]="t().prevRound"><svg gzIcon="chevr" [style.transform]="i18n.isAr() ? 'none' : 'scaleX(-1)'" /></button>
-                  <button type="button" class="gz-btn flex-1" style="min-height: 50px; box-shadow: none" (click)="setPos(pos() + 1)" [disabled]="pos() >= parsed().rounds.length - 1">{{ t().nextRound }}<svg gzIcon="arrow" [flip]="true" /></button>
+                  <button type="button" class="gz-btn flex-1" style="min-height: 50px; box-shadow: none" [gzTour]="'reader.next-round'" (click)="setPos(pos() + 1)" [disabled]="pos() >= parsed().rounds.length - 1">{{ t().nextRound }}<svg gzIcon="arrow" [flip]="true" /></button>
                 </div>
               </div>
               @if (incDec()) {
@@ -93,7 +101,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
               }
             }
 
-            <button type="button" class="gz-btn mt-3.5" (click)="track()"><svg gzIcon="counter" />{{ t().trackThis }}</button>
+            <button type="button" class="gz-btn mt-3.5" [gzTour]="'reader.track'" (click)="track()"><svg gzIcon="counter" />{{ t().trackThis }}</button>
             @if (!linked().length || !parsed().ok) {
               <p class="gz-xs gz-mute mt-1.5 text-center">{{ t().trackHint }}</p>
             }
@@ -106,7 +114,7 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
                     <div class="gz-hd gz-tile" style="width: 46px; height: 46px; font-size: 15px" [style.background]="i === pos() ? 'var(--gz-primary)' : 'var(--gz-lavender-200)'" [style.color]="i === pos() ? '#fff' : 'var(--gz-text)'">R{{ r.n }}</div>
                     <div class="flex min-w-0 flex-1 flex-col gap-1">
                       <div class="gz-code" style="font-size: 15px">{{ code(r.raw) }}</div>
-                      <div class="gz-xs gz-mute gz-ltr">{{ r.ok ? r.cons + ' → ' + r.prod + (r.declared !== null ? '   [' + r.declared + ']' : '') : '?' }}</div>
+                      <div class="gz-xs gz-mute gz-ltr">{{ r.ok ? r.cons + ' → ' + r.prod + (r.chains ? '  +' + r.chains + ' ch' : '') + (r.declared !== null ? '   [' + r.declared + ']' : '') : '?' }}</div>
                       @if (warn(i); as w) {
                         <div class="gz-err" style="margin: 0">{{ w }}</div>
                       }
@@ -140,7 +148,15 @@ export class PatternReaderPage {
   }
   private readonly ai = inject(AssistantService);
   private readonly ui = inject(UiFeedback);
+  private readonly tour = inject(TourCoordinator);
   readonly id = input.required<string>();
+
+  /** A pattern was really opened (counts for the Getting Started list, with or without any tour). */
+  ionViewDidEnter(): void {
+    if (this.pat()) void this.tour.mark('patternOpened');
+  }
+  /** The reader tour needs the reading card to exist: not offered on a file-only pattern that has no text yet. */
+  protected readonly tourOffers = computed<readonly TourId[]>(() => (this.pat()?.text && this.cur() ? ['pattern-reader'] : []));
 
   protected readonly t = this.i18n.t;
   protected readonly paste = signal('');
@@ -177,7 +193,7 @@ export class PatternReaderPage {
     const r = this.cur();
     const q = (a: string, e: string) => this.i18n.q(a, e);
     if (!r || !r.ok) return q('غير مدعوم', 'Unsupported');
-    if (r.mismatch) return `[${r.declared}] ≠ ${r.prod}`;
+    if (r.mismatch) return `[${r.declared}] ≠ ${countedTotal(r)}`;
     if (r.chain === 'bad') return q('لا يطابق الدور السابق', 'Does not match previous round');
     return r.declared !== null ? `[${r.declared}] ✓` : '✓';
   });
@@ -195,7 +211,7 @@ export class PatternReaderPage {
     const x = this.parsed().rounds[i];
     const q = (a: string, e: string) => this.i18n.q(a, e);
     if (!x.ok) return q('صيغة غير مدعومة', 'Unsupported syntax');
-    if (x.mismatch) return q(`المجموع المكتوب [${x.declared}] لا يطابق الحساب ${x.prod}`, `Written total [${x.declared}] differs from computed ${x.prod}`);
+    if (x.mismatch) return q(`المجموع المكتوب [${x.declared}] لا يطابق الحساب ${countedTotal(x)}`, `Written total [${x.declared}] differs from computed ${countedTotal(x)}`);
     if (x.chain === 'bad') return q('الدور السابق أنتج رقم مختلف عن المستهلك هنا', 'The previous round produced a different number than this one consumes');
     return '';
   }

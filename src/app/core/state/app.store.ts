@@ -9,6 +9,7 @@ import { TrackerLike, patternStats, simpleProgress } from '../domain/tracker-eng
 import { TermSystem } from '../domain/terminology';
 import { I18nService } from '../i18n/i18n.service';
 import { JoyPrefs, ReminderPrefs, ScopePrefs, SharePrefs } from '../joy/joy.models';
+import type { TourEvent, TourEventRecord, TourPrefs } from '../tour/tour.types';
 import { ChatMessage, DEFAULT_PROFILE, Pattern, PatternCollection, PatternRevision, Profile, Project, ProjectStatus, TrackerData, TutorialData } from '../models/models';
 import { LocalDb, OutboxKind, Scope, ScopeDocs } from '../storage/local-db';
 import { samplePatterns } from './factories';
@@ -67,6 +68,8 @@ export class AppStore {
   readonly currentProjectId = signal<string | null>(null);
   /** Local display + Crochet Joy preferences of the current scope (celebrations, reminders, share cards). */
   readonly prefs = signal<ScopePrefs>({});
+  /** Local product-tour event log of the current scope (newest last, capped). Content-free by construction (see TourEvent). */
+  readonly tourEvents = signal<TourEventRecord[]>([]);
 
   /** Pattern text a reader is viewing in, overrides the profile terminology. */
   readonly readerTerms = signal<'us' | 'uk' | null>(null);
@@ -131,6 +134,7 @@ export class AppStore {
     this.storeNotified.set(!!docs.storeNotified);
     this.currentProjectId.set(docs.currentProjectId ?? null);
     this.prefs.set(docs.prefs ?? {});
+    this.tourEvents.set(docs.tourEvents ?? []);
     this.loaded.set(true);
   }
 
@@ -519,15 +523,23 @@ export class AppStore {
   }
 
   /** Merges Crochet Joy / display preferences (per scope) and persists them immediately. Local only: never synced. */
-  async updatePrefs(patch: { immersive?: boolean; joy?: Partial<JoyPrefs>; reminders?: Partial<ReminderPrefs>; share?: Partial<SharePrefs> }): Promise<void> {
+  async updatePrefs(patch: { immersive?: boolean; joy?: Partial<JoyPrefs>; reminders?: Partial<ReminderPrefs>; share?: Partial<SharePrefs>; tour?: TourPrefs }): Promise<void> {
     const cur = this.prefs();
     const next: ScopePrefs = { ...cur };
     if (patch.immersive !== undefined) next.immersive = patch.immersive;
     if (patch.joy) next.joy = { ...cur.joy, ...patch.joy };
     if (patch.reminders) next.reminders = { ...cur.reminders, ...patch.reminders };
     if (patch.share) next.share = { ...cur.share, ...patch.share };
+    if (patch.tour) next.tour = patch.tour;
     this.prefs.set(next);
     await this.saveDocs({ prefs: next });
+  }
+
+  /** Appends one product-tour event to this scope's local log (last 200 kept). Local only: never synced, never sent anywhere. */
+  async recordTourEvent(e: TourEvent, lang: 'ar' | 'en'): Promise<void> {
+    const next = [...this.tourEvents(), { ...e, at: Date.now(), lang } as TourEventRecord].slice(-200);
+    this.tourEvents.set(next);
+    await this.saveDocs({ tourEvents: next });
   }
 
   async updateProfile(patch: Partial<Profile>, toolsChanged = false): Promise<void> {

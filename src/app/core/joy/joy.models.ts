@@ -1,5 +1,7 @@
 /** Crochet Joy — preference and achievement types. Everything here is device-local and account-scoped (see `ScopeDocs.prefs`). */
 
+import type { TourPrefs } from '../tour/tour.types';
+
 export type CelebrationMode = 'every' | 'milestones' | 'off';
 export type MotionPref = 'system' | 'reduced';
 
@@ -65,6 +67,8 @@ export type AchievementId = (typeof ACHIEVEMENT_IDS)[number];
 
 /** Local display + Crochet Joy preferences stored in `ScopeDocs.prefs` (all optional: older installs have none). */
 export interface ScopePrefs {
+  /** Product-tour progress for this scope (guest or account). Device-local, never synced. */
+  tour?: TourPrefs;
   immersive?: boolean;
   joy?: Partial<JoyPrefs>;
   reminders?: Partial<ReminderPrefs>;
