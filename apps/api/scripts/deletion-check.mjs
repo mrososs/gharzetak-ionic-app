@@ -18,7 +18,8 @@ if (!url) throw new Error('--url is required');
 const host = new URL(url).hostname;
 const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(host);
 if (!isLocal && !allowRemote) throw new Error('refusing a non-local URL without --allow-remote');
-if (!isLocal && !/staging|test|dev/i.test(host)) throw new Error(`refusing ${host}: the host name does not look like a staging/test environment`);
+const looksStaging = /staging|test|dev/i.test(host);
+if (!isLocal && !looksStaging && !process.argv.includes('--allow-production')) throw new Error(`refusing ${host}: it does not look like staging. For the post-deploy smoke test of PRODUCTION pass --allow-production (the check creates and deletes only its own synthetic account).`);
 
 const email = `deletion-check-${Date.now()}@gharzetak.test`;
 const password = `chk-${crypto.randomUUID()}`; // synthetic, random, never printed

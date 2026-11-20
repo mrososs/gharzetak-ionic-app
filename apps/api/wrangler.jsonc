@@ -99,6 +99,41 @@
       },
       // Workers AI binding (inactive while AI_ENABLED is "false"). Only takes effect on an approved deploy.
       "ai": { "binding": "AI" }
+    },
+
+    // ---------------------------------------------------------------------------------------------
+    // PRODUCTION (public Google Play release). NOT CREATED YET: every REPLACE_* value below is a placeholder, and the Worker REFUSES to
+    // serve while any is present. Nothing here touches Cloudflare until a person runs the steps in docs/release/play-release-runbook.md.
+    //   * D1: a NEW, EMPTY database (`wrangler d1 create gharzetak-db-production`); migrations 0000-0005 are applied to it from scratch.
+    //   * R2: the same private bucket, NO key prefix (staging keeps `staging/`). Never public.
+    //   * Khayoota hosted AI: OFF for everyone (AI_ENABLED "false", no AI binding): public availability is unchanged by this release.
+    //   * Cron: hourly deletion reconciliation (R2 sweep retries, restore-proof ledger check, stale transient rows).
+    // ---------------------------------------------------------------------------------------------
+    "production": {
+      "name": "gharzetak-api",
+      "observability": { "enabled": true },
+      "triggers": { "crons": ["17 * * * *"] },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "gharzetak-db-production",
+          "database_id": "REPLACE_WITH_PRODUCTION_D1_ID",
+          "migrations_dir": "drizzle"
+        }
+      ],
+      "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "gharzetak-media" }],
+      "vars": {
+        "ENVIRONMENT": "production",
+        "AUTH_BASE_URL": "REPLACE_WITH_PRODUCTION_WORKER_URL",
+        "APP_ORIGINS": "https://localhost,capacitor://localhost,com.gharzetak.app://",
+        // No mail provider exists: sign-up verification stays off and password reset is hidden in the app (GZ_PASSWORD_RESET unset).
+        "REQUIRE_EMAIL_VERIFICATION": "false",
+        "AI_ENABLED": "false",
+        "AI_PROVIDER": "fake",
+        "AI_VISION_ENABLED": "false",
+        "AI_EXTRACT_ENABLED": "false",
+        "AI_ALLOWED_USER_IDS": ""
+      }
     }
   }
 }
