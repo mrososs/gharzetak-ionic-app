@@ -48,8 +48,32 @@ Branch `feat/gharzetak-product-tour` (local, not pushed). Written 2026-11-20. Do
 | API-level tests (`npm run api:test`, `e2e:sync`) | Not run: `apps/api` has no installed dependencies here and was not changed. |
 | Focus after a card-launched tour | The Start button no longer exists, so focus falls back to the document. It is never left inside the removed popover. |
 | TalkBack | Not verified. The app is made inert behind a blocked step as a fallback; whether TalkBack honours it is unknown until tested on the device. |
-| Physical device | See the device section of the final report. |
+| Physical device | See the next section. |
 
 ## Unrelated change on this branch
 
 Commit `19d6603` fixes a separate parser bug (`R1: 43 ch` was rejected because `ch` was not a stitch kind). It is independent of the tour and can be cherry-picked on its own.
+
+## Device pass (HONOR DNY-NX9, Android 16, WebView 157, 361×781 CSS px, DPR 3.5)
+
+Isolated debug build  (app id suffix from a Gradle init script, label from an untracked debug resource, nothing committed), installed next to the real app. The real app's  stayed 2026-11-19 01:19:03 throughout; nothing of it was uninstalled, cleared or changed. State was read read-only over WebView DevTools; every interaction with the app was a real touch or key event except where noted.
+
+| Check | Result |
+|---|---|
+| First run as a guest (Arabic, RTL) | **PASS.** Getting Started invitation on Home, nothing auto-started. |
+| Welcome tour, all 6 steps | **PASS.** Right targets in order; every control ≥ 44×44 CSS px; popover never closer than 16 px to an edge; Skip hidden on the last step; Done leaves 0 engine nodes, the app live, status , and a content-free event log. |
+| Persistence across force-stop and restart | **PASS.** Finished tour stays finished; the card is the checklist; nothing restarts. |
+| Pattern Library invitation and tour | **PASS.** Pill on the first visit, Start runs it, **a tap on the dimmed area is ignored**, **the hardware Back key ends it cleanly and stays on the page**. |
+| One automatic tour per launch | **PASS.** No second invitation in the same launch. |
+| Simple tracker: the one invited tap | **PASS.** One real finger tap: count 0 → 1 exactly once, step advanced exactly once, still 1 and on Undo 2 s later; the app is live only on that step. |
+| New Project tour | **PASS.** Two steps; the input method stayed closed (); the form was not filled. |
+| Khayoota tour via Settings replay | **PASS.** Runs highlight-only; no request left the app (the only origin seen was the app's own ). |
+| Background | **PASS.** 6 s away: the tour continues at the same step. 36 s away: it ends cleanly with reason , 0 leftovers, app live. |
+| An Ionic dialog appearing during a tour | **PASS.** The tour ends at once; the dialog is untouched. |
+| Safe areas and popover geometry, Arabic text rendering, real fonts | **PASS** (screenshots reviewed, then deleted). |
+| **Scrollbar in the popover** (reported by the user from the device) | **Found and fixed.** The engine's direction arrow sits outside the box and forced a 16 px overflow inside the scrolling popover. Arrow hidden, scrollbar chrome never drawn, regression test added; verified on the device afterwards (overflow 0, bar width 0). |
+| Swipe-back gesture from a nested page | **NOT VERIFIED.** Injected swipes are not treated as the system back gesture on this phone. Needs a person: start a replay on a nested page and swipe from the screen edge; expected: the tour ends and the page is popped once. The hardware Back key is verified. |
+| Rotation with instrumentation | **NOT VERIFIED.** Changing auto-rotate is a persistent phone setting; needs a person rotating the phone. Expected: the tour ends on  in landscape (height < 420 px) and the app stays usable. Covered in the browser. |
+| Largest font / display size | **NOT VERIFIED.** Same reason (system setting). Covered at 150 % and 200 % text in the browser. |
+| TalkBack | **NOT VERIFIED.** Needs a person with TalkBack on. |
+| Biometric relock, immersive off, offline, account sign-in | **NOT RUN.** No account or backend in the QA build; the others change phone or app settings. |
