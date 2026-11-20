@@ -47,7 +47,8 @@ export const LVL: Record<LevelId, Bi & { icon: IconName; tone: Tone; dAr: string
   advanced: { icon: 'crown', tone: 'lav', ar: 'متقدمة', en: 'Advanced', dAr: 'بقرأ أي باترن وبعدّل عليه', dEn: 'I read any pattern and adapt it' },
 };
 
-export const ACTN: Record<'sc' | 'hdc' | 'dc' | 'tr' | 'inc' | 'dec' | 'hdc-inc' | 'hdc-dec' | 'dc-inc' | 'dc-dec' | 'tr-inc' | 'tr-dec', Bi> = {
+export const ACTN: Record<'ch' | 'sc' | 'hdc' | 'dc' | 'tr' | 'inc' | 'dec' | 'hdc-inc' | 'hdc-dec' | 'dc-inc' | 'dc-dec' | 'tr-inc' | 'tr-dec', Bi> = {
+  ch: { ar: 'سلسلة', en: 'Chain' },
   sc: { ar: 'غرزة قصيرة', en: 'Single crochet' },
   hdc: { ar: 'نص عمود', en: 'Half double crochet' },
   dc: { ar: 'عمود', en: 'Double crochet' },

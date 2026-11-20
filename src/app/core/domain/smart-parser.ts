@@ -23,7 +23,7 @@
  *     round itself needs review the result needs review too (unless the line's own written total confirms it).
  *   - Reversed or runaway ranges (R7 - R5, R1 - R500) are never expanded.
  */
-import { STITCH_IO, StitchKind, parsePattern } from './pattern-parser';
+import { ChainRole, FOUNDATION_SKIP, MAX_CHAIN_COUNT, STITCH_IO, StitchKind, classifyChains, foundationRowCount, parsePattern } from './pattern-parser';
 
 /* ------------------------------------------------------------------ */
 /* public model                                                        */
@@ -54,6 +54,9 @@ export interface ConvRound {
   readonly consumed: number | null;
   /** Other pieces this round is worked into (assembly), e.g. ['legs']. */
   readonly joins: readonly string[];
+  /** Chains in this round. They are never counted in `calculated` / `consumed` (see ChainRole in pattern-parser.ts). */
+  readonly chains: number;
+  readonly chainRole: ChainRole;
   readonly messages: readonly ConvMessage[];
 }
 
@@ -163,12 +166,22 @@ const BASE_UK: BaseTable = [
  * are listed — a bare "غرزتين" (two stitches of an unnamed kind) stays unsupported rather than being guessed as sc.
  */
 const DUALS: ReadonlyArray<readonly [readonly string[], Tok]> = [
+  [['سلسلتين', 'غرزتين سلسله'], { t: 'ch' }],
   [['غرزتين قصيرتين', 'غرزتين عاديتين'], { t: 'base', k: 'sc', ambiguous: false }],
   [['غرزتين حشو'], { t: 'base', k: 'sc', ambiguous: true }],
   [['عمودين'], { t: 'base', k: 'dc', ambiguous: false }],
   [['زيادتين'], { t: 'shape', s: 'inc' }],
   [['نقصين', 'تنقيصين'], { t: 'shape', s: 'dec' }],
 ];
+
+/**
+ * Chain stitches. English: ch / chs / chain / chains / chain stitch(es). Arabic (matching form, ة→ه): سلسلة (a chain), سلاسل / سلسلات
+ * (chains), «غرزة / غرز / غرزات سلسلة» (chain stitch), and the transliteration «تشين» (like دبل / سنجل). They describe a chain in every
+ * terminology system, so they do not change between US and UK patterns.
+ */
+const CH_RE = new RegExp(`^(?:chain\\s+stitch(?:es)?|chains?|chs?|(?:غرزات|غرزه|غرز)\\s+سلسله|سلسلات|سلاسل|سلسله|تشين)${END}`);
+/** "turn" / «اقلبي الشغل»: a movement, not a stitch. Allowed only right after a chain or at the end of a round, and dropped from the strict text. */
+const TURN_RE = new RegExp(`^(?:turn(?:ing)?(?:\\s+(?:your\\s+)?(?:work|piece))?|اقلب[يه]?(?:\\s+(?:ال)?شغل)?)${END}`);
 
 const INC_WORDS = ['increase', 'inc', 'incs', 'زياده', 'زيادة', 'زوّد', 'زود', 'تزايد', 'تزويد'];
 const DEC_WORDS = ['decrease', 'dec', 'decs', 'نقص', 'انقاص', 'تنقيص', 'نقصان', 'تقليل', 'تناقص'];
@@ -303,6 +316,8 @@ type Tok =
   | { t: 'base'; k: BaseKind; ambiguous: boolean }
   | { t: 'shape'; s: 'inc' | 'dec' }
   | { t: 'spec'; k: StitchKind }
+  | { t: 'ch' }
+  | { t: 'turn' }
   | { t: 'lp' }
   | { t: 'rp' }
   | { t: 'sep' }
@@ -379,6 +394,8 @@ export function tokenize(body: string, terms: 'us' | 'uk'): Tok[] {
     for (const d of DUAL_RES) {
       if ((m = d.re.exec(s))) { out.push({ t: 'num', v: 2 }, d.tok); eat(m[0].length); continue outer; }
     }
+    if ((m = CH_RE.exec(s))) { out.push({ t: 'ch' }); eat(m[0].length); continue; }
+    if ((m = TURN_RE.exec(s))) { out.push({ t: 'turn' }); eat(m[0].length); continue; }
     if ((m = MR_RE.exec(s))) {
       // "في MR" / "into ring": the preposition was already read as its own token — never emit a second, dangling "in".
       if (out[out.length - 1]?.t !== 'in') out.push({ t: 'in' });
@@ -433,10 +450,13 @@ type Node = StitchNode | GroupNode;
 
 interface ParseCtx {
   readonly partKind: string | null;
-  readonly flags: { ambiguous: boolean; assumed: boolean };
+  readonly flags: { ambiguous: boolean; assumed: boolean; turn: boolean };
 }
 
 class ParseError extends Error {}
+
+/** Words that may follow a chain count without changing it: "ch 43 sts", «سلسلة من ٤٣ غرزة». */
+const CH_COUNT_NOUN = new Set(['st', 'sts', 'stitch', 'stitches', 'غرزه', 'غرز', 'غرزات']);
 
 const SHAPED: Readonly<Record<BaseKind, { inc: StitchKind; dec: StitchKind }>> = {
   sc: { inc: 'inc', dec: 'dec' },
@@ -451,6 +471,7 @@ function parseTokens(tokens: Tok[], ctx: ParseCtx): Node[] {
 
   const parseSeq = (closer: boolean): Node[] => {
     const items: Node[] = [];
+    let afterChain = false;
     for (;;) {
       const t = peek();
       if (!t) break;
@@ -463,7 +484,17 @@ function parseTokens(tokens: Tok[], ctx: ParseCtx): Node[] {
         if (closer) throw new ParseError('repeat inside group');
         break; // whole-body repetition: handled by the caller
       }
-      items.push(parseItem());
+      if (t.t === 'turn') {
+        // "ch 1, turn" / "..., ch 1, turn": the turn belongs to the chain before it, or closes the round. In the middle of a round it
+        // would mean a short row, which is not guessed.
+        if (!afterChain && !tokens.slice(i + 1).every((x) => x.t === 'sep')) throw new ParseError('turn position');
+        ctx.flags.turn = true;
+        i++;
+        continue;
+      }
+      const node = parseItem();
+      items.push(node);
+      afterChain = node.type === 'stitch' && node.k === 'ch';
     }
     return items;
   };
@@ -495,11 +526,36 @@ function parseTokens(tokens: Tok[], ctx: ParseCtx): Node[] {
     if (t.t === 'num') {
       count = t.v;
       i++;
-      if (count < 1 || count > 200) throw new ParseError('count');
+      if (count < 1 || count > (peek()?.t === 'ch' ? MAX_CHAIN_COUNT : 200)) throw new ParseError('count');
     }
     const a = peek();
     let kind: StitchKind;
     let base: BaseKind | null = null;
+    if (a?.t === 'ch') {
+      // A chain: "43 ch", "ch 43", "ch 43 sts", «٤٣ سلسلة», «سلسلة من ٤٣». The count is written on ONE side only. A chain has no
+      // target ("ch 3 in MR", "ch in each st" mean nothing countable here), so those stay unsupported instead of being guessed.
+      i++;
+      let n = count;
+      let counted = t.t === 'num';
+      if (!counted) {
+        let j = i;
+        const w = tokens[j];
+        if (w?.t === 'word' && w.text === 'من') j++;
+        const v = tokens[j];
+        if (v?.t === 'num') {
+          n = v.v;
+          i = j + 1;
+          counted = true;
+        }
+      }
+      const noun = tokens[i];
+      if (counted && noun?.t === 'word' && CH_COUNT_NOUN.has(noun.text)) i++;
+      if (n < 1 || n > MAX_CHAIN_COUNT) throw new ParseError('count');
+      const nx = peek();
+      if (nx && (nx.t === 'in' || nx.t === 'each' || nx.t === 'eachN' || nx.t === 'mr' || nx.t === 'same' || nx.t === 'loop')) throw new ParseError('chain target');
+      return { type: 'stitch', k: 'ch', n, mr: false, ref: null, each: false };
+    }
+    if (count > 200) throw new ParseError('count');
     if (a?.t === 'base') {
       i++;
       base = a.k;
@@ -676,6 +732,12 @@ interface RoundCtx {
   readonly prevProd: number | null;
   /** Status of that previous round (null = none). "In each stitch" only trusts a previous count that was itself validated. */
   readonly prevStatus: ConvStatus | null;
+  /** This is the first round of the piece (a round of only chains here is the foundation chain). */
+  readonly first: boolean;
+  /** Chains of the previous round when it was a foundation chain (the next row is worked into them), else null. */
+  readonly prevFoundation: number | null;
+  /** Chains in the previous round (not part of `prevProd`). */
+  readonly prevChains: number;
 }
 
 /**
@@ -692,18 +754,22 @@ function applyLeadingMr(tokens: Tok[], ctx: ParseCtx): Node[] {
 
 interface Converted {
   readonly round: ConvRound;
+  /** Stitches the NEXT round can take from this one; null when unknown (unsupported, or a round of only chains). */
   readonly prod: number | null;
+  /** Chains of this round when it is a foundation chain, else null. */
+  readonly foundation: number | null;
 }
 
 function convertOneRound(n: number, original: string, bodyNorm: string, declared: number | null, ctx: RoundCtx): Converted {
   const messages: ConvMessage[] = [];
   const mk = (status: ConvStatus, normalized: string, calculated: number | null, consumed: number | null, joins: string[]): Converted => ({
-    round: { n, original, normalized, status, expected: declared, calculated, consumed, joins, messages },
+    round: { n, original, normalized, status, expected: declared, calculated, consumed, joins, chains: 0, chainRole: 'none', messages },
     prod: calculated,
+    foundation: null,
   });
   const header = `R${n}:`;
   let body = canonRepeat(bodyNorm);
-  const flags = { ambiguous: false, assumed: false };
+  const flags = { ambiguous: false, assumed: false, turn: false };
 
   // "R4 >> R7 (24)": no instruction at all, only a total → work even. The stitch is NOT written, so this is an explicit, flagged assumption.
   if (!body) {
@@ -754,20 +820,87 @@ function convertOneRound(n: number, original: string, bodyNorm: string, declared
     status = 'needs-review';
   };
 
-  if (declared !== null && declared !== t.prod) {
-    review(msg('warn', 'total-mismatch', `المجموع المكتوب [${declared}] لا يساوي المحسوب ${t.prod}. لم نعدّل أي غرزة — راجعي السطر.`, `The written total [${declared}] does not match the calculated ${t.prod}. No stitches were changed — please check the line.`));
+  // Chains are never part of a stitch total. What they ARE is decided from where they sit (see ChainRole); a round of ONLY chains is
+  // checked against its written total by counting the chains.
+  const flat = flatten(nodes, ctx.prevProd);
+  const { chains, role } = classifyChains(flat, ctx.first);
+  const chainOnly = role === 'foundation' || role === 'standalone';
+  const counted = chainOnly ? chains : t.prod;
+  const firstStitch = flat.find((s) => s.k !== 'ch')?.k ?? null;
+
+  if (declared !== null && declared !== counted) {
+    const withChains = !chainOnly && chains > 0 && declared === t.prod + chains;
+    review(
+      msg(
+        'warn',
+        'total-mismatch',
+        `المجموع المكتوب [${declared}] لا يساوي المحسوب ${counted}.${withChains ? ` الرقم المكتوب يساوي الغرز + السلاسل (${chains}) — السلاسل لا تُحسب غرزًا هنا.` : ''} لم نعدّل أي غرزة — راجعي السطر.`,
+        `The written total [${declared}] does not match the calculated ${counted}.${withChains ? ` It equals the stitches plus the ${chains} chains — chains are not counted as stitches here.` : ''} No stitches were changed — please check the line.`,
+      ),
+    );
   } else if (declared === null) {
-    messages.push(msg('info', 'no-total', `لا يوجد مجموع مكتوب — المحسوب ${t.prod}.`, `No total was written — calculated ${t.prod}.`));
+    messages.push(
+      chainOnly
+        ? msg('info', 'no-total', `لا يوجد مجموع مكتوب — ${chains} سلسلة.`, `No total was written — ${chains} chains.`)
+        : msg('info', 'no-total', `لا يوجد مجموع مكتوب — المحسوب ${t.prod}.`, `No total was written — calculated ${t.prod}.`),
+    );
   }
   if (joins.length) {
     review(msg('warn', 'joins', `هذا الدور يعمل داخل قطع أخرى (${joins.join('، ')}). احتُفظ بالإشارة، ولا يمكن التحقق من تجميع القطع تلقائيًا.`, `This round is worked into other pieces (${joins.join(', ')}). The reference is kept; joining pieces cannot be fully validated automatically.`));
+  } else if (ctx.prevFoundation !== null && !hasMr && !chainOnly) {
+    // The row worked into a foundation chain: checked ONLY against the standard rule for its stitch, and the rule is always reported.
+    const expected = foundationRowCount(ctx.prevFoundation, firstStitch);
+    const skip = firstStitch ? FOUNDATION_SKIP[firstStitch] : undefined;
+    if (expected !== null && t.cons === expected) {
+      messages.push(
+        msg(
+          'info',
+          'foundation-rule',
+          `الصف بيشتغل على سلسلة البداية (${ctx.prevFoundation} سلسلة): ${t.cons} غرزة — أول ${skip} من السلسلة بتتخطّى (سلسلة الدوران).`,
+          `Worked into the ${ctx.prevFoundation}-chain foundation: ${t.cons} stitches — the first ${skip} chain(s) from the hook are skipped (the turning chain).`,
+        ),
+      );
+    } else {
+      review(
+        msg(
+          'warn',
+          'foundation-count',
+          expected === null
+            ? `سلسلة البداية فيها ${ctx.prevFoundation} سلسلة وهذا الصف يستهلك ${t.cons} غرزة — مفيش قاعدة معروفة لنوع الغرزة الأولى، فراجعي كام سلسلة بتتخطّى.`
+            : `سلسلة البداية فيها ${ctx.prevFoundation} سلسلة، والصف ده عادةً يستهلك ${expected} غرزة لكنه يستهلك ${t.cons} — راجعي كام سلسلة بتتخطّى.`,
+          expected === null
+            ? `The foundation chain has ${ctx.prevFoundation} chains and this row uses ${t.cons} stitches — there is no standard rule for its first stitch, so please check how many chains are skipped.`
+            : `The foundation chain has ${ctx.prevFoundation} chains; a row of this stitch normally uses ${expected} of them, but this row uses ${t.cons} — please check how many chains are skipped.`,
+        ),
+      );
+    }
+  } else if (chainOnly) {
+    // Chains take nothing from the previous round: there is nothing to compare.
   } else if (ctx.prevProd !== null && !hasMr && t.cons !== ctx.prevProd) {
-    review(msg('warn', 'chain', `يستهلك ${t.cons} غرزة لكن الدور السابق أنتج ${ctx.prevProd}.`, `It uses ${t.cons} stitches but the previous round produced ${ctx.prevProd}.`));
+    const hint = ctx.prevChains > 0 && t.cons === ctx.prevProd + ctx.prevChains;
+    review(
+      msg(
+        'warn',
+        'chain',
+        `يستهلك ${t.cons} غرزة لكن الدور السابق أنتج ${ctx.prevProd}.${hint ? ` الدور السابق فيه ${ctx.prevChains} سلسلة لا تُحسب غرزًا — لو بتشتغلي فيها راجعي الدور.` : ''}`,
+        `It uses ${t.cons} stitches but the previous round produced ${ctx.prevProd}.${hint ? ` The previous round also has ${ctx.prevChains} chains, which are not counted as stitches — if this row works into them, please check.` : ''}`,
+      ),
+    );
   }
+  if (role === 'foundation') {
+    messages.push(msg('info', 'foundation-chain', `سلسلة بداية (${chains}). السلاسل لا تُحسب غرزًا — هي القاعدة اللي الصف الجاي بيتشغل عليها.`, `Foundation chain of ${chains}. Chains are not counted as stitches — they are the base the next row is worked into.`));
+  } else if (role === 'turning') {
+    messages.push(msg('info', 'turning-chain', `سلسلة دوران (${chains}) في أول الدور — لا تُحسب غرزة.`, `Turning chain of ${chains} at the start of the row — not counted as a stitch.`));
+  } else if (role === 'standalone') {
+    review(msg('warn', 'chain-role', `دور فيه سلاسل بس (${chains}) وهو مش الأول — مش واضح لو ده سلسلة بداية جديدة أو حزام أو فجوة. السلاسل لا تُحسب غرزًا، راجعي الدور اللي بعده.`, `A row of only chains (${chains}) that is not the first row — it cannot be told whether this is a new foundation, a strap or a gap. Chains are not counted as stitches; please check the next row.`));
+  } else if (role === 'inline') {
+    review(msg('warn', 'chain-inline', `${chains} سلسلة جوه الدور مش محسوبة غرز — الباترنات بتختلف في لو الدور الجاي بيشتغل فيها. راجعي عدد الدور الجاي.`, `${chains} chains inside this row are not counted as stitches — patterns differ on whether the next row works into them. Please check the next row's count.`));
+  }
+  if (flags.turn) messages.push(msg('info', 'turn', '«اقلبي الشغل» حركة مش غرزة — محفوظة في النص الأصلي بس.', '"Turn" is a movement, not a stitch — it is kept in the original text only.'));
   if (flags.ambiguous) review(msg('warn', 'ambiguous', 'كلمة «حشو» قد تعني الحشو لا الغرزة القصيرة — اعتُبرت غرزة قصيرة، راجعيها.', 'The word "حشو" may mean stuffing rather than a stitch — read as single crochet, please confirm.'));
   // "In each stitch" takes its count from the previous round. That count is only trusted when the previous round was itself
   // validated — or when this line's own written total confirms the result.
-  if (nodes.some(hasEach) && ctx.prevStatus !== 'validated' && !(declared !== null && declared === t.prod)) {
+  if (nodes.some(hasEach) && ctx.prevStatus !== 'validated' && !(declared !== null && declared === counted)) {
     review(
       msg(
         'warn',
@@ -780,13 +913,18 @@ function convertOneRound(n: number, original: string, bodyNorm: string, declared
 
   // Defence in depth: the strict parser (what the tracker uses) must agree with the numbers we calculated.
   const strict = parsePattern(normalized).rounds[0];
-  if (!strict?.ok || strict.prod !== t.prod || strict.cons !== t.cons) {
+  if (!strict?.ok || strict.prod !== t.prod || strict.cons !== t.cons || strict.chains !== chains) {
     review(msg('warn', 'strict-mismatch', 'تعذّر تأكيد السطر بالمحلّل الصارم — راجعيه.', 'The strict parser could not confirm this line — please review it.'));
   }
   if (flags.assumed) {
     status = 'needs-review';
   }
-  return { round: { n, original, normalized, status, expected: declared, calculated: t.prod, consumed: t.cons, joins, messages }, prod: t.prod };
+  return {
+    round: { n, original, normalized, status, expected: declared, calculated: t.prod, consumed: t.cons, joins, chains, chainRole: role, messages },
+    // A round of only chains leaves no stitch count for the next round to be compared with (or to take "each stitch" from).
+    prod: chainOnly ? null : t.prod,
+    foundation: role === 'foundation' ? chains : null,
+  };
 }
 
 function withMsg(c: Converted, messages: ConvMessage[], m: ConvMessage): Converted {
@@ -897,6 +1035,9 @@ interface PartBuilder {
   notes: string[];
   prevProd: number | null;
   prevStatus: ConvStatus | null;
+  /** Chains of the previous round when it was a foundation chain. */
+  prevFoundation: number | null;
+  prevChains: number;
   lastN: number;
 }
 
@@ -936,7 +1077,7 @@ export function convertPatternText(input: string, opts: ConvertOptions = {}): Co
     while (kinds[j] === 'setup') j++;
     return { kind: kinds[j], isLast: j >= lines.length };
   };
-  const newPart = (name: string, quantity: number | null): PartBuilder => ({ name, quantity, rounds: [], notes: [], prevProd: null, prevStatus: null, lastN: 0 });
+  const newPart = (name: string, quantity: number | null): PartBuilder => ({ name, quantity, rounds: [], notes: [], prevProd: null, prevStatus: null, prevFoundation: null, prevChains: 0, lastN: 0 });
 
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
@@ -986,6 +1127,8 @@ export function convertPatternText(input: string, opts: ConvertOptions = {}): Co
         calculated: null,
         consumed: null,
         joins: [],
+        chains: 0,
+        chainRole: 'none',
         messages: [
           msg(
             'error',
@@ -998,6 +1141,8 @@ export function convertPatternText(input: string, opts: ConvertOptions = {}): Co
       current.rounds.push(r);
       current.prevProd = null;
       current.prevStatus = 'unsupported';
+      current.prevFoundation = null;
+      current.prevChains = 0;
       current.lastN = head.from;
       continue;
     }
@@ -1015,8 +1160,18 @@ export function convertPatternText(input: string, opts: ConvertOptions = {}): Co
     const sp = splitTotal(rest);
     const def = kindOf(current.name.replace(/\s*\(.*$/, '').split(/\s+/)[0] ?? '') ?? kindOf(current.name);
     for (let n = from; n <= to; n++) {
-      const c = convertOneRound(n, line, sp.body, sp.declared, { terms, partKind: def?.kind ?? null, prevProd: current.prevProd, prevStatus: current.prevStatus });
+      const c = convertOneRound(n, line, sp.body, sp.declared, {
+        terms,
+        partKind: def?.kind ?? null,
+        prevProd: current.prevProd,
+        prevStatus: current.prevStatus,
+        first: current.rounds.length === 0,
+        prevFoundation: current.prevFoundation,
+        prevChains: current.prevChains,
+      });
       current.rounds.push(c.round);
+      current.prevFoundation = c.foundation;
+      current.prevChains = c.round.chains;
       current.prevProd = c.prod;
       current.prevStatus = c.round.status;
       current.lastN = n;

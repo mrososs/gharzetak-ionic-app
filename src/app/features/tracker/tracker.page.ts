@@ -3,7 +3,7 @@ import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { ACTN } from '../../core/data/catalog';
 import { IconName } from '../../core/data/icons';
 import { PartInstance, instanceLabel, instanceProgress, nextUnfinished, projectCompletion, siblingsOf } from '../../core/domain/collections';
-import { StitchKind, parsePattern } from '../../core/domain/pattern-parser';
+import { StitchKind, countedTotal, parsePattern } from '../../core/domain/pattern-parser';
 import { TermSystem, convertToken, displayInTerms } from '../../core/domain/terminology';
 import { compareTime, formatMinutes } from '../../core/domain/time';
 import {
@@ -211,13 +211,13 @@ export class TrackerPage {
       st,
       n: r.n,
       code: displayInTerms(r.raw, src.terms, this.store.viewTerms()),
-      sumText: `${r.cons} → ${r.prod}` + (r.declared !== null ? `  [${r.declared}]` : ''),
-      okText: r.mismatch ? `[${r.declared}] ≠ ${r.prod}` : r.declared !== null ? `[${r.declared}] ✓` : q('بدون مجموع', 'No total'),
+      sumText: `${r.cons} → ${r.prod}` + (r.chains ? `  +${r.chains} ch` : '') + (r.declared !== null ? `  [${r.declared}]` : ''),
+      okText: r.mismatch ? `[${r.declared}] ≠ ${countedTotal(r)}` : r.declared !== null ? `[${r.declared}] ✓` : q('بدون مجموع', 'No total'),
       okCls: r.mismatch ? 'rose' : 'sage',
       joins: r.joins,
       rounds: parsed.rounds.map((x, i) => ({ n: x.n, i, cls: i === ctx.roundIndex ? 'cur' : i < ctx.roundIndex ? 'dn' : '' })),
       curLabel: act ? this.actLabel(act.k, src.terms) : '',
-      curIO: act ? (act.mr ? '0 → 1 · MR' : act.ref ? `0 → ${act.prod} · ${act.ref}` : `${act.cons} → ${act.prod}`) : '',
+      curIO: act ? (act.k === 'ch' ? q('سلسلة — لا تُحسب غرزة', 'chain — not counted as a stitch') : act.mr ? '0 → 1 · MR' : act.ref ? `0 → ${act.prod} · ${act.ref}` : `${act.cons} → ${act.prod}`) : '',
       group: grp.map((a, i) => ({ label: this.abbr(a.k, src.terms), cls: gStart + i < ptr ? 'dn' : gStart + i === ptr ? 'cur' : '' })),
       next,
       doneMsg: ctx.isLastRound ? q('اكتمل الباترن كله!', 'The whole pattern is complete!') : q(`اكتمل الدور ${r.n}!`, `Round ${r.n} complete!`),

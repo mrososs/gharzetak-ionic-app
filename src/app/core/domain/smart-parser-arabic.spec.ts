@@ -133,9 +133,8 @@ describe('P5a · 2. Arabic stitch names, plurals and duals', () => {
     expect(last(`${R1}الدور ٢: غرزتين في كل غرزة (١٢)`).status).toBe('unsupported');
   });
 
-  it('negative: slip stitches and chains in Arabic stay unsupported', () => {
+  it('negative: slip stitches in Arabic stay unsupported (chains are supported now: see chain-stitches.spec.ts)', () => {
     expect(last(`${R1}الدور ٢: ٦ غرز منزلقة (٦)`).status).toBe('unsupported');
-    expect(last(`${R1}الدور ٢: ٣ سلسلة، ٦ غرز قصيرة`).status).toBe('unsupported');
   });
 
   it('descriptive Arabic names mean the same stitch in UK patterns; transliterations still follow the system', () => {
@@ -341,9 +340,8 @@ describe('P5a · set-up lines, rows and unsupported syntax', () => {
   it.each([
     ['armhole chains and skips', 'Row 2: 6 sc, ch 6, skip 6 sts, 18 sc, ch 6, skip 6 sts, 6 sc (54)'],
     ['sk abbreviation', 'Row 2: 6 sc, ch 6, sk 6, 30 sc (54)'],
-    ['a row that starts with a turning chain', 'Row 2: ch 1, turn, 42 sc'],
     ['slip stitch to join', 'R2: inc x 6, sl st to join (12)'],
-    ['chains inside a round', 'R2: ch 3, 11 dc in MR'],
+    ['a chain space with a slip stitch', 'R2: ch 3, sl st in 2nd ch from hook'],
     ['repeat from *', 'R2: *sc, inc* repeat from * 3 times (9)'],
     ['back loop only', 'R2: 6 sc in BLO (6)'],
   ])('unsupported and kept verbatim: %s', (_label, line) => {

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { AssistantService } from '../../core/ai/assistant.service';
-import { parsePattern } from '../../core/domain/pattern-parser';
+import { countedTotal, parsePattern } from '../../core/domain/pattern-parser';
 import { displayInTerms } from '../../core/domain/terminology';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { AppStore } from '../../core/state/app.store';
@@ -85,6 +85,9 @@ import { TourTargetDirective } from '../../shared/ui/tour/tour-target.directive'
                 <div class="mt-2.5 flex flex-wrap gap-1.5">
                   @if (r.ok) {
                     <span class="gz-badge peach gz-ltr">{{ i18n.q('مستهلك: ', 'In: ') }}{{ r.cons }}</span><span class="gz-badge sage gz-ltr">{{ i18n.q('ناتج: ', 'Out: ') }}{{ r.prod }}</span>
+                    @if (r.chains) {
+                      <span class="gz-badge lav gz-ltr">{{ i18n.q('سلاسل: ', 'Chains: ') }}{{ r.chains }}</span>
+                    }
                   }
                   <span class="gz-badge {{ chainCls() }}">{{ chainText() }}</span>
                 </div>
@@ -111,7 +114,7 @@ import { TourTargetDirective } from '../../shared/ui/tour/tour-target.directive'
                     <div class="gz-hd gz-tile" style="width: 46px; height: 46px; font-size: 15px" [style.background]="i === pos() ? 'var(--gz-primary)' : 'var(--gz-lavender-200)'" [style.color]="i === pos() ? '#fff' : 'var(--gz-text)'">R{{ r.n }}</div>
                     <div class="flex min-w-0 flex-1 flex-col gap-1">
                       <div class="gz-code" style="font-size: 15px">{{ code(r.raw) }}</div>
-                      <div class="gz-xs gz-mute gz-ltr">{{ r.ok ? r.cons + ' → ' + r.prod + (r.declared !== null ? '   [' + r.declared + ']' : '') : '?' }}</div>
+                      <div class="gz-xs gz-mute gz-ltr">{{ r.ok ? r.cons + ' → ' + r.prod + (r.chains ? '  +' + r.chains + ' ch' : '') + (r.declared !== null ? '   [' + r.declared + ']' : '') : '?' }}</div>
                       @if (warn(i); as w) {
                         <div class="gz-err" style="margin: 0">{{ w }}</div>
                       }
@@ -190,7 +193,7 @@ export class PatternReaderPage {
     const r = this.cur();
     const q = (a: string, e: string) => this.i18n.q(a, e);
     if (!r || !r.ok) return q('غير مدعوم', 'Unsupported');
-    if (r.mismatch) return `[${r.declared}] ≠ ${r.prod}`;
+    if (r.mismatch) return `[${r.declared}] ≠ ${countedTotal(r)}`;
     if (r.chain === 'bad') return q('لا يطابق الدور السابق', 'Does not match previous round');
     return r.declared !== null ? `[${r.declared}] ✓` : '✓';
   });
@@ -208,7 +211,7 @@ export class PatternReaderPage {
     const x = this.parsed().rounds[i];
     const q = (a: string, e: string) => this.i18n.q(a, e);
     if (!x.ok) return q('صيغة غير مدعومة', 'Unsupported syntax');
-    if (x.mismatch) return q(`المجموع المكتوب [${x.declared}] لا يطابق الحساب ${x.prod}`, `Written total [${x.declared}] differs from computed ${x.prod}`);
+    if (x.mismatch) return q(`المجموع المكتوب [${x.declared}] لا يطابق الحساب ${countedTotal(x)}`, `Written total [${x.declared}] differs from computed ${countedTotal(x)}`);
     if (x.chain === 'bad') return q('الدور السابق أنتج رقم مختلف عن المستهلك هنا', 'The previous round produced a different number than this one consumes');
     return '';
   }
