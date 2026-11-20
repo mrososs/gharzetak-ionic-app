@@ -36,9 +36,29 @@ const R2_DELETE_BATCH = 1000;
 /** A runaway guard for the prefix listing (1000 keys per page). */
 const MAX_LIST_PAGES = 1000;
 
+/**
+ * DELETION LEDGER (survives a database restore). A D1 point-in-time restore rewinds the WHOLE database, including the deletion
+ * journal, so a restore to a moment before an account was deleted would bring the account and all its data back. R2 is outside the
+ * restore domain, so each confirmed deletion also leaves one tiny object here:
+ *     `_ledger/deleted/<userId>`   body {"v":1}  (the upload time is the deletion time)
+ * It holds ONLY the opaque random account id: no e-mail, no name, no content. Written only AFTER the user row is confirmed gone, so
+ * it can never point at a live account. After a restore, `reapplyDeletions` deletes every restored account whose id is in the ledger.
+ * The raw id (not a keyed hash) is stored on purpose: a hash of a random id is exactly as linkable as the id, and a key would make
+ * the protection depend on a secret that could be rotated. Entries are purged after LEDGER_RETENTION_MS.
+ */
+export const LEDGER_PREFIX = '_ledger/deleted/';
+/**
+ * Why 35 days: the longest database recovery window Cloudflare documents is 30 days (D1 Time Travel, Workers Paid; 7 on Free), so a
+ * restore can never reach back further than that; 5 days of margin cover clock skew and a delayed operator reaction. If the owner ever
+ * keeps longer-lived database exports, this value must be raised to cover them.
+ */
+export const LEDGER_RETENTION_MS = 35 * 24 * 60 * 60 * 1000;
+/** D1 allows 100 bound parameters per query. */
+const LEDGER_QUERY_CHUNK = 80;
+
 export type StorageCleanup = 'complete' | 'pending';
 
-type Bucket = Pick<R2Bucket, 'list' | 'delete'>;
+type Bucket = Pick<R2Bucket, 'list' | 'delete' | 'put'>;
 
 /** Ids come from Better Auth; assert they are key/SQL-safe before they become an R2 prefix. */
 const SAFE_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -111,6 +131,9 @@ export async function sweepUserObjects(bucket: Bucket, userId: string): Promise<
  */
 export async function finishDeletion(env: Pick<AppEnv, 'DB' | 'MEDIA'>, userId: string, now = Date.now()): Promise<StorageCleanup> {
   try {
+    // Never finish (and never write the ledger for) an account that still exists: that would sweep a live account's files.
+    if (await env.DB.prepare(`SELECT 1 AS x FROM user WHERE id = ?1`).bind(assertSafeUserId(userId)).first()) throw new Error('account still exists');
+    await recordDeletion(env.MEDIA, userId); // first: the durable, restore-proof record
     await purgeAiCounters(env.DB, userId);
     await sweepUserObjects(env.MEDIA, userId);
   } catch (e) {
@@ -127,7 +150,7 @@ export async function finishDeletion(env: Pick<AppEnv, 'DB' | 'MEDIA'>, userId: 
 async function markFailed(db: D1Database, userId: string, e: unknown, now: number): Promise<void> {
   // An error CLASS only: never a key, a message from user data or a stack.
   const msg = e instanceof Error ? e.message : '';
-  const cls = /unsafe/.test(msg) ? 'unsafe_id' : /converge/.test(msg) ? 'r2_no_converge' : 'storage_error';
+  const cls = /unsafe/.test(msg) ? 'unsafe_id' : /converge/.test(msg) ? 'r2_no_converge' : /still exists/.test(msg) ? 'account_alive' : 'storage_error';
   await db
     .prepare(`UPDATE account_deletion_job SET attempts = attempts + 1, last_error = ?2, updated_at = ?3 WHERE user_id = ?1`)
     .bind(userId, cls, now)
@@ -141,17 +164,84 @@ export async function storageStatus(db: D1Database, userId: string): Promise<Sto
   return row && row.state === 'pending' ? 'pending' : 'complete';
 }
 
+/** Writes the restore-proof ledger entry. Idempotent: an existing entry keeps its original (earlier) deletion time. */
+export async function recordDeletion(bucket: Pick<R2Bucket, 'put'>, userId: string): Promise<void> {
+  assertSafeUserId(userId);
+  await bucket.put(`${LEDGER_PREFIX}${userId}`, '{"v":1}', { onlyIf: { etagDoesNotMatch: '*' } });
+}
+
+async function listLedger(bucket: Pick<R2Bucket, 'list'>): Promise<{ id: string; uploaded: number }[]> {
+  const out: { id: string; uploaded: number }[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+    const l = await bucket.list({ prefix: LEDGER_PREFIX, limit: 1000, cursor });
+    for (const o of l.objects) {
+      const id = o.key.slice(LEDGER_PREFIX.length);
+      if (SAFE_ID.test(id)) out.push({ id, uploaded: o.uploaded.getTime() });
+    }
+    if (!l.truncated) return out;
+    cursor = l.cursor;
+  }
+  throw new Error('ledger listing did not converge');
+}
+
+/** Removes ledger entries older than the retention window (no restore can reach back that far). Returns how many were removed. */
+export async function purgeLedger(bucket: Pick<R2Bucket, 'list' | 'delete'>, now = Date.now()): Promise<number> {
+  const expired = (await listLedger(bucket)).filter((e) => e.uploaded < now - LEDGER_RETENTION_MS).map((e) => `${LEDGER_PREFIX}${e.id}`);
+  for (let i = 0; i < expired.length; i += R2_DELETE_BATCH) await bucket.delete(expired.slice(i, i + R2_DELETE_BATCH));
+  return expired.length;
+}
+
+/**
+ * The single "delete this account now" path used by restore reconciliation (and mirrored statement-for-statement by the operator
+ * script, scripts/lib/admin-delete-sql.mjs): journal first, then the e-mail-keyed tokens, then the user row (the FK cascade removes
+ * every owned row), then the same finish step as a user-initiated deletion (ledger, counters, R2 sweep).
+ */
+export async function deleteAccountNow(env: Pick<AppEnv, 'DB' | 'MEDIA'>, userId: string, email: string, now = Date.now()): Promise<StorageCleanup> {
+  await beginDeletion(env.DB, userId, now);
+  await purgeVerification(env.DB, userId, email);
+  await env.DB.prepare(`DELETE FROM user WHERE id = ?1`).bind(userId).run();
+  return finishDeletion(env, userId, now);
+}
+
+/**
+ * After a database restore: every account whose id is in the ledger was deleted on purpose, so any that reappeared is deleted again
+ * (with its files). Cost is proportional to the ledger size (queries are chunked `id IN (...)`), never to the user count.
+ * Safe to run at any time and any number of times: with no resurrected account it does nothing.
+ */
+export async function reapplyDeletions(env: Pick<AppEnv, 'DB' | 'MEDIA'>, now = Date.now()): Promise<{ ledgerEntries: number; resurrected: number }> {
+  const ids = (await listLedger(env.MEDIA)).map((e) => e.id);
+  let resurrected = 0;
+  for (let i = 0; i < ids.length; i += LEDGER_QUERY_CHUNK) {
+    const chunk = ids.slice(i, i + LEDGER_QUERY_CHUNK);
+    const rows = await env.DB.prepare(`SELECT id, email FROM user WHERE id IN (${chunk.map((_, k) => `?${k + 1}`).join(',')})`)
+      .bind(...chunk)
+      .all<{ id: string; email: string }>();
+    for (const r of rows.results) {
+      await deleteAccountNow(env, r.id, r.email, now);
+      resurrected++;
+    }
+  }
+  return { ledgerEntries: ids.length, resurrected };
+}
+
 export interface ReconcileReport {
   readonly retried: number;
   readonly completed: number;
   readonly stillPending: number;
   readonly abandoned: number;
   readonly transientPurged: number;
+  /** Accounts that a database restore brought back and that were deleted again. */
+  readonly resurrected: number;
+  readonly ledgerPurged: number;
 }
 
 /** Retries pending jobs, verifies swept jobs once more, drops abandoned attempts, and purges stale transient security rows. */
 export async function reconcile(env: Pick<AppEnv, 'DB' | 'MEDIA'>, now = Date.now()): Promise<ReconcileReport> {
   const db = env.DB;
+  // 1. A restore may have resurrected deleted accounts (and wiped the journal): the R2 ledger is the source of truth for that.
+  // A ledger/R2 failure must not stop the journal retries below (they will run again next hour).
+  const restored = await reapplyDeletions(env, now).catch(() => ({ ledgerEntries: 0, resurrected: 0 }));
   const jobs = await db
     .prepare(`SELECT user_id, state, updated_at FROM account_deletion_job ORDER BY requested_at LIMIT 200`)
     .all<{ user_id: string; state: string; updated_at: number }>();
@@ -162,10 +252,21 @@ export async function reconcile(env: Pick<AppEnv, 'DB' | 'MEDIA'>, now = Date.no
   for (const job of jobs.results) {
     const alive = await db.prepare(`SELECT 1 AS x FROM user WHERE id = ?1`).bind(job.user_id).first();
     if (alive) {
-      // The user row still exists: the deletion never reached it. Never sweep a live account. Drop stale attempts.
+      // The user row still exists: the deletion never reached it. Never sweep a live account while it is usable.
       if (now - job.updated_at >= ABANDONED_ATTEMPT_MS) {
-        await db.prepare(`DELETE FROM account_deletion_job WHERE user_id = ?1`).bind(job.user_id).run();
-        abandoned++;
+        // Better Auth deletes sessions and sign-in methods BEFORE the user row and D1 is not transactional, so a crash in between leaves
+        // a user row with NO sign-in method at all: nobody can ever use or sign in to it, and the owner already asked for deletion
+        // (password / fresh session verified at request time). Finish that deletion. Any account that still has a sign-in method is an
+        // intact account whose attempt simply never got that far: drop the work item.
+        const usable = await db.prepare(`SELECT 1 AS x FROM account WHERE user_id = ?1 LIMIT 1`).bind(job.user_id).first();
+        if (!usable) {
+          const u = await db.prepare(`SELECT email FROM user WHERE id = ?1`).bind(job.user_id).first<{ email: string }>();
+          await deleteAccountNow(env, job.user_id, u?.email ?? '', now);
+          retried++;
+        } else {
+          await db.prepare(`DELETE FROM account_deletion_job WHERE user_id = ?1`).bind(job.user_id).run();
+          abandoned++;
+        }
       }
       continue;
     }
@@ -179,7 +280,8 @@ export async function reconcile(env: Pick<AppEnv, 'DB' | 'MEDIA'>, now = Date.no
       }
     } else stillPending++;
   }
-  return { retried, completed, stillPending, abandoned, transientPurged: await purgeTransient(db, now) };
+  const ledgerPurged = await purgeLedger(env.MEDIA, now).catch(() => 0);
+  return { retried, completed, stillPending, abandoned, transientPurged: await purgeTransient(db, now), resurrected: restored.resurrected, ledgerPurged };
 }
 
 /** Expired verification tokens (they carry e-mail addresses) and IP-keyed rate-limit / burst counters have no reason to stay. */
