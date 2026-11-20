@@ -31,6 +31,8 @@ const cases = opt('--cases', 'giraffe,chicken,photo').split(',');
 const maxReq = Number(opt('--max-requests', 8));
 const maxNeurons = Number(opt('--max-neurons', 3500));
 const label = opt('--label', 'run');
+/** Experiment only: text appended to the extraction system prompt (production prompt is untouched). */
+const extraSystem = opt('--extra-system', '');
 
 const imgFile = join(RES, 'local-images.json');
 if (!existsSync(imgFile)) throw new Error('results/local-images.json missing (local, git-ignored): { giraffe, chicken:[…], photo }');
@@ -57,7 +59,10 @@ function plan(c) {
     return { kind: 'chat', messages: prod.buildChatMessages(req), schema: prod.REPLY_JSON_SCHEMA, name: 'khayoota_reply', maxOut: 700, req };
   }
   const req = prod.extractRequest.parse({ v: 1, lang: 'ar', images: images[c] });
-  return { kind: 'extract', messages: prod.buildExtractMessages(req), schema: prod.TRANSCRIPT_JSON_SCHEMA, name: 'pattern_transcript', maxOut: 4000, req };
+  const messages = prod.buildExtractMessages(req);
+  if (extraSystem) messages[0] = { ...messages[0], content: `${messages[0].content}
+${extraSystem}` };
+  return { kind: 'extract', messages, schema: prod.TRANSCRIPT_JSON_SCHEMA, name: 'pattern_transcript', maxOut: 4000, req };
 }
 
 const jobs = cases.flatMap((c) => models.map((m) => ({ c, m })));

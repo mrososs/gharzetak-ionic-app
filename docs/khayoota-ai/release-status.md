@@ -58,7 +58,8 @@ provider only (no AI binding in `wrangler.jsonc` outside staging).
 
 ## 5. Model routing
 
-Current routing: **all capabilities use Gemma 4**. A hybrid evaluation (Qwen 3.8 for photo troubleshooting / extraction, Gemma
-for text chat) is a separate, bounded measurement: see `model-routing-evaluation.md` (created when the measurement is run). The
-routing is already per-capability in config (`AI_MODEL_CHAT`, `AI_MODEL_VISION`, `AI_MODEL_EXTRACT`, allowlisted to Gemma 4
-and Qwen 3.8); nothing changes until measured results justify it.
+**All capabilities use Gemma 4.** A bounded real comparison against Qwen 3.8 (giraffe sheet, 4-page chicken pattern, chicken photo;
+one run per case) found Qwen better only at keeping Arabic repeat-group parentheses, and worse or equal elsewhere at 6–14× the
+Neurons and about 2× the latency, so **no routing change was made** (details: [`model-routing-evaluation.md`](model-routing-evaluation.md)).
+Routing is per capability in config (`AI_MODEL_CHAT`, `AI_MODEL_VISION`, `AI_MODEL_EXTRACT`, allowlisted to Gemma 4 and Qwen 3.8) if
+future, larger evidence justifies it; a second model is never called automatically.
