@@ -65,7 +65,8 @@ export class SyncService {
   readonly lastError = signal<string | null>(null);
   /** Set when a local change lost a conflict (or was rejected) and was kept as a backup; the app shows it once and clears it. */
   readonly conflictNotice = signal<ConflictNotice | null>(null);
-  readonly active = computed(() => this.api.configured && this.auth.signedIn());
+  /** Sync stands down while an account deletion is in flight: nothing may be pushed to (or re-created on) an account being deleted. */
+  readonly active = computed(() => this.api.configured && this.auth.signedIn() && !this.auth.deleting());
 
   private running: Promise<void> | null = null;
   private again = false;

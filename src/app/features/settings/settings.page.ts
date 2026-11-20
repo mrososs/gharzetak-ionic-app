@@ -13,6 +13,7 @@ import { TimerService } from '../../core/services/timer.service';
 import { AppStore } from '../../core/state/app.store';
 import { SyncService } from '../../core/sync/sync.service';
 import { ToolsSheetBody } from '../../shared/ui/dialogs/common-sheets';
+import { PrivacyAccountSectionComponent } from './privacy-account-section.component';
 import { RemindersSettingsComponent } from './reminders-settings.component';
 import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
@@ -24,7 +25,7 @@ import { TourHelpComponent } from '../../shared/ui/tour/tour-help.component';
 /** GZ-S25 settings · GZ-T07 tools sheet · GZ-T09 erase-data sheet. */
 @Component({
   selector: 'gz-settings',
-  imports: [IonHeader, IonContent, IconComponent, SheetComponent, ToolsSheetBody, AvatarPickerComponent, CrochetAvatarComponent, RemindersSettingsComponent, TourHelpComponent],
+  imports: [IonHeader, IonContent, IconComponent, SheetComponent, ToolsSheetBody, AvatarPickerComponent, CrochetAvatarComponent, RemindersSettingsComponent, TourHelpComponent, PrivacyAccountSectionComponent],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top">
@@ -131,6 +132,8 @@ import { TourHelpComponent } from '../../shared/ui/tour/tour-help.component';
         <gz-tour-help />
         <button type="button" class="gz-btn3 rose w mt-2" (click)="sheet.set('erase')"><svg gzIcon="trash" size="s" />{{ t().resetDemo }}</button>
         <button type="button" class="gz-btn2 mt-2" (click)="logout()">{{ t().logout }}</button>
+
+        <gz-privacy-account />
 
         <div class="gz-sec"><h2 class="gz-h3 gz-hd">{{ t().aboutProto }}</h2></div>
         <div class="gz-card soft flex flex-col gap-2">

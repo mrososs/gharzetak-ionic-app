@@ -77,3 +77,30 @@ Isolated debug build `com.gharzetak.app.tourqa` (app id suffix from a Gradle ini
 | Largest font / display size | **NOT VERIFIED.** Same reason (system setting). Covered at 150 % and 200 % text in the browser. |
 | TalkBack | **NOT VERIFIED.** Needs a person with TalkBack on. |
 | Biometric relock, immersive off, offline, account sign-in | **NOT RUN.** No account or backend in the QA build; the others change phone or app settings. |
+
+## Integration with Account Deletion (2026-11-20)
+
+The Product Tour (merged earlier as `3c1de6b` on `development`, `a5ce553` on `test`) was integrated with the Account Deletion work (`release/play-1` @ `0d44bb9`, staging-verified 16/16 and 29/29) into one build. Nothing else was merged; the old Supabase `production` branch was not touched.
+
+| Item | Result |
+|---|---|
+| Conflicts | 6, all additive, resolved by union: `.env.example`, `scripts/set-env.mjs`, `src/environments/environment.ts`, `settings.page.ts` (both "Tours & help" and the privacy/account section), `assistant.page.spec.ts` (auth fake with `ready`, `locked`, `deleting`), `android/app/build.gradle`. |
+| Android | Debug build, application id `com.gharzetak.app`, established debug certificate. The Play branch's release-signing block only activates when a git-ignored `keystore.properties` exists, so test builds are unaffected. Version `1.3.0-test` / code 4 (2 = client's `c3ca6a3`, 3 = tour UAT, 4 = tour + deletion). The Play candidate's own `1.1.0` / 3 was not taken: a Play upload is a separate, Play-signed artifact. |
+| Unit and integration | 1036 / 1036, with and without an API URL. |
+| Browser (Playwright, real Chrome) | 74 passed, twice in a row. Seven saved-state assertions now retry until the asynchronous write lands (found as intermittent failures under load; nothing was weakened). |
+| Backend (vitest) | 176 / 176, including the deletion crash-injection tests. The API typecheck needs a `wrangler types` output that is not available here and was not run. |
+| Staging deletion check | `deletion-check.mjs` against the staging Worker: 16 / 16, storage cleanup `complete`. D1 and R2 then confirmed independently and read-only: no `user`, `session`, `account`, `projects`, `profiles` or `media_objects` rows remain, the deletion job is `swept`, and the uploaded R2 object returns "key does not exist". |
+
+### Device QA of the combined build (HONOR, isolated twin `com.gharzetak.app.tourqa`, disposable staging account)
+| Check | Result |
+|---|---|
+| In-place update (code 3 → 4) | Pass. Guest projects, ids and pattern position identical; IndexedDB version unchanged. |
+| Sign-up with a disposable staging account | Pass. The guest-import prompt shows the right count; no tour overlay interfered with sign-up, import or setup. |
+| Guest data isolation | Pass. Choosing "Not now" left both projects in the guest scope and the account scope empty; the tour state was copied into the account, not shared. |
+| Tour vs deletion | Pass. Navigating to the deletion screen in the middle of a running tour ends the tour cleanly (no leftovers, app not inert) and the form is fully usable. |
+| Deletion with a wrong password | Pass. Button disabled until the confirmation is ticked; "That password is not correct. Nothing was deleted." |
+| Deletion with the right password | Pass. Success shown only after the server confirmed. Account scope erased on the device, including its tour state and event log; guest scope intact; signed out to onboarding; guest mode still opens with its two projects. D1 afterwards: all rows gone, job `swept`. |
+| Arabic / English | Pass. RTL deletion screen and guest message in Arabic; English tours earlier. |
+| Offline counting | Pass (earlier on the previous twin, same code paths). |
+| Google Sign-In and Google re-authentication for deletion | **NOT VERIFIED.** The isolated twin has a different package id, so the Google OAuth Android client (registered for `com.gharzetak.app` and the debug certificate) cannot sign it in, and choosing the Google account must be done by a person. Needs a human on the real package. |
+| Swipe-back, rotation, largest font, TalkBack | Still not verified. |

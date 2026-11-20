@@ -22,7 +22,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Supabase auth deep links: com.gharzetak.app://auth/... -->
+            <!-- Auth deep links (password-reset / verification landing): com.gharzetak.app://auth/... -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

@@ -43,8 +43,7 @@ for (const lang of LANGS) {
       await nextButton(page).click(); // "Done"
       await expectClean(page);
       await expect(card(page)).toHaveAttribute('data-gs', 'list');
-      const stored = await storedTour(page);
-      expect(stored?.prefs?.tour?.tours?.welcome?.status).toBe('completed');
+      await expect.poll(async () => (await storedTour(page))?.prefs?.tour?.tours?.welcome?.status).toBe('completed');
     });
 
     test('controls are at least 44×44 CSS px and the popover keeps a margin from the screen edge', async ({ page }) => {
@@ -93,7 +92,7 @@ for (const lang of LANGS) {
       await skipButton(page).click();
       await expectClean(page);
       await expect(card(page)).toHaveAttribute('data-gs', 'list');
-      expect((await storedTour(page))?.prefs?.tour?.tours?.welcome?.status).toBe('skipped');
+      await expect.poll(async () => (await storedTour(page))?.prefs?.tour?.tours?.welcome?.status).toBe('skipped');
       await page.reload();
       await expect(card(page)).toHaveAttribute('data-gs', 'list');
       await page.waitForTimeout(1200);

@@ -32,7 +32,7 @@ for (const lang of LANGS) {
         await nextButton(page).click();
       }
       await expectClean(page);
-      expect(await tourStatus(page, 'patterns')).toBe('completed');
+      await expect.poll(() => tourStatus(page, 'patterns')).toBe('completed');
       await page.reload();
       await page.waitForTimeout(1000);
       await expect(pill(page)).toHaveCount(0); // never again by itself
@@ -42,7 +42,7 @@ for (const lang of LANGS) {
       await page.goto('/tabs/home/patterns');
       await pill(page).locator('.x').click();
       await expect(pill(page)).toHaveCount(0);
-      expect(await tourStatus(page, 'patterns')).toBe('declined');
+      await expect.poll(() => tourStatus(page, 'patterns')).toBe('declined');
       await page.reload();
       await page.waitForTimeout(800);
       await expect(pill(page)).toHaveCount(0);
@@ -61,7 +61,7 @@ for (const lang of LANGS) {
       await expectClean(page);
       expect(page.url()).toBe(url);
       expect((await storedAll(page, 'projects')).length).toBe(projectsBefore);
-      expect(await tourStatus(page, 'pattern-reader')).toBe('completed');
+      await expect.poll(() => tourStatus(page, 'pattern-reader')).toBe('completed');
     });
 
     test('New Project: two steps, the form is not filled, no keyboard, no unsaved-changes prompt on leaving', async ({ page }) => {
@@ -148,13 +148,13 @@ test.describe('Settings → Tours & help', () => {
     }
     await nextButton(page).click();
     await expectClean(page);
-    expect(await tourStatus(page, 'welcome')).toBe('completed');
+    await expect.poll(() => tourStatus(page, 'welcome')).toBe('completed');
     await page.goto('/tabs/home/settings');
     await page.locator('[data-help="welcome"]').click();
     await waitForStep(page, 'welcome.patterns');
     await page.keyboard.press('Escape');
     await expectClean(page);
-    expect(await tourStatus(page, 'welcome')).toBe('completed'); // a replay can only improve a record
+    await expect.poll(() => tourStatus(page, 'welcome')).toBe('completed'); // a replay can only improve a record
   });
 
   test('the checklist can be hidden and restored from Settings; ticking only comes from real actions', async ({ page }) => {
@@ -197,7 +197,7 @@ test.describe('Settings → Tours & help', () => {
     await expect.poll(milestone('tutorialOpened')).toBe(true);
     await page.goto('/tabs/home');
     await expect(card(page)).toHaveAttribute('data-gs', 'list');
-    expect(await done()).toBe(4); // four ticked by real actions, one left
+    await expect(page.locator('[data-task].done')).toHaveCount(4); // four ticked by real actions, one left (retries until the card has rendered)
     await expect(page.locator('[data-task="khayoota"]')).toBeEnabled();
 
     await page.goto('/tabs/assistant'); // 5 · ask Khayoota (a guest gets the local offline helper: nothing is sent anywhere)

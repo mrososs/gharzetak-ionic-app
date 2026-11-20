@@ -33,6 +33,24 @@ export interface AuthResult {
   readonly isNew?: boolean;
 }
 
+/**
+ * Why a deletion request did not complete. In every case the account was NOT deleted, except 'offline' and 'sessionEnded', which can
+ * mean the answer was lost on the way (the UI says so honestly instead of claiming either outcome).
+ */
+export type DeleteFailure =
+  | 'offline'
+  | 'wrongPassword'
+  | 'reauthRequired'
+  | 'googleCancelled'
+  | 'googleFailed'
+  | 'otherAccount'
+  | 'tooMany'
+  | 'sessionEnded'
+  | 'unavailable'
+  | 'failed';
+
+export type DeleteRequestResult = { readonly ok: true; readonly storageCleanup: 'complete' | 'pending' } | { readonly ok: false; readonly failure: DeleteFailure };
+
 export type UnlockFailure = BiometricFailureKind | 'expired';
 
 export interface UnlockResult {
@@ -87,6 +105,8 @@ export class AuthService {
   readonly user = computed<AuthUser | null>(() => this.session()?.user ?? null);
   readonly guest = signal<boolean>(readGuest());
   readonly ready = signal(false);
+  /** True while an account deletion is in flight: sync stands down so nothing is pushed to an account being deleted. */
+  readonly deleting = signal(false);
   /** True after arriving from a valid password-reset email link (a one-time reset token is held in memory). */
   readonly recovery = signal(false);
   readonly signedIn = computed(() => !!this.user());
@@ -370,6 +390,106 @@ export class AuthService {
     await this.expire();
   }
 
+  // ---- account deletion -------------------------------------------------------------------------------------------------
+  // The REMOTE half only: authenticate, ask the Worker to delete, and report exactly what the server confirmed. Wiping local data is
+  // AccountDeletionService's job and happens only after `ok: true` (never while the remote outcome is unresolved).
+
+  /** Which sign-in methods the account has. null = could not be determined (offline / error): the UI then asks for the password. */
+  async accountKinds(): Promise<{ password: boolean; google: boolean } | null> {
+    if (!this.backend || !this.session()) return null;
+    try {
+      const res = await this.api.raw<{ providerId?: string }[] | null>('GET', '/api/auth/list-accounts');
+      const list = Array.isArray(res.body) ? res.body : [];
+      return { password: list.some((a) => a.providerId === 'credential'), google: list.some((a) => a.providerId === 'google') };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Proves the owner's authority and deletes the account on the server. Password accounts send the password (verified server-side);
+   * Google-only accounts rely on a FRESH session, and when the session is older the native Google picker is shown first.
+   * `ok: true` ONLY when the server answered success; every other outcome leaves the account and the local data untouched.
+   */
+  async requestAccountDeletion(password: string | null): Promise<DeleteRequestResult> {
+    if (!this.backend || !this.session()) return { ok: false, failure: 'unavailable' };
+    const send = async (): Promise<DeleteRequestResult> => {
+      const res = await this.api.raw<{ success?: boolean; storageCleanup?: string } | null>('POST', '/api/auth/delete-user', password ? { password } : {});
+      if (res.body?.success !== true) return { ok: false, failure: 'failed' };
+      // Only an explicit "complete" is reported as complete: anything else is "still being removed".
+      return { ok: true, storageCleanup: res.body.storageCleanup === 'complete' ? 'complete' : 'pending' };
+    };
+    try {
+      return await send();
+    } catch (e) {
+      const failure = mapDeleteError(e);
+      if (failure !== 'reauthRequired' || password || !this.googleAvailable) return { ok: false, failure };
+      const re = await this.reauthenticateWithGoogle();
+      if (!re.ok) return { ok: false, failure: re.failure };
+      try {
+        return await send();
+      } catch (e2) {
+        return { ok: false, failure: mapDeleteError(e2) };
+      }
+    }
+  }
+
+  /**
+   * Fresh proof of ownership for an account without a password. The new session MUST belong to the same account: if the person picks
+   * a different Google account, that session is discarded (and removed again if this very attempt created it) and nothing is adopted.
+   */
+  async reauthenticateWithGoogle(): Promise<{ ok: true } | { ok: false; failure: 'googleCancelled' | 'googleFailed' | 'otherAccount' | 'offline' }> {
+    const current = this.session();
+    if (!current) return { ok: false, failure: 'googleFailed' };
+    let cred: GoogleCredential;
+    try {
+      cred = await this.google.getCredential();
+    } catch (e) {
+      return { ok: false, failure: e instanceof GoogleSignInError && e.kind === 'cancelled' ? 'googleCancelled' : 'googleFailed' };
+    }
+    let token: string | null;
+    let u: BetterAuthUser | undefined;
+    try {
+      const res = await this.api.raw<{ token?: string; user?: BetterAuthUser }>(
+        'POST',
+        '/api/auth/sign-in/social',
+        { provider: 'google', idToken: { token: cred.idToken, nonce: cred.nonce } },
+        false,
+      );
+      token = res.headers.get('set-auth-token') ?? res.body?.token ?? null;
+      u = res.body?.user;
+    } catch (e) {
+      return { ok: false, failure: mapGoogleError(e) === 'errNetwork' ? 'offline' : 'googleFailed' };
+    }
+    if (!token || !u) return { ok: false, failure: 'googleFailed' };
+    if (u.id !== current.user.id) {
+      await this.discardForeignSession(token);
+      return { ok: false, failure: 'otherAccount' };
+    }
+    return (await this.adopt(token, u)).ok ? { ok: true } : { ok: false, failure: 'googleFailed' };
+  }
+
+  /** A session for ANOTHER account appeared by accident: end it, and delete the account only if this attempt just created it (empty). */
+  private async discardForeignSession(token: string): Promise<void> {
+    try {
+      const r = await this.api.raw<{ session?: { createdAt?: string }; user?: { createdAt?: string } } | null>('GET', '/api/auth/get-session', undefined, true, token);
+      const s = Date.parse(r.body?.session?.createdAt ?? '');
+      const created = Date.parse(r.body?.user?.createdAt ?? '');
+      const brandNew = Number.isFinite(s) && Number.isFinite(created) && s - created < 30_000;
+      if (brandNew) await this.api.raw('POST', '/api/auth/delete-user', {}, true, token); // fresh session: allowed without a password
+      else await this.api.raw('POST', '/api/auth/sign-out', {}, true, token);
+    } catch {
+      /* best effort: the stray session is never adopted or stored */
+    }
+  }
+
+  /** Called by AccountDeletionService once the server confirmed and the local data of the account is gone. */
+  async finishAccountDeletion(): Promise<void> {
+    this.setGuest(false);
+    await this.expire();
+    this.deleting.set(false);
+  }
+
   async signOut(): Promise<void> {
     this.setGuest(false);
     if (this.backend && this.session()) {
@@ -454,6 +574,18 @@ function mapGoogleError(e: unknown): AuthErrorKey {
   if (/OAUTH_LINK_ERROR|not linked/i.test(`${e.code} ${e.message}`)) return 'errGoogleNotLinked';
   if (e.status === 403 || /EMAIL_NOT_VERIFIED/i.test(e.code)) return 'errNotConfirmed';
   return 'errGoogleFailed';
+}
+
+/** Order matters: 429 and 503 are also "network-ish" statuses but mean something specific here. */
+function mapDeleteError(e: unknown): DeleteFailure {
+  if (!(e instanceof ApiError)) return 'failed';
+  if (e.status === 429) return 'tooMany';
+  if (e.status === 503) return 'unavailable';
+  if (e.status === 401) return 'sessionEnded';
+  if (/INVALID_PASSWORD/i.test(e.code)) return 'wrongPassword';
+  if (/SESSION_EXPIRED/i.test(e.code)) return 'reauthRequired';
+  if (e.isNetwork) return 'offline';
+  return 'failed';
 }
 
 function mapError(e: unknown): AuthErrorKey {
