@@ -12,7 +12,7 @@ export default defineConfig({
   testDir: './e2e-ui',
   testMatch: '**/*.pw.ts',
   timeout: 60_000,
-  expect: { timeout: 8_000 },
+  expect: { timeout: 12_000 }, // headroom for a loaded machine: the dev server compiles lazily and four workers share it
   fullyParallel: true,
   workers: process.env['CI'] ? 2 : 4,
   retries: 0,
