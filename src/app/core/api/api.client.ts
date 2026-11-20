@@ -48,8 +48,8 @@ export class ApiClient {
     return this.baseUrl + path;
   }
 
-  private headers(extra: Record<string, string> = {}, auth = true): HttpHeaders {
-    const token = this.session.token();
+  private headers(extra: Record<string, string> = {}, auth = true, tokenOverride?: string): HttpHeaders {
+    const token = tokenOverride ?? this.session.token();
     return new HttpHeaders({ ...(auth && token ? { Authorization: `Bearer ${token}` } : {}), ...extra });
   }
 
@@ -88,9 +88,13 @@ export class ApiClient {
     return this.exec(firstValueFrom(this.http.get(this.url(path), { headers: this.headers(), params: toParams(params), responseType: 'blob' })));
   }
 
-  /** Full response access (needed for the `set-auth-token` header on sign-in / sign-up). */
-  raw<T>(method: 'GET' | 'POST', path: string, body?: unknown, auth = true): Promise<HttpResponse<T>> {
-    return this.exec(firstValueFrom(this.http.request<T>(method, this.url(path), { body, headers: this.headers({}, auth), observe: 'response' })));
+  /**
+   * Full response access (needed for the `set-auth-token` header on sign-in / sign-up).
+   * `token` authenticates this ONE call with a different session than the stored one (used to discard a session that was just
+   * created by mistake; it never reads or replaces the stored session).
+   */
+  raw<T>(method: 'GET' | 'POST', path: string, body?: unknown, auth = true, token?: string): Promise<HttpResponse<T>> {
+    return this.exec(firstValueFrom(this.http.request<T>(method, this.url(path), { body, headers: this.headers({}, auth, token), observe: 'response' })));
   }
 }
 

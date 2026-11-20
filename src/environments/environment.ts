@@ -13,6 +13,11 @@ export interface AppEnvironment {
   readonly aiEndpoint: string;
   /** True only when the backend can deliver email (GZ_PASSWORD_RESET=1). False hides "Forgot password" so the app never promises an email that is not sent. */
   readonly passwordResetEnabled: boolean;
+  /**
+   * Base URL of the PUBLISHED legal pages (privacy policy, terms, account deletion), e.g. https://example.org . '' = not configured:
+   * Settings then shows the legal rows as unavailable instead of linking anywhere. Never defaulted to an unapproved domain.
+   */
+  readonly legalBaseUrl: string;
 }
 
 export const environment: AppEnvironment = GENERATED_ENV;

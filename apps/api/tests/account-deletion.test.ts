@@ -193,6 +193,7 @@ describe('account deletion: authority and isolation', () => {
     const before = await counts(u.id);
     const res = await del(u, { password: 'definitely-not-it' });
     expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe('INVALID_PASSWORD'); // the app maps this code to "wrong password"
     expect(await counts(u.id)).toEqual(before);
     expect((await json(u, 'GET', '/v1/sync/pull')).status).toBe(200);
     expect(await job(u.id)).toBeNull();
@@ -203,6 +204,7 @@ describe('account deletion: authority and isolation', () => {
     await env.DB.prepare('UPDATE session SET created_at = ?2 WHERE user_id = ?1').bind(u.id, Date.now() - 3 * 86_400_000).run();
     const stale = await del(u, {});
     expect(stale.status).toBe(400);
+    expect(((await stale.json()) as { code: string }).code).toBe('SESSION_EXPIRED'); // the app maps this code to "re-authenticate"
     expect((await counts(u.id)).user).toBe(1);
 
     const fresh = await signUp('fresh2');
