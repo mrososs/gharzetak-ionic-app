@@ -79,7 +79,7 @@ One dependency, one stylesheet, one optional key in local prefs, three `arm()` c
 Yes, as the drawing layer behind an app-owned wrapper, and conditionally on a device run. It highlighted Ionic hosts, scrolled inside `ion-content`, waited for a lazy page and advanced on a real tap in a live probe against the app. It does not provide persistence, routing, eligibility, RTL or Ionic awareness; those are built around it. It is MIT, dependency-free and about 15 KB gzipped, loaded only when a tour starts. Its release pace is very fast (1.14.0 is a week old), so the version is pinned and isolated. `ngx-ui-tour-ionic` is the fallback.
 
 **2. What are the Ionic/Angular compatibility risks?**
-Five were found and each has a fix: (a) plain selectors match elements on hidden cached pages; (b) the highlight does not follow `ion-content` scrolling until `refresh()` is called; (c) an Ionic sheet or alert opened during a tour appears above the dimmer but cannot be tapped; (d) no RTL code (one CSS rule and alignment mirroring are enough); (e) no Android Back handling. Lesser ones: the focus trap ignores shadow roots, the animation ignores reduced-motion, text is injected as HTML, and a tab-button tap returns to a nested page rather than the tab root. Not yet tested: real touch, safe areas, keyboard, rotation, TalkBack.
+Five were found and each has a fix: (a) plain selectors match elements on hidden cached pages; (b) the highlight does not follow `ion-content` scrolling until `refresh()` is called; (c) an Ionic sheet or alert opened during a tour appears above the dimmer but cannot be tapped; (d) no RTL code (one CSS rule and alignment mirroring are enough); (e) no Android Back handling. Confirmed on the device, with defaults to override: tapping the dimmer closes the tour, the highlighted element stays live, `instruction` / `advanceOn` make Next inert, default buttons are 23 px tall. Lesser ones: the focus trap ignores shadow roots, the animation ignores reduced-motion, text is injected as HTML, and a tab-button tap returns to a nested page rather than the tab root. Still untested: rotation, TalkBack, largest font, swipe-back.
 
 **3. What should the first welcome tour contain?**
 Six steps on Home, none requiring navigation: the Patterns tile, then the Projects, Tracker, Learn and Khayoota tabs, then the avatar that opens Settings and replay. The Patterns tile and the avatar are included because they are the two entry points with no visible label that says what they are.
@@ -124,7 +124,7 @@ None exist today apart from Ionic's tab-button ids. v1 adds a `gzTour` attribute
 (1) No stuck overlay after any exit path. (2) The eligibility table for the twelve user scenarios. (3) State transitions, especially skipped vs interrupted vs completed. (4) Target resolution ignores hidden cached pages. (5) A tour ends when an Ionic overlay opens or navigation starts. (6) The tracker action step counts exactly once. (7) The Khayoota tour makes zero AI requests. (8) Every target id used by a tour exists in a template.
 
 **17. How will it behave on the real HONOR phone?**
-Not yet known: the phone was not connected during discovery, and nothing in this package claims a device result. Expected from the probe and the source: correct alignment, correct RTL, working scroll-into-view, and a highlight that needs the scroll listener. Unverified and first on the list for Phase 0: touch behaviour, bottom safe area and immersive mode, keyboard, rotation, hardware Back, TalkBack, large fonts, and a production build.
+Tested in Phase 0 on the phone (Android 16, WebView 157, isolated QA build): alignment, RTL and Arabic rendering, scroll-into-view, scroll-follow (needs the refresh hook), hidden-page resolution, ending on an Ionic overlay, hardware Back, background return, safe areas with immersive mode on, the keyboard, a real finger tap on the tracker (one tap, one count, one advance) and the production CSS all passed. Not yet verified: rotation, TalkBack, largest font, swipe-back, long background with biometric relock. Details in `phase-0-results.md`.
 
 **18. What should be implemented in v1?**
 Phase 0 (device spike), Phase 1 (foundation with all guards), Phase 2 (welcome tour and Getting Started card), Phase 3 (tracker simple and pattern, pattern library, pattern reader, pills), the Settings "Tours & help" section, and Phase 6 (tests, accessibility, device pass).
@@ -151,5 +151,5 @@ Details, files, acceptance and rollback for each: `11`.
 ## Part C — What to do next
 
 1. Answer the four decisions in `00`.
-2. Connect the phone and approve Phase 0 (a throwaway branch; nothing merged).
-3. On a pass, start Phase 1 on a feature branch from `development`.
+2. Phase 0 has run ([results](phase-0-results.md)); decide whether the four open checks are done now or in Phase 6.
+3. Start Phase 1 on a feature branch from `development`.

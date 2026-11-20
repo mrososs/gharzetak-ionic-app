@@ -138,6 +138,7 @@ Same popover. Differences: 2–5 dots; no end toast; title carries the screen's 
 - The highlighted control is live and keeps its own pressed state.
 - Next remains enabled (`04` §4).
 - After the tap the tour moves on without a "well done" step; the changed counter is the feedback.
+- Do not set the library's `popover.instruction` or `advanceOn`: on the phone they made Next inert (Phase 0, F3). The adapter renders the strip and listens for the tap itself.
 
 ### 6.4 Getting Started card
 
@@ -234,6 +235,6 @@ html[dir='ltr'] .gz-tour .driver-popover-description { line-height: var(--gz-lh-
 .gz-tour .driver-popover-footer button:focus-visible { outline: 3px solid var(--gz-primary); outline-offset: 2px; }
 ```
 
-Engine configuration that goes with it: `popoverClass: 'gz-tour'`, `overlayColor: '#35253e'`, `overlayOpacity: 0.58`, `stagePadding: 6`, `stageRadius: 20`, `duration: 250`, `overlayClickBehavior: 'none'`, `showProgress: true` (kept for the spoken label), dots and Skip added in `onPopoverRender`.
+Engine configuration that goes with it: `popoverClass: 'gz-tour'`, `overlayColor: '#35253e'`, `overlayOpacity: 0.58`, `stagePadding: 6`, `stageRadius: 20`, `duration: 250`, `overlayClickBehavior: 'none'`, `disableActiveInteraction: true` (blocked steps; `false` only on the one action step), `showProgress: true` (kept for the spoken label), dots and Skip added in `onPopoverRender`.
 
 Selectors above are the engine's class names as of 1.14.0; they are the reason the engine version is pinned.

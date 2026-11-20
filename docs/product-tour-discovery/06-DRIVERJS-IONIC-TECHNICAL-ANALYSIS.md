@@ -65,6 +65,10 @@ Destroy reasons reported by the library: `done`, `close`, `escape`, `overlay`, `
 | P11 | Tap-to-advance on the tracker's big button | **Pass.** The app counted 0 → 1 (really saved in the test profile) and the tour moved to the Undo step. With `advanceOn`, the Next button is `aria-disabled="true"`. |
 | P12 | Tapping a tab button to "go Home" | Not a library issue, but found here: a tab button returns to that tab's **last nested page**, not its root. A tour must navigate with `navigateRoot('/tabs/home')`. |
 
+### 2.1 Device run (Phase 0, 2026-11-20)
+
+The same behaviour was then tested on the HONOR phone (Android 16, WebView 157) in an isolated QA build. Full results, method and the checks still open are in [phase-0-results.md](phase-0-results.md). In short: highlight alignment, scroll-follow with the refresh hook, hidden-page resolution, overlay ending, hardware Back, background return, safe areas, production CSS, keyboard and a real finger tap on the tracker all passed; rotation, TalkBack, large font, long background and swipe-back are not yet verified. Four library defaults must be overridden: tapping the dimmer closes the tour, the highlighted element stays live, `instruction` / `advanceOn` make Next inert, and the default buttons are 23 px tall.
+
 ## 3. Compatibility analysis by topic
 
 ### 3.1 Angular lifecycle
@@ -186,4 +190,4 @@ Each is a Phase 0 task on the HONOR phone. "Probe page" means a temporary dev-on
 
 ## 6. Verdict
 
-Technically suitable behind an adapter, on the evidence above, with four mandatory adapter behaviours: function resolvers scoped to the visible page, refresh on Ionic scroll, end on Ionic overlay, and Back-button handling. The device run in Phase 0 is the gate; until it passes, this verdict is conditional.
+Technically suitable behind an adapter, now on both desktop and device evidence, with these mandatory adapter behaviours: function resolvers scoped to the visible page, refresh on Ionic scroll, end on Ionic overlay, Back-button handling at priority 100, `overlayClickBehavior: 'none'`, `disableActiveInteraction: true` on blocked steps, and no use of `instruction` / `advanceOn`. The remaining device checks are listed in `phase-0-results.md` §4.

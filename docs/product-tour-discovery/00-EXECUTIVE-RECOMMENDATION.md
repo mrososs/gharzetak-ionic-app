@@ -1,6 +1,6 @@
 # 00 — Executive Recommendation
 
-Discovery only. No application code, backend, flags or dependencies were changed. Baseline: `origin/test` at `c3ca6a3` (2026-11-19).
+Discovery only. No application code, backend, flags or dependencies were changed on the documentation branch; the Phase 0 device spike lives on a separate local throwaway branch. Baseline: `origin/test` at `c3ca6a3` (2026-11-19).
 
 ## The recommendation in one paragraph
 
@@ -36,7 +36,7 @@ Things the library offers that we should **not** use: its checklist widget (a fl
 | 5 | **A tour tap changes real data.** Every tracker tap is saved and can unlock a permanent achievement. | Medium | Only one step in v1 invites a tap, in simple-counter mode, where one tap is +1 stitch and Undo is the very next step. |
 | 6 | **Tour annoys returning users** (reinstall, new device, users from before the feature). | Medium | Tours are armed by an entry event and suppressed by evidence of prior use; see `03`. |
 | 7 | **Khayoota copy over-promises.** Real AI is tester-only on staging; the tab is visible to all. | Medium | Highlight only, never click; copy is chosen from the screen's own status. |
-| 8 | **No device test yet.** The HONOR phone was not connected during discovery. | Open | Phase 0 runs the same probe on the phone before any feature code is merged. |
+| 8 | **Device coverage is partial.** Phase 0 ran on the HONOR phone: 9 of 14 checks passed, 1 partial, 4 not verified (rotation, TalkBack, large font, swipe-back); none failed. | Reduced | Remaining checks are in the Phase 6 device pass. See `phase-0-results.md`. |
 | 9 | **No analytics exist** to measure the result. | Medium | Local, content-free event log first; a later endpoint is a separate decision. |
 
 ## Alternative worth knowing about

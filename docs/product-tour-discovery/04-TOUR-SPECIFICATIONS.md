@@ -10,8 +10,8 @@ Step-level specification for every recommended tour. Copy is in `05`; this file 
 | Selector strategy | A `gzTour` directive on the element registers it under its id and writes `data-tour="<id>"`. The engine receives a **function** that asks the registry for the element on the visible page. No CSS selector strings. |
 | Target is "ready" | Registered, connected, inside an `.ion-page` without `.ion-page-hidden`, non-zero box, same rectangle on two consecutive frames |
 | Wait | Up to 2500 ms for a target on the current page; then the fallback |
-| Interaction | Highlighted element is **not** tappable unless the step says "Action" |
-| Dimmed area | Taps ignored |
+| Interaction | Highlighted element is **not** tappable unless the step says "Action". The adapter sets `disableActiveInteraction: true` on every blocked step: by default the highlighted element is live, and tapping a highlighted tab navigated away with the tour still showing (Phase 0, F2). |
+| Dimmed area | Taps ignored: `overlayClickBehavior: 'none'`. By default a tap on the dimmer closes the tour (Phase 0, F1). |
 | Popover position | `auto` = below if it fits, else above. Only `top` / `bottom` are specified; `left` / `right` are never used, because the library treats them physically and the app is bidirectional. Alignment is `start` / `center` / `end` and is mirrored by the adapter in RTL. |
 | Stage | Padding 6 px, radius 20 px, unless noted |
 | Focus | Moves to the popover's Next button; returns to the previously focused element on close |
@@ -116,7 +116,7 @@ Notes:
 
 Action-step details:
 
-- The probe showed that using the library's `advanceOn` disables the Next button. This design keeps Next enabled, so the adapter listens for the tap itself and calls `moveNext()`. Check in Phase 0 whether `advanceOn: { strict: false }` gives the same result with less code.
+- **Verified on the phone (Phase 0, F3):** the library's `popover.instruction` and `advanceOn` make Next inert. So this step uses neither. The adapter attaches its own click listener to the target, calls `moveNext()` one frame after the tap, and renders the hint line itself. A real tap counted once and advanced once; Next also advances with no tap.
 - If the tap completes the round (count reaches the target), the app's own "round complete" note and possibly a celebration banner appear. That is real feedback; the tour moves on to Undo as usual. If a piece-finished sheet or the finale opens, the overlay rule ends the tour.
 - Undo is highlighted but not tappable: the user decides whether to keep her stitch.
 - The tap is one of the two actions that can tick the Getting Started task "Try the tracker".

@@ -25,6 +25,8 @@ The suggested order (foundation → welcome → core → contextual → checklis
 
 ## Phase 0 — Technical spike on the device (S)
 
+**Status: run on 2026-11-20 — passed with four items open.** See [phase-0-results.md](phase-0-results.md). Result: 9 of 14 checks passed, 1 partial, 4 not verified, none failed; three engine defaults (dimmer tap, live highlighted element, inert Next on action steps) became named adapter requirements. The plan below is kept as originally written; what remains of it moves to Phase 6.
+
 | | |
 |---|---|
 | Goal | Confirm on the HONOR phone what the desktop probe showed, before any feature code |

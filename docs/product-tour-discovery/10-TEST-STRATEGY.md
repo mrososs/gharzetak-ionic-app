@@ -138,7 +138,7 @@ Stable selectors for all of this are the `data-tour` attributes; no test uses de
 
 ## 4. Real Android device (HONOR, Android 16, 1264×2736)
 
-Status during discovery: **the phone was not connected** (`adb devices` returned an empty list). Everything in this section is pending.
+Status: the phone was connected for Phase 0 on 2026-11-20 and part of this list was run against an isolated spike build; see [phase-0-results.md](phase-0-results.md). Items it did not cover remain pending (rotation, TalkBack, large font, long background / relock, swipe-back, immersive off, release build). The same isolation rule applies to later runs: a separate application id, never the real app's data.
 
 Safety rules (from the team's existing practice):
 

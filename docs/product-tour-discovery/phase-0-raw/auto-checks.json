@@ -1,0 +1,204 @@
+{
+  "device": {
+    "model": "DNY-NX9",
+    "android": "16",
+    "wm": "1264x2736",
+    "webview": "{\"attached\":true,\"empty\":false,\"height\":2736,\"never_attached\":false,\"screenX\":0,\"screenY\":0,\"visible\":true,\"width\":1264}"
+  },
+  "pid": "28708",
+  "startedAt": "2026-11-20T12:52:25.744Z",
+  "checks": {
+    "S12_css_in_build": {
+      "pass": true,
+      "popoverRect": [
+        66,
+        561,
+        250,
+        123
+      ],
+      "position": "fixed",
+      "zIndex": "1000000000",
+      "bg": "rgb(255, 255, 255)",
+      "hole": [
+        66,
+        694,
+        90,
+        84
+      ],
+      "target": [
+        76,
+        704,
+        70,
+        64
+      ]
+    },
+    "S9_safe_area": {
+      "pass": true,
+      "popover": [
+        66,
+        561,
+        250,
+        123
+      ],
+      "tabButton": [
+        76,
+        704,
+        70,
+        64
+      ],
+      "viewportH": 781,
+      "safeAreaPx": [
+        "40px",
+        "0px",
+        "0px",
+        "0px"
+      ]
+    },
+    "S0_destroy_clean": {
+      "pass": true,
+      "nodes": 0,
+      "bodyClass": ""
+    },
+    "S3_hidden_page_resolution": {
+      "pass": true,
+      "naiveSelectorHitHiddenPage": true,
+      "naiveRect": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visibleResolverRect": [
+        20,
+        505,
+        321,
+        142
+      ],
+      "pages": [
+        "gz-tabs-layout [visible]",
+        "gz-home [visible]",
+        "gz-projects [hidden]",
+        "gz-tracker [hidden]"
+      ]
+    },
+    "S1_scroll_follow_with_refresh_hook": {
+      "pass": true,
+      "scrolledTo": 612.5714111328125,
+      "a": {
+        "hole": [
+          10,
+          472,
+          120,
+          184
+        ],
+        "target": [
+          20,
+          482,
+          100,
+          164
+        ]
+      },
+      "withoutHook": {
+        "hole": [
+          10,
+          472,
+          120,
+          184
+        ],
+        "target": [
+          20,
+          562,
+          100,
+          164
+        ],
+        "followed": false
+      },
+      "withHook": {
+        "hole": [
+          10,
+          512,
+          120,
+          184
+        ],
+        "target": [
+          20,
+          522,
+          100,
+          164
+        ],
+        "followed": true
+      }
+    },
+    "S4_no_body_shift": {
+      "pass": true,
+      "app": [
+        0,
+        0,
+        361,
+        782
+      ],
+      "docScroll": [
+        0,
+        0
+      ],
+      "bodyScroll": [
+        0,
+        0
+      ],
+      "win": [
+        0,
+        0
+      ]
+    },
+    "S2_overlay_ends_tour": {
+      "pass": true,
+      "eventsSeen": [
+        "event ionModalWillPresent target=ION-MODAL"
+      ],
+      "tourEndedMsAfterStart": 73,
+      "popoverGone": true,
+      "modalPointerEvents": "auto",
+      "elementAtTitle": "H2.gz-h2 gz-hd gz-dlg-title",
+      "bodyClass": "backdrop-no-scroll"
+    },
+    "FINAL_no_stuck_overlay": {
+      "pass": true,
+      "nodes": 0,
+      "bodyClass": ""
+    }
+  },
+  "env": {
+    "ua": "Mozilla/5.0 (Linux; Android 16; DNY-NX9 Build/HONORDNY-N39; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/157.0.8103.38 Mobile Safari/537.36",
+    "dpr": 3.5,
+    "inner": [
+      361,
+      781
+    ],
+    "visualViewport": [
+      361.1428527832031,
+      781.7142944335938,
+      1
+    ],
+    "safeAreaPx": [
+      "40px",
+      "0px",
+      "0px",
+      "0px"
+    ],
+    "gzSafeBottom": "max(0px, 14px)",
+    "immersiveClass": true,
+    "dir": "rtl",
+    "lang": "ar",
+    "tabBar": [
+      0,
+      704,
+      361,
+      78
+    ],
+    "url": "https://localhost/tabs/home",
+    "reducedMotion": false,
+    "fontScaleProbe": "15px",
+    "stylesheetHasDriverCss": true
+  },
+  "finishedAt": "2026-11-20T12:52:38.715Z"
+}
