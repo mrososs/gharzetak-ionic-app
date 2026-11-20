@@ -19,11 +19,12 @@ import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { AvatarPickerComponent } from '../../shared/ui/avatar/avatar-picker.component';
 import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.component';
+import { TourHelpComponent } from '../../shared/ui/tour/tour-help.component';
 
 /** GZ-S25 settings · GZ-T07 tools sheet · GZ-T09 erase-data sheet. */
 @Component({
   selector: 'gz-settings',
-  imports: [IonHeader, IonContent, IconComponent, SheetComponent, ToolsSheetBody, AvatarPickerComponent, CrochetAvatarComponent, RemindersSettingsComponent],
+  imports: [IonHeader, IonContent, IconComponent, SheetComponent, ToolsSheetBody, AvatarPickerComponent, CrochetAvatarComponent, RemindersSettingsComponent, TourHelpComponent],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top">
@@ -127,6 +128,7 @@ import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.co
 
         <button type="button" class="gz-btn3 w mt-4" (click)="sheet.set('tools')"><svg gzIcon="hook" size="s" />{{ t().editTools }}</button>
         <button type="button" class="gz-btn3 w mt-2" (click)="replayIntro()"><svg gzIcon="reset" size="s" />{{ t().replayIntro }}</button>
+        <gz-tour-help />
         <button type="button" class="gz-btn3 rose w mt-2" (click)="sheet.set('erase')"><svg gzIcon="trash" size="s" />{{ t().resetDemo }}</button>
         <button type="button" class="gz-btn2 mt-2" (click)="logout()">{{ t().logout }}</button>
 

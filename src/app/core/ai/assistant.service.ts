@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { environment } from '../../../environments/environment';
 import { ACTN } from '../data/catalog';
-import { ParsedRound, STITCH_IO, StitchKind, parsePattern } from '../domain/pattern-parser';
+import { ParsedRound, STITCH_IO, StitchKind, countedTotal, parsePattern } from '../domain/pattern-parser';
 import { convertToken, displayInTerms } from '../domain/terminology';
 import { patternContext } from '../domain/tracker-engine';
 import { I18nService } from '../i18n/i18n.service';
@@ -80,7 +80,7 @@ export class AssistantService {
     const l2 = mr
       ? this.q('الغرز كلها بتتعمل جوّه الحلقة السحرية (MR)، فمفيش غرز من دور قبلها.', 'All stitches go into the magic ring (MR), so nothing is taken from a previous round.')
       : this.q(`كل تكرار بياخد ${uc} غرز من الدور اللي قبله وبيطلّع ${up}.`, `Each repeat takes ${uc} stitch(es) from the previous round and produces ${up}.`);
-    const chk = r.declared === null ? '' : r.mismatch ? this.q(` — الباترن مكتوب [${r.declared}] لكن الحساب ${r.prod} ⚠`, ` — the pattern says [${r.declared}] but the maths gives ${r.prod} ⚠`) : ' ✓';
+    const chk = r.declared === null ? '' : r.mismatch ? this.q(` — الباترن مكتوب [${r.declared}] لكن الحساب ${countedTotal(r)} ⚠`, ` — the pattern says [${r.declared}] but the maths gives ${countedTotal(r)} ⚠`) : ' ✓';
     const l3 = this.q(`الإجمالي: ${r.cons} ← ${r.prod} غرزة${chk}.`, `Total: ${r.cons} → ${r.prod} stitches${chk}.`);
     return `${l1}\n${l2}\n${l3}`;
   }

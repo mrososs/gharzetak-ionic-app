@@ -8,6 +8,9 @@ import { AppStore } from '../../core/state/app.store';
 import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
+import type { TourId } from '../../core/tour/tour-ids';
+import { TourOfferComponent } from '../../shared/ui/tour/tour-offer.component';
+import { TourTargetDirective } from '../../shared/ui/tour/tour-target.directive';
 
 type Kind = 'all' | 'collections' | 'patterns';
 
@@ -29,22 +32,23 @@ interface Row {
 /** GZ-S16 — pattern library: complete multi-part patterns (collections) and standalone patterns, with search and filters. */
 @Component({
   selector: 'gz-pattern-library',
-  imports: [IonHeader, IonContent, IconComponent, PhotoComponent, SheetComponent],
+  imports: [IonHeader, IonContent, IconComponent, PhotoComponent, SheetComponent, TourOfferComponent, TourTargetDirective],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top">
         <button type="button" class="gz-icb" (click)="nav.back()" [attr.aria-label]="t().back"><svg gzIcon="arrowl" [flip]="true" /></button>
         <h1 class="gz-ttl gz-hd">{{ t().patternReader }}</h1>
-        <button type="button" class="gz-icb pur" (click)="sheet.set('add')" [attr.aria-label]="t().addPattern"><svg gzIcon="plus" /></button>
+        <button type="button" class="gz-icb pur" [gzTour]="'patterns.add'" (click)="sheet.set('add')" [attr.aria-label]="t().addPattern"><svg gzIcon="plus" /></button>
       </div>
     </ion-header>
     <ion-content class="gz-scroll">
       <div class="gz-pad">
+        <gz-tour-offer [tours]="tourOffers()" />
         <div class="gz-note lav" style="margin: 4px 0 12px"><svg gzIcon="info" size="s" /><span>{{ t().readerSupports }}</span></div>
 
         <div class="gz-in"><svg gzIcon="search" /><input type="search" [value]="query()" (input)="onQuery($event)" maxlength="80" [placeholder]="i18n.q('ابحثي بالاسم أو اسم الجزء', 'Search by name or part')" [attr.aria-label]="i18n.q('بحث في الباترونات', 'Search patterns')" /></div>
 
-        <div class="gz-hs mt-2.5" role="tablist" [attr.aria-label]="i18n.q('النوع', 'Type')" style="padding-block: 0">
+        <div class="gz-hs mt-2.5" role="tablist" [gzTour]="'patterns.kind-filter'" [attr.aria-label]="i18n.q('النوع', 'Type')" style="padding-block: 0">
           @for (k of kinds(); track k.id) {
             <button type="button" role="tab" class="gz-chip sm" [class.on]="kind() === k.id" [attr.aria-selected]="kind() === k.id" (click)="kind.set(k.id)">{{ k.label }}</button>
           }
@@ -58,7 +62,7 @@ interface Row {
 
         <div class="mt-3 flex flex-col gap-3">
           @for (p of items(); track p.kind + p.id) {
-            <button type="button" class="gz-rcard" (click)="open(p)" [attr.aria-label]="p.name">
+            <button type="button" class="gz-rcard" [gzTour]="p.id === sampleRowId() ? 'patterns.sample-row' : null" (click)="open(p)" [attr.aria-label]="p.name">
               <div class="flex items-start gap-3">
                 @if (p.cover) {
                   <gz-photo class="flex-none" tone="lav" [src]="p.cover" [alt]="p.name" [showLabel]="false" [icon]="null" height="52px" width="52px" extraClass="r16" />
@@ -191,6 +195,14 @@ export class PatternLibraryPage {
     return this.rows().filter((r) => (kind === 'all' || (kind === 'collections') === (r.kind === 'collection')) && (level === 'all' || r.level === level) && (!q || r.haystack.includes(q)));
   });
   protected readonly hasFilter = computed(() => !!this.query().trim() || this.kind() !== 'all' || this.level() !== 'all');
+
+  /** The first built-in sample that is visible: the row the patterns tour points at. */
+  protected readonly sampleRowId = computed(() => {
+    const samples = new Set(this.store.patterns().filter((p) => p.isSample).map((p) => p.id));
+    return this.items().find((r) => r.kind === 'pattern' && samples.has(r.id))?.id ?? null;
+  });
+  /** The tour is offered only while nothing is filtered, so the sample rows it describes are really on screen. */
+  protected readonly tourOffers = computed<readonly TourId[]>(() => (this.hasFilter() ? [] : ['patterns']));
 
   protected onQuery(ev: Event): void {
     this.query.set((ev.target as HTMLInputElement).value);

@@ -1,9 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { ACTN } from '../../core/data/catalog';
 import { IconName } from '../../core/data/icons';
 import { PartInstance, instanceLabel, instanceProgress, nextUnfinished, projectCompletion, siblingsOf } from '../../core/domain/collections';
-import { StitchKind, parsePattern } from '../../core/domain/pattern-parser';
+import { StitchKind, countedTotal, parsePattern } from '../../core/domain/pattern-parser';
 import { TermSystem, convertToken, displayInTerms } from '../../core/domain/terminology';
 import { compareTime, formatMinutes } from '../../core/domain/time';
 import {
@@ -40,6 +40,11 @@ import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { StepperComponent } from '../../shared/ui/inputs/stepper.component';
 import { RingComponent } from '../../shared/ui/progress/ring.component';
+import { TourCoordinator } from '../../core/tour/tour-coordinator.service';
+import type { TourId } from '../../core/tour/tour-ids';
+import type { TrackerLayout } from '../../core/tour/tour.types';
+import { TourOfferComponent } from '../../shared/ui/tour/tour-offer.component';
+import { TourTargetDirective } from '../../shared/ui/tour/tour-target.directive';
 
 /** Minimum gap between two counted taps — swallows accidental double-fires, not real fast counting. */
 const TAP_GUARD_MS = 120;
@@ -49,7 +54,7 @@ const fmtHMS = (s: number) => Math.floor(s / 3600) + ':' + pad2(Math.floor((s % 
 /** GZ-S14 simple · GZ-S15 pattern-aware · GZ-T03 round complete · GZ-T05 settings · GZ-T06 reset — and, for multi-part projects, the part switcher. */
 @Component({
   selector: 'gz-tracker',
-  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent, JoyBannerComponent, JoyMilestoneComponent],
+  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent, JoyBannerComponent, JoyMilestoneComponent, TourOfferComponent, TourTargetDirective],
   templateUrl: './tracker.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -79,6 +84,34 @@ export class TrackerPage {
   protected readonly tr = computed<TrackerLike | null>(() => this.view()?.tracker ?? null);
   protected readonly inst = computed<PartInstance | null>(() => this.view()?.instance ?? null);
   protected readonly isPattern = computed(() => this.tr()?.mode === 'pattern');
+
+  /* ---------------- product tour ---------------- */
+  private readonly tour = inject(TourCoordinator);
+  /**
+   * Which of this page's layouts is on screen, as the tour system needs to know it. Pattern mode counts only when the pattern is really
+   * usable (the page then shows the fallback cards, which have nothing to tour).
+   */
+  protected readonly tourLayout = computed<TrackerLayout>(() => {
+    if (!this.p()) return 'none';
+    const parts = !!this.inst();
+    if (this.isPattern()) return this.pt() ? (parts ? 'parts-pattern' : 'pattern') : 'none';
+    return parts ? 'parts-simple' : 'simple';
+  });
+  /** Candidate tours, most specific first; a multi-part project gets its piece tour after the counter tour. */
+  protected readonly tourOffers = computed<readonly TourId[]>(() => {
+    switch (this.tourLayout()) {
+      case 'simple': return ['tracker-simple'];
+      case 'pattern': return ['tracker-pattern'];
+      case 'parts-simple': return ['tracker-simple', 'tracker-parts'];
+      case 'parts-pattern': return ['tracker-pattern', 'tracker-parts'];
+      default: return [];
+    }
+  });
+
+  constructor() {
+    effect(() => this.tour.setTrackerLayout(this.tourLayout()));
+    inject(DestroyRef).onDestroy(() => this.tour.setTrackerLayout('none'));
+  }
 
   /* ---------------- multi-part ---------------- */
   protected readonly completion = computed(() => {
@@ -178,13 +211,13 @@ export class TrackerPage {
       st,
       n: r.n,
       code: displayInTerms(r.raw, src.terms, this.store.viewTerms()),
-      sumText: `${r.cons} → ${r.prod}` + (r.declared !== null ? `  [${r.declared}]` : ''),
-      okText: r.mismatch ? `[${r.declared}] ≠ ${r.prod}` : r.declared !== null ? `[${r.declared}] ✓` : q('بدون مجموع', 'No total'),
+      sumText: `${r.cons} → ${r.prod}` + (r.chains ? `  +${r.chains} ch` : '') + (r.declared !== null ? `  [${r.declared}]` : ''),
+      okText: r.mismatch ? `[${r.declared}] ≠ ${countedTotal(r)}` : r.declared !== null ? `[${r.declared}] ✓` : q('بدون مجموع', 'No total'),
       okCls: r.mismatch ? 'rose' : 'sage',
       joins: r.joins,
       rounds: parsed.rounds.map((x, i) => ({ n: x.n, i, cls: i === ctx.roundIndex ? 'cur' : i < ctx.roundIndex ? 'dn' : '' })),
       curLabel: act ? this.actLabel(act.k, src.terms) : '',
-      curIO: act ? (act.mr ? '0 → 1 · MR' : act.ref ? `0 → ${act.prod} · ${act.ref}` : `${act.cons} → ${act.prod}`) : '',
+      curIO: act ? (act.k === 'ch' ? q('سلسلة — لا تُحسب غرزة', 'chain — not counted as a stitch') : act.mr ? '0 → 1 · MR' : act.ref ? `0 → ${act.prod} · ${act.ref}` : `${act.cons} → ${act.prod}`) : '',
       group: grp.map((a, i) => ({ label: this.abbr(a.k, src.terms), cls: gStart + i < ptr ? 'dn' : gStart + i === ptr ? 'cur' : '' })),
       next,
       doneMsg: ctx.isLastRound ? q('اكتمل الباترن كله!', 'The whole pattern is complete!') : q(`اكتمل الدور ${r.n}!`, `Round ${r.n} complete!`),

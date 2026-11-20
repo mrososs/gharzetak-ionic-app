@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { DBSchema, IDBPDatabase, openDB } from 'idb';
 import type { JoyRow } from '../domain/joy';
 import type { ScopePrefs } from '../joy/joy.models';
+import type { TourEventRecord } from '../tour/tour.types';
 import type { ChatMessage, Pattern, PatternCollection, PatternRevision, Profile, Project, TutorialData } from '../models/models';
 
 /** A data scope: everything a guest or a signed-in user owns on this device. */
@@ -74,6 +75,8 @@ export interface ScopeDocs {
   importMap: Record<string, string>;
   /** Crochet Joy ledger rows that could not be migrated safely from the guest scope. Kept so nothing is lost and no count is invented. */
   joyRecovery: JoyRow[];
+  /** Local product-tour event log (last 200). Content-free: event names, tour and step ids, reasons. Never leaves the device. */
+  tourEvents: TourEventRecord[];
 }
 
 /** A running timer segment. `beat` is refreshed every few seconds; after a crash only time up to the last beat is credited. */

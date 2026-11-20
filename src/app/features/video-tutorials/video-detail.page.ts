@@ -12,6 +12,7 @@ import { AppStore, TrackerChange } from '../../core/state/app.store';
 import { uuid } from '../../core/state/factories';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { JoyPresenter } from '../../core/joy/joy-presenter.service';
+import { TourCoordinator } from '../../core/tour/tour-coordinator.service';
 import { JoyBannerComponent } from '../../shared/ui/joy/joy-banner.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
@@ -34,6 +35,7 @@ export class VideoDetailPage implements OnDestroy {
   private readonly ui = inject(UiFeedback);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly presenter = inject(JoyPresenter);
+  private readonly tour = inject(TourCoordinator);
   readonly id = input.required<string>();
 
   protected readonly t = this.i18n.t;
@@ -116,6 +118,7 @@ export class VideoDetailPage implements OnDestroy {
   /** The video must never be covered or interrupted: every Crochet Joy level becomes one inline line while this page is in front. */
   ionViewWillEnter(): void {
     this.presenter.surface.set('video');
+    void this.tour.mark('tutorialOpened'); // a tutorial was really opened (Getting Started); this page never hosts a tour
   }
   ionViewWillLeave(): void {
     this.presenter.surface.set('default');

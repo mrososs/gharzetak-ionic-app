@@ -58,6 +58,8 @@ const out = {
   aiEndpoint: get('GZ_AI_ENDPOINT', ''),
   // '1' only when the Worker really delivers email (verification / reset links). Otherwise the app hides password reset instead of promising an email.
   passwordResetEnabled: get('GZ_PASSWORD_RESET', '') === '1',
+  // Release kill switch for the whole product-tour system (card, pills, replays). On by default; GZ_TOURS=0 turns every tour surface off.
+  toursEnabled: get('GZ_TOURS', '1') !== '0',
 };
 
 const target = resolve(root, 'src/environments/env.generated.ts');

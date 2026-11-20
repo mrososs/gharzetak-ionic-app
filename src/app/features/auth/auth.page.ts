@@ -5,6 +5,7 @@ import { AuthErrorKey, AuthService } from '../../core/auth/auth.service';
 import { BiometricService } from '../../core/auth/biometric.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { AppStore } from '../../core/state/app.store';
+import { TourCoordinator } from '../../core/tour/tour-coordinator.service';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 
@@ -108,6 +109,8 @@ export class AuthPage {
   private readonly store = inject(AppStore);
   private readonly ui = inject(UiFeedback);
   private readonly bio = inject(BiometricService);
+  /** Product tours: told about the entry events only; it decides by itself whether anything is offered (never blocks sign-in). */
+  private readonly tour = inject(TourCoordinator);
 
   readonly mode = input<'login' | 'signup'>('login');
   protected readonly t = this.i18n.t;
@@ -160,12 +163,14 @@ export class AuthPage {
         }
         await this.store.whenScopeLoaded(this.auth.scope()); // the account's profile, not the guest's
         await this.store.updateProfile({ displayName: name.trim() });
+        void this.tour.arm(); // a brand-new account
         // navigateRoot clears the stack: Back can never return to the sign-up form.
         await this.nav.navigateRoot('/setup/avatar', { replaceUrl: true });
       } else {
         const r = await this.auth.signIn(email, password);
         if (!r.ok) return void this.error.set(r.error ?? 'errGeneric');
         this.form.controls.password.reset('');
+        void this.tour.armIfFreshAccount(); // only an account that is demonstrably new (decided after the first sync)
         await this.nav.navigateRoot('/tabs/home', { replaceUrl: true });
       }
     } finally {
@@ -186,6 +191,7 @@ export class AuthPage {
         await this.store.whenScopeLoaded(this.auth.scope());
         await this.store.updateProfile({ displayName: this.auth.user()?.name ?? '' });
       }
+      void (r.isNew ? this.tour.arm() : this.tour.armIfFreshAccount());
       await this.offerBiometrics();
       // navigateRoot clears the stack: Back can never return to the sign-in form.
       await this.nav.navigateRoot(r.isNew ? '/setup/avatar' : '/tabs/home', { replaceUrl: true });
@@ -209,6 +215,7 @@ export class AuthPage {
 
   protected async guest(): Promise<void> {
     this.auth.continueAsGuest();
+    void this.tour.arm(); // a guest starting out: the welcome tour may be offered once on Home
     await this.nav.navigateRoot('/tabs/home', { replaceUrl: true });
   }
 }

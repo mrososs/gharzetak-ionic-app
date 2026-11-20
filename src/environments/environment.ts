@@ -13,6 +13,8 @@ export interface AppEnvironment {
   readonly aiEndpoint: string;
   /** True only when the backend can deliver email (GZ_PASSWORD_RESET=1). False hides "Forgot password" so the app never promises an email that is not sent. */
   readonly passwordResetEnabled: boolean;
+  /** Build-time kill switch for the product tours (GZ_TOURS=0 disables every tour surface; routes and other features are unaffected). */
+  readonly toursEnabled: boolean;
 }
 
 export const environment: AppEnvironment = GENERATED_ENV;

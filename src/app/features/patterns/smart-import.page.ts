@@ -127,7 +127,7 @@ R7: 5sc in body + 5sc in legs + 14sc in body + 5sc in legs + 7sc in body (36)`;
                         <div class="flex items-center gap-2">
                           <span class="gz-badge {{ cls(rd.status) }}">{{ label(rd.status) }}</span>
                           <span class="gz-b gz-ltr">R{{ rd.n }}</span>
-                          <span class="gz-xs gz-mute gz-ltr ms-auto">{{ i18n.q('المحسوب', 'calc') }} {{ rd.calculated ?? '—' }} · {{ i18n.q('المكتوب', 'written') }} {{ rd.expected ?? '—' }}</span>
+                          <span class="gz-xs gz-mute gz-ltr ms-auto">{{ i18n.q('المحسوب', 'calc') }} {{ rd.chainRole === 'foundation' || rd.chainRole === 'standalone' ? rd.chains + ' ch' : (rd.calculated ?? '—') + (rd.chains ? ' +' + rd.chains + ' ch' : '') }} ·{{ i18n.q('المكتوب', 'written') }} {{ rd.expected ?? '—' }}</span>
                         </div>
                         <div class="gz-code gz-ltr" dir="ltr" style="font-size: 14px; overflow-wrap: anywhere">{{ rd.normalized }}</div>
                         @if (rd.original.trim() !== rd.normalized.trim()) {
