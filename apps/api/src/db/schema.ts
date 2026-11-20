@@ -570,8 +570,32 @@ export const aiUsageDaily = sqliteTable(
     tokensOut: integer('tokens_out').notNull().default(0),
     neuronsReserved: integer('neurons_reserved').notNull().default(0),
     neuronsUsed: integer('neurons_used').notNull().default(0),
+    /** Quota refunds granted today (requests that produced no reply); capped so failures cannot be farmed. */
+    refunds: integer('refunds').notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.scope, t.day] }), index('ai_usage_daily_day_idx').on(t.day)],
+);
+
+/**
+ * Idempotency ledger for hosted AI requests: one row per (account, client request key). It makes a retried request
+ * (same key) charge the daily quota ONCE: 'reserved' (in flight or crashed) → 'done' (a reply was produced; a retry is refused
+ * with 409, the reply is never stored) or 'refunded' (no reply; a retry may run and is charged again). Counts and ids only.
+ */
+export const aiRequestLedger = sqliteTable(
+  'ai_request_ledger',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    requestId: text('request_id').notNull(),
+    /** Quota (Africa/Cairo) day the units were charged to. */
+    day: text('day').notNull(),
+    chat: integer('chat').notNull(),
+    image: integer('image').notNull(),
+    state: text('state').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.requestId] }), index('ai_request_ledger_created_idx').on(t.createdAt)],
 );
 
 /** Burst limiter: weighted units per user per minute window (chat 1, photo 3, extraction 6). */

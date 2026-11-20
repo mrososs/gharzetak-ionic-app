@@ -50,6 +50,9 @@ export const inlineImage = z.object({
 });
 export type InlineImage = z.infer<typeof inlineImage>;
 
+/** Client-generated idempotency key of ONE user action: a retry reuses it, so the daily quota is charged once. */
+export const clientRequestId = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
+
 const shortText = (max: number) => z.string().max(max);
 const id = z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
 
@@ -111,6 +114,7 @@ export const chatRequest = z
     calc: z.array(calcFact).max(5).optional(),
     intent: chatIntent.optional(),
     lang: z.enum(['ar', 'en']),
+    clientRequestId: clientRequestId.optional(),
   })
   .strict()
   .refine((r) => r.message.trim().length > 0 || (r.images?.length ?? 0) > 0, { message: 'message or image required' })
@@ -125,6 +129,7 @@ export const extractRequest = z
     text: z.string().max(AI_LIMITS.extractTextChars).optional(),
     hint: z.object({ lang: z.enum(['ar', 'en', 'mixed']).optional(), terms: z.enum(['us', 'uk']).optional() }).strict().optional(),
     lang: z.enum(['ar', 'en']),
+    clientRequestId: clientRequestId.optional(),
   })
   .strict()
   .refine((r) => (r.images?.length ?? 0) > 0 || (r.text ?? '').trim().length > 0, { message: 'images or text required' });

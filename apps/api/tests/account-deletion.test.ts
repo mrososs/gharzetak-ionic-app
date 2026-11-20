@@ -30,6 +30,7 @@ const OWNED: [string, string][] = [
   ['ai_user_state', 'user_id'],
   ['ai_usage_daily', 'scope'],
   ['ai_rate', 'user_id'],
+  ['ai_request_ledger', 'user_id'],
 ];
 
 async function counts(userId: string): Promise<Record<string, number>> {
@@ -90,6 +91,7 @@ async function populate(u: TestUser) {
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO ai_usage_daily (scope, day, chat, requests) VALUES (?1, '2026-11-20', 2, 2)`).bind(u.id),
     env.DB.prepare(`INSERT INTO ai_rate (user_id, window_start, units) VALUES (?1, ?2, 1)`).bind(u.id, Date.now()),
+    env.DB.prepare(`INSERT INTO ai_request_ledger (user_id, request_id, day, chat, image, state, created_at) VALUES (?1, 'req-del-0001', '2026-11-20', 1, 0, 'done', ?2)`).bind(u.id, Date.now()),
     env.DB.prepare(`INSERT INTO verification (id, identifier, value, expires_at) VALUES (?1, ?2, ?3, ?4)`).bind(uuid(), `reset-password:tok-${uuid()}`, u.id, Date.now() + 3_600_000),
     env.DB.prepare(`INSERT INTO verification (id, identifier, value, expires_at) VALUES (?1, ?2, ?3, ?4)`).bind(uuid(), u.email, 'otp-123', Date.now() + 3_600_000),
   ]);
@@ -115,7 +117,7 @@ describe('account deletion: complete removal', () => {
     await populate(u);
     const before = await counts(u.id);
     // The fixture really exercised the tables (a zero here would make the "after" assertion meaningless).
-    for (const t of ['user', 'session', 'account', 'profiles', 'user_tools', 'patterns', 'pattern_collections', 'pattern_parts', 'pattern_revisions', 'projects', 'project_progress', 'project_notes', 'project_photos', 'work_sessions', 'favorites', 'tutorial_bookmarks', 'tutorial_timestamps', 'store_interest', 'media_objects', 'ai_user_state', 'ai_usage_daily', 'ai_rate', 'verification'])
+    for (const t of ['user', 'session', 'account', 'profiles', 'user_tools', 'patterns', 'pattern_collections', 'pattern_parts', 'pattern_revisions', 'projects', 'project_progress', 'project_notes', 'project_photos', 'work_sessions', 'favorites', 'tutorial_bookmarks', 'tutorial_timestamps', 'store_interest', 'media_objects', 'ai_user_state', 'ai_usage_daily', 'ai_rate', 'ai_request_ledger', 'verification'])
       expect(before[t], `fixture has no ${t} rows`).toBeGreaterThan(0);
     expect((await r2Keys(u.id)).length).toBeGreaterThanOrEqual(3); // photo + cover + pattern file
 

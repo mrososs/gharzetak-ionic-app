@@ -1,9 +1,10 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { NavController } from '@ionic/angular';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KhayootaFailure, KhayootaService } from '../../core/ai/khayoota.service';
-import type { ChatReplyV1, TranscriptV1 } from '../../core/ai/khayoota.types';
+import type { ChatReplyV1, QuotaV1, TranscriptV1 } from '../../core/ai/khayoota.types';
+import { I18nService } from '../../core/i18n/i18n.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { AppStore } from '../../core/state/app.store';
 import { createProject } from '../../core/state/factories';
@@ -17,12 +18,17 @@ const flush = async () => {
   for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 10));
 };
 
-function fakeKhayoota(over: { ready?: boolean; needsConsent?: boolean; vision?: boolean; extract?: boolean; restricted?: boolean } = {}) {
+const quotaOf = (chatLeft: number | null, imageLeft: number | null, resetAt: string | null = new Date(Date.now() + 5 * 3600_000 + 12 * 60_000).toISOString()): QuotaV1 =>
+  chatLeft === null
+    ? { unlimited: true, timezone: 'Africa/Cairo', chat: { used: 0, limit: null, remaining: null }, image: { used: 0, limit: null, remaining: null }, resetAt: null }
+    : { unlimited: false, timezone: 'Africa/Cairo', chat: { used: 10 - chatLeft, limit: 10, remaining: chatLeft }, image: { used: 5 - (imageLeft ?? 5), limit: 5, remaining: imageLeft ?? 5 }, resetAt };
+
+function fakeKhayoota(over: { ready?: boolean; needsConsent?: boolean; vision?: boolean; extract?: boolean; restricted?: boolean; quota?: QuotaV1 } = {}) {
   const ready = over.ready ?? true;
   const needsConsent = signal(over.needsConsent ?? false);
   return {
     configured: true,
-    status: signal({ v: 1, enabled: true, provider: 'workers-ai', features: { chat: true, vision: !!over.vision, extract: !!over.extract }, consent: { version: 1, accepted: !needsConsent() }, limits: { chat: 20, image: 5, extract: 3 }, remaining: { chat: 20, image: 5, extract: 3 }, available: true, resetAt: '' }),
+    status: signal({ v: 1, enabled: true, provider: 'workers-ai', features: { chat: true, vision: !!over.vision, extract: !!over.extract }, consent: { version: 1, accepted: !needsConsent() }, limits: { chat: 10, image: 5, extract: 5 }, remaining: { chat: 10, image: 5, extract: 5 }, ...(over.quota ? { quota: over.quota } : {}), available: true, resetAt: '' }),
     hosted: signal(ready),
     needsConsent,
     ready: signal(ready && !needsConsent()),
@@ -270,4 +276,114 @@ describe('Khayoota page', () => {
     expect(d.sourceText).toContain('الحلقة السحرية');
     expect(store.patterns().length).toBe(before); // nothing saved until the editor's Save
   });
+
+  describe('daily allowance (10 messages + 5 images; one unlimited account)', () => {
+    const text = () => host.querySelector('.kh-quota')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+
+    // The language is persisted (gz.lang): pin it per test so a switch to English can never leak into the next one.
+    beforeEach(() => localStorage.setItem('gz.lang', 'ar'));
+    afterEach(() => localStorage.setItem('gz.lang', 'ar'));
+
+    it('shows the SERVER numbers in Arabic and in English, and updates after a reply from the server', async () => {
+      await setup(fakeKhayoota({ vision: true }));
+      expect(text()).toContain('الرسائل المتبقية اليوم: 10 من 10');
+      expect(text()).toContain('الصور المتبقية اليوم: 5 من 5');
+      TestBed.inject(I18nService).lang.set('en');
+      detect();
+      expect(text()).toContain('Messages remaining today: 10 of 10');
+      expect(text()).toContain('Images remaining today: 5 of 5');
+      kh.status.update((st) => ({ ...st, quota: quotaOf(9, 3) }));
+      detect();
+      expect(text()).toContain('Messages remaining today: 9 of 10');
+      expect(text()).toContain('Images remaining today: 3 of 5');
+      TestBed.inject(I18nService).lang.set('ar');
+    });
+
+    it('the unlimited account sees "Unlimited usage" and never a countdown or a limit', async () => {
+      await setup(fakeKhayoota({ quota: quotaOf(null, null) }));
+      expect(text()).toBe('استخدام غير محدود');
+      TestBed.inject(I18nService).lang.set('en');
+      detect();
+      expect(text()).toBe('Unlimited usage');
+      expect(host.querySelector('.kh-quota-reset')).toBeNull();
+      TestBed.inject(I18nService).lang.set('ar');
+    });
+
+    it('one user action = ONE idempotency key: a retry of the same message reuses it', async () => {
+      const page = (await setup()) as Page & { retry(): Promise<void> };
+      kh.chat.mockRejectedValueOnce(new KhayootaFailure('ai_timeout')).mockResolvedValue({ requestId: 'r', reply: { v: 1, lang: 'en', text: 'ok', actions: [], degraded: false }, usage: { remaining: { chat: 9, image: 5, extract: 5 }, resetAt: '' } });
+      await page.send('How do I magic ring?');
+      await flush();
+      await page.retry();
+      await flush();
+      const keys = kh.chat.mock.calls.map((c) => c[0].clientRequestId);
+      expect(keys).toHaveLength(2);
+      expect(keys[0]).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+      expect(keys[1]).toBe(keys[0]);
+      await page.send('A different question');
+      await flush();
+      expect(kh.chat.mock.calls[2][0].clientRequestId).not.toBe(keys[0]); // a new action gets a new key
+    });
+
+    it('messages used up: the server is NOT called, the reason and the reset are shown, the labelled offline helper still answers', async () => {
+      const page = await setup(fakeKhayoota({ quota: quotaOf(0, 5) }));
+      await page.send('What is the difference between increase and decrease?');
+      await flush();
+      expect(kh.chat).not.toHaveBeenCalled();
+      const last = page.messages().at(-1)!;
+      expect(last).toMatchObject({ role: 'bot', error: 'ai_quota_exceeded', source: 'offline' });
+      const note = (page as unknown as { errorText(c: string): string }).errorText('ai_quota_exceeded');
+      expect(note).toContain('خلّصتي رسائل النهارده (10)');
+      expect(note).toContain('منتصف الليل بتوقيت القاهرة');
+      TestBed.inject(I18nService).lang.set('en');
+      expect((page as unknown as { errorText(c: string): string }).errorText('ai_quota_exceeded')).toContain("You've used all 10 messages for today");
+      TestBed.inject(I18nService).lang.set('ar');
+    });
+
+    it('3 photos with 2 images left: refused BEFORE sending, the draft and the tray stay, nothing is asked of the server', async () => {
+      const page = await setup(fakeKhayoota({ vision: true, extract: true, quota: quotaOf(8, 2) }));
+      const P = page as unknown as { tray: { set(v: unknown[]): void; (): unknown[] }; input: { set(v: string): void; (): string }; sendDraft(): Promise<void> };
+      const shot = (id: string) => ({ id, dataUrl: `data:image/jpeg;base64,${id}`, image: { mime: 'image/jpeg', data: `/9j/${id}` } });
+      P.tray.set([shot('a'), shot('b'), shot('c')]);
+      P.input.set('look at this');
+      const say = TestBed.inject(UiFeedback).say as unknown as ReturnType<typeof vi.fn>;
+      await P.sendDraft();
+      await flush();
+      expect(kh.chat).not.toHaveBeenCalled();
+      expect(kh.extract).not.toHaveBeenCalled();
+      expect(P.tray()).toHaveLength(3);
+      expect(P.input()).toBe('look at this');
+      expect(say).toHaveBeenCalledTimes(1);
+      expect(say.mock.calls[0][0]).toContain('اخترتي 3 صور بس الباقي النهارده 2');
+      expect(say.mock.calls[0][1]).toContain('You selected 3 photos but only 2 remain today');
+      // two fit: the request goes out and carries both photos
+      P.tray.set([shot('a'), shot('b')]);
+      kh.chat.mockResolvedValue({ requestId: 'r', reply: { v: 1, lang: 'en', text: 'ok', actions: [], degraded: false }, usage: { remaining: { chat: 7, image: 0, extract: 0 }, resetAt: '' } });
+      await P.sendDraft();
+      await flush();
+      expect(kh.chat.mock.calls[0][0].images).toHaveLength(2);
+    });
+
+    it('the tray never offers more photos than today\'s remaining images', async () => {
+      const page = await setup(fakeKhayoota({ vision: true, quota: quotaOf(8, 2) }));
+      expect((page as unknown as { trayCap(): number }).trayCap()).toBe(2);
+      await setup(fakeKhayoota({ vision: true, quota: quotaOf(null, null) }));
+      expect((TestBed.createComponent(AssistantPage).componentInstance as unknown as { trayCap(): number }).trayCap()).toBe(4);
+    });
+
+    it('a server refusal updates the displayed numbers from the server and explains it, without inventing a reply', async () => {
+      const page = await setup(fakeKhayoota({ vision: true }));
+      kh.chat.mockImplementation(async () => {
+        kh.status.update((st) => ({ ...st, quota: quotaOf(0, 5) }));
+        throw new KhayootaFailure('ai_quota_exceeded', { scope: 'user', kind: 'chat', resetAt: new Date(Date.now() + 3600_000).toISOString() });
+      });
+      await page.send('one more question please');
+      await flush();
+      const last = page.messages().at(-1)!;
+      expect(last.error).toBe('ai_quota_exceeded');
+      expect(last.source).toBe('offline'); // labelled: it is NOT an AI reply
+      expect(text()).toContain('الرسائل المتبقية اليوم: 0 من 10');
+    });
+  });
+
 });

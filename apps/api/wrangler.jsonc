@@ -74,8 +74,9 @@
         // Khayoota AI (docs/khayoota-ai/staging-rollout-readiness.md). Master switch OFF: Stage A deploys with it off;
         // Stage B flips ONLY AI_ENABLED after a separate approval. Photos and pattern extraction stay OFF (flags AND
         // zero quotas) until their quality gates pass. There is no third-party fallback provider in the code at all.
-        // Stage B (2026-11-18): ON for the controlled internal test. Only the tester in the AI_ALLOWED_EMAILS Worker SECRET
-        // (verified e-mail) can use it; every other account gets 403 ai_access_restricted. Set "false" to kill it.
+        // SHARED TEST BUILD (2026-11-20): ON for EVERY signed-in account (AI_ALLOWED_USER_IDS "*" below; guests never reach the
+        // Worker), with per-account daily limits (10 messages + 5 images, Africa/Cairo day) enforced in D1. Set "false" to kill it.
+        // Production keeps hosted AI OFF and deny-all: this policy exists on this STAGING Worker only.
         "AI_ENABLED": "true",
         "AI_PROVIDER": "workers-ai",
         "AI_MODEL_CHAT": "@cf/google/gemma-4-26b-a4b-it",
@@ -85,17 +86,19 @@
         // is checked before these flags, so no other account can reach them. Not a release decision (gates not passed).
         "AI_VISION_ENABLED": "true",
         "AI_EXTRACT_ENABLED": "true",
-        // 60 for the single allowlisted tester during real-device QA; the 3,000-Neuron global budget still caps the day.
-        "AI_USER_DAILY_CHAT": "60",
-        "AI_USER_DAILY_IMAGE": "10",
-        "AI_USER_DAILY_EXTRACT": "6",
-        // The free 10,000 Neurons/day are shared by the WHOLE Cloudflare account (every Worker, the dashboard
-        // playground, scripts). 3,000 (~75-95 text chats) leaves 7,000 for anything else on the account.
-        "AI_DAILY_NEURON_BUDGET": "3000",
-        "AI_DAILY_REQUEST_CAP": "100",
+        // Per ACCOUNT per day (Africa/Cairo midnight): 10 hosted messages, 5 images. A message with N photos costs 1 message + N images;
+        // reading a pattern from photos costs 1 message + 1 per photo. The exempt account (AI_UNLIMITED_EMAILS, a Worker SECRET) has none.
+        "AI_USER_DAILY_CHAT": "10",
+        "AI_USER_DAILY_IMAGE": "5",
+        // The free 10,000 Neurons/day are shared by the WHOLE Cloudflare account (every Worker, the dashboard playground, scripts).
+        // 6,000 (~170 text chats, fewer with photos) stays inside the free allocation with 4,000 left for anything else, so this test
+        // build cannot cause paid usage on its own. These two ceilings apply to EVERYONE, the exempt account included.
+        "AI_DAILY_NEURON_BUDGET": "6000",
+        "AI_DAILY_REQUEST_CAP": "250",
         "AI_CONSENT_VERSION": "1",
-        // Controlled internal test: comma-separated staging user ids. EMPTY = nobody (fail-closed); "*" = every account.
-        "AI_ALLOWED_USER_IDS": ""
+        // "*" = every signed-in account (test build). EMPTY = nobody (fail-closed, the production default). The tester e-mail
+        // secret AI_ALLOWED_EMAILS is ignored while "*" is set.
+        "AI_ALLOWED_USER_IDS": "*"
       },
       // Workers AI binding (inactive while AI_ENABLED is "false"). Only takes effect on an approved deploy.
       "ai": { "binding": "AI" }

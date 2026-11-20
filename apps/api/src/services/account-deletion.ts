@@ -100,6 +100,7 @@ export async function purgeAiCounters(db: D1Database, userId: string): Promise<v
   await db.batch([
     db.prepare(`DELETE FROM ai_usage_daily WHERE scope = ?1 AND scope <> '__all__'`).bind(userId),
     db.prepare(`DELETE FROM ai_rate WHERE user_id = ?1`).bind(userId),
+    db.prepare(`DELETE FROM ai_request_ledger WHERE user_id = ?1`).bind(userId),
   ]);
 }
 
@@ -291,6 +292,8 @@ export async function purgeTransient(db: D1Database, now = Date.now()): Promise<
     db.prepare(`DELETE FROM verification WHERE expires_at < ?1`).bind(cutoff),
     db.prepare(`DELETE FROM rate_limit WHERE last_request < ?1`).bind(cutoff),
     db.prepare(`DELETE FROM ai_rate WHERE window_start < ?1`).bind(cutoff),
+    // Idempotency keys only matter for retries of the same action (minutes); keep three days, then drop them.
+    db.prepare(`DELETE FROM ai_request_ledger WHERE created_at < ?1`).bind(now - 3 * 86_400_000),
   ]);
   return res.reduce((n, r) => n + (r.meta?.changes ?? 0), 0);
 }

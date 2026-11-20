@@ -44,6 +44,8 @@ export interface ChatRequestV1 {
   context?: KhayootaContextV1;
   calc?: CalcFact[];
   intent?: 'ask' | 'explain-round' | 'diagnose-photo' | 'next-piece' | 'explain-stitch';
+  /** Idempotency key of ONE user action: a retry reuses it, so the daily allowance is charged once. */
+  clientRequestId?: string;
 }
 
 export type ActionId = 'tracker.openCurrentRound' | 'project.openPart' | 'learn.explainStitch';
@@ -66,9 +68,27 @@ export interface ChatReplyV1 {
   degraded: boolean;
 }
 
+/** One daily allowance. limit/remaining are null for the exempt (unlimited) account. */
+export interface QuotaCounterV1 {
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+}
+
+/** The authoritative daily allowance: 10 messages + 5 images per account per Africa/Cairo day (server config). resetAt is null when unlimited. */
+export interface QuotaV1 {
+  unlimited: boolean;
+  timezone: string;
+  chat: QuotaCounterV1;
+  image: QuotaCounterV1;
+  resetAt: string | null;
+}
+
 export interface UsageV1 {
+  /** v1 numbers (older servers send only these). */
   remaining: { chat: number; image: number; extract: number };
   resetAt: string;
+  quota?: QuotaV1;
 }
 
 export interface ChatResponseV1 {
@@ -113,6 +133,8 @@ export type AiStatusV1 =
       consent: { version: number; accepted: boolean };
       limits: { chat: number; image: number; extract: number };
       remaining: { chat: number; image: number; extract: number };
+      /** Authoritative daily allowance (absent on older servers: derive it with quotaOf()). */
+      quota?: QuotaV1;
       available: boolean;
       resetAt: string;
     };
@@ -131,6 +153,8 @@ export type KhayootaErrorCode =
   | 'ai_timeout'
   | 'ai_bad_output'
   | 'ai_upstream_error'
+  | 'ai_duplicate_request'
+  | 'ai_request_in_progress'
   | 'validation_error'
   | 'network'
   | 'unknown';
