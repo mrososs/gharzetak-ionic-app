@@ -19,7 +19,7 @@ export const PATTERN_READER_TOUR: TourDefinition = {
       side: 'bottom',
       align: 'center',
       ifMissing: 'end',
-      title: { ar: 'اقري دور بدور', en: 'One round at a time' },
+      title: { ar: 'اقري دور بدور', en: 'Round by round' },
       body: { ar: 'الكارت ده بيعرض الدور اللي إنتي فيه وشرحه بكلام بسيط. ومكانك بيتحفظ.', en: 'This card shows your current round with a plain-language explanation. Your place is saved.' },
     },
     {

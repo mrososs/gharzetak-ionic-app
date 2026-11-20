@@ -136,12 +136,25 @@ export class TourCoordinator {
       onCleanup(() => clearTimeout(t));
     });
 
-    // First look at a scope that has no tour state: remember what is already known; recover a tour a crash left "active".
+    // A scope has just finished loading. One effect decides, in this order (the order matters):
+    //  1. Guest → account within one session: the account inherits the guest's tour state, once, if it has none of its own. A guest scope
+    //     loaded at start-up for someone who was already signed in is never "the guest who just signed up" (auth.guest() was false then).
+    //  2. A scope with no tour state yet: remember what is already known (so later deletions never re-offer a tour), and turn a tour a
+    //     crash left "active" into an interruption.
+    let snap: { scope: string; wasGuest: boolean; tour: TourPrefs | undefined } | null = null;
     effect(() => {
       if (this.killed || !this.loadedScope()) return;
       const scope = this.store.scope();
+      const tour = this.store.prefs().tour;
       untracked(() => {
-        if (this.seededFor === scope && this.state.prefs()) return;
+        const prev = snap;
+        snap = { scope, wasGuest: this.auth.guest(), tour };
+        if (prev && prev.wasGuest && prev.scope === 'guest' && scope.startsWith('user:') && !tour && prev.tour) {
+          this.seededFor = scope;
+          void this.state.adopt(prev.tour);
+          return;
+        }
+        if (this.seededFor === scope && tour) return;
         this.seededFor = scope;
         void this.state.ensureSeeded(this.evidence(), ALL_TOURS);
       });
@@ -158,35 +171,22 @@ export class TourCoordinator {
       });
     });
 
-    // Getting Started: remember tasks that are true now (so Undo or a delete never un-ticks them), and note completion once.
+    // Getting Started: remember tasks that are true now (so Undo or a delete never un-ticks them), and note completion once. This works
+    // from the stored state itself, not from the card's view (which is, by design, hidden once everything is done and acknowledged).
     effect(() => {
-      const v = this.gettingStarted();
+      if (this.killed || !this.loadedScope()) return;
       const prefs = this.state.prefs();
-      if (v.state === 'hidden' || !prefs?.armed) return;
+      if (!prefs?.armed || prefs.gettingStarted?.hiddenAt) return;
+      const input = { milestones: prefs.milestones, projects: this.store.projects(), chat: this.store.chat() };
       untracked(() => {
-        const input = { milestones: prefs.milestones, projects: this.store.projects(), chat: this.store.chat() };
         for (const t of newlyDone(input)) {
           this.sink.record({ name: 'gs_task_done', task: t });
           void this.state.mark(milestoneOf(t));
         }
-        if (v.doneCount === v.total && !prefs.gettingStarted?.completedAt) {
+        if (gsDoneCount(taskDone(input)) === GS_TASKS.length && !prefs.gettingStarted?.completedAt) {
           this.sink.record({ name: 'gs_completed' });
           void this.state.completeGettingStarted();
         }
-      });
-    });
-
-    // Guest → account within one session: the account inherits the guest's tour state, once, if it has none of its own. A guest scope
-    // loaded at start-up for someone who was already signed in is never "the guest who just signed up" (auth.guest() was false).
-    let snap: { scope: string; tour: TourPrefs | undefined; wasGuest: boolean } | null = null;
-    effect(() => {
-      if (this.killed || !this.loadedScope()) return;
-      const scope = this.store.scope();
-      const tour = this.store.prefs().tour;
-      untracked(() => {
-        const prev = snap;
-        snap = { scope, tour, wasGuest: this.auth.guest() };
-        if (prev && prev.wasGuest && prev.scope === 'guest' && scope.startsWith('user:') && !tour && prev.tour) void this.state.adopt(prev.tour);
       });
     });
 
