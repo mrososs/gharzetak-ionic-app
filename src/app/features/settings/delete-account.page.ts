@@ -56,14 +56,14 @@ type Methods = { readonly password: boolean; readonly google: boolean };
           <p class="gz-sm m-0 mt-2">{{ c().intro }}</p>
 
           <div class="gz-sec"><h2 class="gz-h3 gz-hd">{{ c().deletesTitle }}</h2></div>
-          <ul class="gz-sm m-0 flex flex-col gap-1.5 ps-5" data-testid="delete-list">
+          <ul class="gz-sm m-0 flex list-disc flex-col gap-1.5 ps-5" data-testid="delete-list">
             @for (line of c().deletes; track line) {
               <li>{{ line }}</li>
             }
           </ul>
 
           <div class="gz-sec"><h2 class="gz-h3 gz-hd">{{ c().exceptionsTitle }}</h2></div>
-          <ul class="gz-sm m-0 flex flex-col gap-1.5 ps-5" data-testid="exceptions-list">
+          <ul class="gz-sm m-0 flex list-disc flex-col gap-1.5 ps-5" data-testid="exceptions-list">
             @for (line of c().exceptions; track line) {
               <li>{{ line }}</li>
             }
