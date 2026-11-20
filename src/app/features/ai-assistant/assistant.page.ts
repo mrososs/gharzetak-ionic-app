@@ -26,6 +26,9 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
 import { ImportDraftService } from '../patterns/import-draft.service';
 import { KhayootaReplyComponent } from './khayoota-reply.component';
+import type { TourId } from '../../core/tour/tour-ids';
+import { TourOfferComponent } from '../../shared/ui/tour/tour-offer.component';
+import { TourTargetDirective } from '../../shared/ui/tour/tour-target.directive';
 
 type PhotoPurpose = 'diagnose' | 'pattern';
 /** Base64 cap per image (matches the server contract). */
@@ -58,15 +61,16 @@ function readCtxOpen(): boolean {
 
 @Component({
   selector: 'gz-assistant',
-  imports: [IonHeader, IonContent, IonFooter, IconComponent, PhotoComponent, SheetComponent, KhayootaReplyComponent],
+  imports: [IonHeader, IonContent, IonFooter, IconComponent, PhotoComponent, SheetComponent, KhayootaReplyComponent, TourOfferComponent, TourTargetDirective],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top kh-top" style="padding-top: calc(18px + var(--gz-safe-top))">
         <div class="gz-tile t-lav" style="width: 46px; height: 46px"><svg gzIcon="sparkles" /></div>
         <div class="flex min-w-0 flex-1 flex-col"><h1 class="gz-hd m-0" style="font-size: 18px">{{ t().aiTitle }}</h1><span class="gz-xs gz-mute truncate kh-sub">{{ t().aiSub }}</span></div>
         <span class="gz-badge" [class.rose]="mode() === 'offline'" [class.sage]="mode() === 'ai'" [class.peach]="mode() === 'consent'">{{ badge() }}</span>
-        <button type="button" class="gz-icb flat" (click)="sheet.set('menu')" [attr.aria-label]="i18n.q('خيارات خيوطة', 'Khayoota options')"><svg gzIcon="sliders" /></button>
+        <button type="button" class="gz-icb flat" [gzTour]="'khayoota.menu'" (click)="sheet.set('menu')" [attr.aria-label]="i18n.q('خيارات خيوطة', 'Khayoota options')"><svg gzIcon="sliders" /></button>
       </div>
+      <gz-tour-offer [tours]="tourOffers" style="padding: 0 20px" />
       <div class="kh-ctx-wrap" style="padding: 0 20px 8px">
         @if (!ctxOpen()) {
           <!-- Collapsed: one slim row, so the conversation gets the screen. Tap to open the card again. -->
@@ -166,7 +170,7 @@ function readCtxOpen(): boolean {
             }
           </div>
         }
-        <div class="kh-composer">
+        <div class="kh-composer" [gzTour]="'khayoota.composer'">
           <button type="button" class="gz-icb flat" (click)="photoTap()" [attr.aria-label]="t().attachPhoto"><svg gzIcon="camera" /></button>
           <input #file class="gz-sr" type="file" accept="image/*" multiple (change)="onPhoto($event)" />
           <input #cam class="gz-sr" type="file" accept="image/*" capture="environment" (change)="onPhoto($event)" />
@@ -186,7 +190,7 @@ function readCtxOpen(): boolean {
           <button type="button" class="gz-icb pur" (click)="sendDraft()" [disabled]="typing() || (!input().trim() && !tray().length)" [attr.aria-label]="t().send"><svg gzIcon="send" /></button>
         </div>
         <!-- One compact status line from the real backend/provider state; details live in the options sheet. -->
-        <button type="button" class="kh-status" [attr.data-mode]="mode()" (click)="sheet.set('menu')" [attr.aria-label]="statusLine() + ' — ' + i18n.q('التفاصيل', 'details')">
+        <button type="button" class="kh-status" [gzTour]="'khayoota.status'" [attr.data-mode]="mode()" (click)="sheet.set('menu')" [attr.aria-label]="statusLine() + ' — ' + i18n.q('التفاصيل', 'details')">
           <span class="kh-dot" aria-hidden="true"></span><span class="truncate">{{ statusLine() }}</span><svg gzIcon="info" size="s" aria-hidden="true" />
         </button>
       </div>
@@ -342,6 +346,8 @@ export class AssistantPage {
 
   /** Project card open/collapsed — remembered on this device (a convenience only; storage may be unavailable). */
   protected readonly ctxOpen = signal(readCtxOpen());
+  /** The Khayoota tour is highlight-only; the page just says it exists. Nothing here ever sends a message. */
+  protected readonly tourOffers: readonly TourId[] = ['khayoota'];
   protected toggleCtx(): void {
     const open = !this.ctxOpen();
     this.ctxOpen.set(open);

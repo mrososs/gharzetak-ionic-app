@@ -15,13 +15,16 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
 import { DurationInputComponent } from '../../shared/ui/inputs/duration-input.component';
 import { StepperComponent } from '../../shared/ui/inputs/stepper.component';
+import type { TourId } from '../../core/tour/tour-ids';
+import { TourOfferComponent } from '../../shared/ui/tour/tour-offer.component';
+import { TourTargetDirective } from '../../shared/ui/tour/tour-target.directive';
 
 type Source = { kind: 'none' } | { kind: 'collection'; id: string } | { kind: 'pattern'; id: string };
 
 /** GZ-S13 — create a project: free-form, from a saved pattern, or from a multi-part collection. Optional estimated time. */
 @Component({
   selector: 'gz-new-project',
-  imports: [IonHeader, IonContent, IonInput, ReactiveFormsModule, IconComponent, PhotoComponent, StepperComponent, DurationInputComponent],
+  imports: [IonHeader, IonContent, IonInput, ReactiveFormsModule, IconComponent, PhotoComponent, StepperComponent, DurationInputComponent, TourOfferComponent, TourTargetDirective],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top">
@@ -32,8 +35,9 @@ type Source = { kind: 'none' } | { kind: 'collection'; id: string } | { kind: 'p
     </ion-header>
     <ion-content class="gz-scroll">
       <form class="gz-pad" [formGroup]="form" (ngSubmit)="save()" novalidate>
+        <gz-tour-offer [tours]="tourOffers()" />
         <label class="gz-lbl" for="np-name">{{ t().projName }}</label>
-        <div class="gz-in" [class.invalid]="nameErr()">
+        <div class="gz-in" [gzTour]="'project-new.name'" [class.invalid]="nameErr()">
           <svg gzIcon="yarn" />
           <ion-input id="np-name" formControlName="name" maxlength="120" [placeholder]="t().projNamePh" [attr.aria-label]="t().projName" />
         </div>
@@ -42,6 +46,7 @@ type Source = { kind: 'none' } | { kind: 'collection'; id: string } | { kind: 'p
         }
 
         @if (collections().length || patterns().length) {
+          <div [gzTour]="'project-new.source'">
           <span class="gz-lbl">{{ i18n.q('ابدئي من باترون محفوظ (اختياري)', 'Start from a saved pattern (optional)') }}</span>
           <div class="gz-hs" style="padding-block: 0">
             <button type="button" class="gz-chip sm" [class.on]="source().kind === 'none'" [attr.aria-pressed]="source().kind === 'none'" (click)="choose({ kind: 'none' })">{{ i18n.q('بدون', 'None') }}</button>
@@ -51,6 +56,7 @@ type Source = { kind: 'none' } | { kind: 'collection'; id: string } | { kind: 'p
             @for (p of patterns(); track p.id) {
               <button type="button" class="gz-chip sm" [class.on]="isSel('pattern', p.id)" [attr.aria-pressed]="isSel('pattern', p.id)" (click)="choose({ kind: 'pattern', id: p.id })">{{ store.patternName(p) }}</button>
             }
+          </div>
           </div>
           @if (selCollection(); as c) {
             <div class="gz-note lav mt-2"><svg gzIcon="info" size="s" /><span>{{ i18n.q('هيتعمل عدّاد مستقل لكل قطعة: ' + pieces() + ' قطعة من ' + c.parts.length + ' أجزاء. تقدّم قطعة مش بيأثر على التانية.', 'Every piece gets its own counter: ' + pieces() + ' pieces from ' + c.parts.length + ' parts. Progress on one piece never affects another.') }}</span></div>
@@ -129,6 +135,8 @@ export class NewProjectPage implements HasUnsavedChanges, ViewWillEnter {
 
   /** `?collection=<id>` (from a collection's "Start a project") preselects that collection. */
   readonly collection = input<string>();
+  /** Not offered when the page was opened from a multi-part pattern: that person has already chosen where to start. */
+  protected readonly tourOffers = computed<readonly TourId[]>(() => (this.collection() ? [] : ['project-create']));
 
   protected readonly t = this.i18n.t;
   protected readonly cats = CAT_IDS;

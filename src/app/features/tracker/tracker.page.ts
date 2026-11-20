@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { IonContent, IonHeader, NavController } from '@ionic/angular';
 import { ACTN } from '../../core/data/catalog';
 import { IconName } from '../../core/data/icons';
@@ -40,6 +40,11 @@ import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { StepperComponent } from '../../shared/ui/inputs/stepper.component';
 import { RingComponent } from '../../shared/ui/progress/ring.component';
+import { TourCoordinator } from '../../core/tour/tour-coordinator.service';
+import type { TourId } from '../../core/tour/tour-ids';
+import type { TrackerLayout } from '../../core/tour/tour.types';
+import { TourOfferComponent } from '../../shared/ui/tour/tour-offer.component';
+import { TourTargetDirective } from '../../shared/ui/tour/tour-target.directive';
 
 /** Minimum gap between two counted taps — swallows accidental double-fires, not real fast counting. */
 const TAP_GUARD_MS = 120;
@@ -49,7 +54,7 @@ const fmtHMS = (s: number) => Math.floor(s / 3600) + ':' + pad2(Math.floor((s % 
 /** GZ-S14 simple · GZ-S15 pattern-aware · GZ-T03 round complete · GZ-T05 settings · GZ-T06 reset — and, for multi-part projects, the part switcher. */
 @Component({
   selector: 'gz-tracker',
-  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent, JoyBannerComponent, JoyMilestoneComponent],
+  imports: [IonHeader, IonContent, IconComponent, RingComponent, StepperComponent, SheetComponent, JoyBannerComponent, JoyMilestoneComponent, TourOfferComponent, TourTargetDirective],
   templateUrl: './tracker.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -79,6 +84,34 @@ export class TrackerPage {
   protected readonly tr = computed<TrackerLike | null>(() => this.view()?.tracker ?? null);
   protected readonly inst = computed<PartInstance | null>(() => this.view()?.instance ?? null);
   protected readonly isPattern = computed(() => this.tr()?.mode === 'pattern');
+
+  /* ---------------- product tour ---------------- */
+  private readonly tour = inject(TourCoordinator);
+  /**
+   * Which of this page's layouts is on screen, as the tour system needs to know it. Pattern mode counts only when the pattern is really
+   * usable (the page then shows the fallback cards, which have nothing to tour).
+   */
+  protected readonly tourLayout = computed<TrackerLayout>(() => {
+    if (!this.p()) return 'none';
+    const parts = !!this.inst();
+    if (this.isPattern()) return this.pt() ? (parts ? 'parts-pattern' : 'pattern') : 'none';
+    return parts ? 'parts-simple' : 'simple';
+  });
+  /** Candidate tours, most specific first; a multi-part project gets its piece tour after the counter tour. */
+  protected readonly tourOffers = computed<readonly TourId[]>(() => {
+    switch (this.tourLayout()) {
+      case 'simple': return ['tracker-simple'];
+      case 'pattern': return ['tracker-pattern'];
+      case 'parts-simple': return ['tracker-simple', 'tracker-parts'];
+      case 'parts-pattern': return ['tracker-pattern', 'tracker-parts'];
+      default: return [];
+    }
+  });
+
+  constructor() {
+    effect(() => this.tour.setTrackerLayout(this.tourLayout()));
+    inject(DestroyRef).onDestroy(() => this.tour.setTrackerLayout('none'));
+  }
 
   /* ---------------- multi-part ---------------- */
   protected readonly completion = computed(() => {
