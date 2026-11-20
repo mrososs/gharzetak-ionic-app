@@ -18,7 +18,11 @@
   overflow-y: auto;
   box-sizing: border-box;
   overscroll-behavior: contain;
+  // Scrolling stays possible for extreme text sizes, but no scrollbar is ever drawn over the dialog.
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.driver-popover.gz-tour::-webkit-scrollbar { display: none; width: 0; height: 0; }
 html[dir='ltr'] .driver-popover.gz-tour { font-family: var(--gz-font-latin); }
 
 .gz-tour .driver-popover-title {
@@ -109,7 +113,9 @@ html[dir='ltr'] .gz-tour .driver-popover-description { line-height: var(--gz-lh-
 }
 .gz-tour .gz-tour-hint::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--gz-pink); }
 
-.gz-tour .driver-popover-arrow { border-width: 8px; }
+// No arrow: the cut-out already shows what the step is about. The engine places the arrow OUTSIDE the box, so inside a scrolling popover it
+// forced a 16 px overflow and a scrollbar (seen on the device).
+.gz-tour .driver-popover-arrow { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .driver-popover.gz-tour, .driver-overlay { transition: none !important; animation: none !important; }

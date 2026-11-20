@@ -68,6 +68,17 @@ for (const lang of LANGS) {
       }
     });
 
+    test('the popover never shows a scrollbar or scrolls when its content fits (no overflow from the arrow or anything else)', async ({ page }) => {
+      await page.locator('[data-gs-start]').click();
+      for (const id of WELCOME_STEPS) {
+        await waitForStep(page, id);
+        const m = await popover(page).evaluate((p) => ({ over: p.scrollHeight - p.clientHeight, bar: p.offsetWidth - p.clientWidth - (parseFloat(getComputedStyle(p).borderLeftWidth) + parseFloat(getComputedStyle(p).borderRightWidth)) }));
+        expect(m.over, `${id}: content taller than the box`).toBeLessThanOrEqual(0);
+        expect(m.bar, `${id}: a scrollbar takes width`).toBeLessThanOrEqual(0);
+        if (id !== WELCOME_STEPS[WELCOME_STEPS.length - 1]) await nextButton(page).click();
+      }
+    });
+
     test('Back goes to the previous step; Skip ends it cleanly and nothing restarts after a reload', async ({ page }) => {
       await page.locator('[data-gs-start]').click();
       await waitForStep(page, 'welcome.patterns');
