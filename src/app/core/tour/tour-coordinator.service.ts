@@ -492,7 +492,10 @@ export class TourCoordinator {
   /** Entry event: a guest started, an account was created, a Google account is new. From now on the welcome tour may be offered. */
   async arm(): Promise<void> {
     if (this.killed) return;
-    await this.store.whenScopeLoaded(this.auth.scope());
+    // A slow device may take a while to load the scope. Writing before it has loaded would be overwritten by the load itself and the
+    // invitation would silently never appear, so wait generously and never write into a scope that is not the loaded one.
+    await this.store.whenScopeLoaded(this.auth.scope(), 60_000);
+    if (!this.loadedScope()) return;
     await this.state.arm(this.evidence());
   }
 
@@ -502,7 +505,8 @@ export class TourCoordinator {
    */
   async armIfFreshAccount(): Promise<void> {
     if (this.killed) return;
-    await this.store.whenScopeLoaded(this.auth.scope());
+    await this.store.whenScopeLoaded(this.auth.scope(), 60_000);
+    if (!this.loadedScope()) return;
     await this.waitForFirstSync(8000);
     if (this.store.profile().onboarded) return;
     await this.state.arm(this.evidence());

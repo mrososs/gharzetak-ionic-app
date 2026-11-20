@@ -177,22 +177,40 @@ test.describe('Settings → Tours & help', () => {
     await expect(page.locator('[data-task="project"]')).toBeEnabled();
   });
 
-  test('completing all five real actions shows the completion message once', async ({ page }) => {
+  test('completing all five REAL actions ticks each task in turn, shows the completion message once, and makes no AI request', async ({ page, baseURL }) => {
+    const traffic = watchTraffic(page, baseURL!);
+    const milestone = (id: string) => async () => !!(await storedTour(page))?.prefs?.tour?.milestones?.[id];
     await page.locator('[data-gs-notnow]').click();
-    await page.goto(`/tabs/home/patterns/${SAMPLE}`);
-    await page.waitForTimeout(400);
-    await createProjectViaUi(page, 'QA gs project');
-    await page.goto('/tabs/tracker');
-    await page.locator('[data-tour="tracker.tap"]').click({ timeout: 8000 }).catch(() => undefined);
-    await page.goto('/tabs/learn');
-    await page.waitForTimeout(300);
-    const first = page.locator('a, ion-item, [role="button"], button').filter({ hasText: /./ }).first();
-    await first.waitFor({ state: 'attached' });
+    const done = async () => page.locator('[data-task].done').count();
     await page.goto('/tabs/home');
-    await expect(card(page)).toBeVisible();
-    // pattern + project are done; tracker/learn/Khayoota are ticked only by their real actions
-    await expect(page.locator('[data-task="pattern"]')).toBeDisabled();
-    await expect(page.locator('[data-task="project"]')).toBeDisabled();
+    await expect(page.locator('[data-task]')).toHaveCount(5);
+    expect(await done()).toBe(0);
+
+    await page.goto(`/tabs/home/patterns/${SAMPLE}`); // 1 · open a pattern
+    await expect.poll(milestone('patternOpened')).toBe(true);
+    await createProjectViaUi(page, 'QA gs project'); // 2 · create a project
+    await expect.poll(async () => (await storedAll(page, 'projects')).length).toBe(1);
+    await page.goto('/tabs/tracker'); // 3 · use the tracker (a real tap)
+    await page.locator('[data-tour="tracker.tap"]').click();
+    await expect.poll(async () => (await storedAll<any>(page, 'projects'))[0]?.tracker?.simple?.count).toBe(1);
+    await page.goto('/tabs/learn/magic-ring'); // 4 · open a tutorial
+    await expect.poll(milestone('tutorialOpened')).toBe(true);
+    await page.goto('/tabs/home');
+    await expect(card(page)).toHaveAttribute('data-gs', 'list');
+    expect(await done()).toBe(4); // four ticked by real actions, one left
     await expect(page.locator('[data-task="khayoota"]')).toBeEnabled();
+
+    await page.goto('/tabs/assistant'); // 5 · ask Khayoota (a guest gets the local offline helper: nothing is sent anywhere)
+    await page.locator('.kh-field textarea').fill('How do I make a magic ring?');
+    await page.locator('.kh-composer button.pur').click();
+    await expect.poll(async () => ((await storedAll<any>(page, 'docs'))[0]?.chat ?? []).filter((m: any) => m.role === 'user').length).toBeGreaterThan(0);
+    await tabButton(page, 'home').click(); // same launch: the completion message is shown where it was earned
+    await expect(card(page)).toHaveAttribute('data-gs', 'done'); // the completion message
+    await expect(page.locator('[data-task]')).toHaveCount(0);
+    await page.reload();
+    await page.waitForTimeout(800);
+    await expect(card(page)).toHaveCount(0); // shown once: gone on the next launch
+    expect(traffic.aiCalls()).toEqual([]);
+    expect(traffic.external()).toEqual([]);
   });
 });
