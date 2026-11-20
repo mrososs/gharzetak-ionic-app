@@ -4,6 +4,7 @@ import { resolveAction, type ResolvedAction } from '../../core/ai/action-registr
 import { AssistantService } from '../../core/ai/assistant.service';
 import { calcFacts, messageLang } from '../../core/ai/calc';
 import { buildKhayootaContext } from '../../core/ai/khayoota-context';
+import { blockedBy, photoRoom, quotaLines, quotaOf, resetLine } from '../../core/ai/khayoota-quota';
 import { KhayootaFailure, KhayootaService } from '../../core/ai/khayoota.service';
 import type { InlineImage, KhayootaErrorCode } from '../../core/ai/khayoota.types';
 import { previewFromTranscript, type PatternPreview } from '../../core/ai/transcript-draft';
@@ -144,7 +145,7 @@ function readCtxOpen(): boolean {
              composer keeps the space. Chips stay single-line; long ones end in an ellipsis and keep a full label. -->
         @if (tray().length) {
           <div class="kh-tray" role="group" [attr.aria-label]="i18n.q('الصور المرفقة', 'Attached photos')">
-            <span class="gz-badge" [class.peach]="trayPurpose() === 'pattern'">{{ trayPurpose() === 'pattern' ? i18n.q('قراية باترون', 'Read pattern') : i18n.q('سؤال عن شغلي', 'About my work') }} · {{ tray().length }}/{{ maxImages }}</span>
+            <span class="gz-badge" [class.peach]="trayPurpose() === 'pattern'">{{ trayPurpose() === 'pattern' ? i18n.q('قراية باترون', 'Read pattern') : i18n.q('سؤال عن شغلي', 'About my work') }} · {{ tray().length }}/{{ trayCap() }}</span>
             <div class="kh-tray-row">
               @for (a of tray(); track a.id; let i = $index) {
                 <div class="kh-tray-item">
@@ -156,7 +157,7 @@ function readCtxOpen(): boolean {
                   }
                 </div>
               }
-              @if (tray().length < maxImages) {
+              @if (tray().length < trayCap()) {
                 <button type="button" class="kh-tray-add" (click)="addMore()" [attr.aria-label]="i18n.q('ضيفي صور', 'Add photos')"><svg gzIcon="plus" /></button>
                 <button type="button" class="kh-tray-add" (click)="shootPhoto()" [attr.aria-label]="i18n.q('صوّري', 'Take a photo')"><svg gzIcon="camera" /></button>
               }
@@ -189,6 +190,17 @@ function readCtxOpen(): boolean {
           </label>
           <button type="button" class="gz-icb pur" (click)="sendDraft()" [disabled]="typing() || (!input().trim() && !tray().length)" [attr.aria-label]="t().send"><svg gzIcon="send" /></button>
         </div>
+        <!-- The daily allowance, straight from the server's numbers (never computed on the phone). -->
+        @if (kh.ready() && quotaView(); as qv) {
+          <div class="kh-quota" [class.is-out]="qv.out" role="status" aria-live="polite">
+            @if (qv.unlimited) {
+              <span>{{ qv.chat }}</span>
+            } @else {
+              <span>{{ qv.chat }}</span><span>{{ qv.image }}</span>
+            }
+            @if (qv.out && resetNote(); as rn) { <span class="kh-quota-reset">{{ rn }}</span> }
+          </div>
+        }
         <!-- One compact status line from the real backend/provider state; details live in the options sheet. -->
         <button type="button" class="kh-status" [gzTour]="'khayoota.status'" [attr.data-mode]="mode()" (click)="sheet.set('menu')" [attr.aria-label]="statusLine() + ' — ' + i18n.q('التفاصيل', 'details')">
           <span class="kh-dot" aria-hidden="true"></span><span class="truncate">{{ statusLine() }}</span><svg gzIcon="info" size="s" aria-hidden="true" />
@@ -226,9 +238,13 @@ function readCtxOpen(): boolean {
     <gz-sheet [open]="sheet() === 'menu'" [title]="t().aiTitle" (closed)="sheet.set(null)">
       <div class="flex flex-col gap-2">
         <div class="gz-note lav" role="status"><div class="flex-1">{{ statusDetail() }}</div></div>
-        @if (kh.hosted() && kh.status(); as s) {
-          @if (s.enabled) {
-            <p class="gz-sm m-0">{{ i18n.q('الباقي النهارده', 'Left today') }}: {{ s.remaining.chat }} {{ i18n.q('سؤال', 'questions') }} · {{ s.remaining.image }} {{ i18n.q('صورة', 'photos') }} · {{ s.remaining.extract }} {{ i18n.q('باترون', 'patterns') }}</p>
+        @if (kh.hosted() && quotaView(); as qv) {
+          @if (qv.unlimited) {
+            <p class="gz-sm m-0">{{ qv.chat }}</p>
+          } @else {
+            <p class="gz-sm m-0">{{ qv.chat }}</p>
+            <p class="gz-sm m-0">{{ qv.image }}</p>
+            @if (resetNote(); as rn) { <p class="gz-xs gz-mute m-0">{{ rn }}</p> }
           }
         }
         <button type="button" class="gz-btn3" (click)="clearChat()"><svg gzIcon="x" size="s" />{{ i18n.q('مسح المحادثة', 'Clear conversation') }}</button>
@@ -249,6 +265,9 @@ function readCtxOpen(): boolean {
         border: 1.5px solid var(--gz-border); border-radius: 23px; background: var(--gz-surface); padding: 0 14px;
       }
       .kh-field:focus-within { border-color: var(--gz-primary); }
+      .kh-quota { display: flex; flex-wrap: wrap; gap: 2px 14px; padding: 6px var(--gz-screen-pad, 20px) 0; font-size: 12px; line-height: 1.45; color: var(--gz-text-3); }
+      .kh-quota.is-out { color: var(--gz-pink-ink); font-weight: 700; }
+      .kh-quota-reset { flex-basis: 100%; font-weight: 400; }
       .kh-field textarea {
         flex: 1; min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; resize: none; font: inherit;
         font-size: 15px; line-height: 1.45; color: var(--gz-text); padding: 11px 0; max-height: 7.5em; overflow-y: auto;
@@ -341,6 +360,15 @@ export class AssistantPage {
 
   /** Photos waiting to be sent together (memory only), their order, and what they are for. */
   protected readonly maxImages = MAX_IMAGES;
+  /** The server's daily allowance (null while unknown / not hosted). */
+  protected readonly quota = computed(() => quotaOf(this.kh.status()));
+  protected readonly quotaView = computed(() => {
+    const q = this.quota();
+    return q ? quotaLines(q, this.i18n.isAr()) : null;
+  });
+  protected readonly resetNote = computed(() => resetLine(this.quota(), this.i18n.isAr()));
+  /** Photos that may still be attached to the next message (per-message maximum, never more than today's remaining images). */
+  protected readonly trayCap = computed(() => (this.kh.ready() ? photoRoom(this.quota(), MAX_IMAGES) : MAX_IMAGES));
   protected readonly tray = signal<readonly Shot[]>([]);
   protected readonly trayPurpose = signal<PhotoPurpose>('diagnose');
 
@@ -364,7 +392,7 @@ export class AssistantPage {
   protected readonly consentBusy = signal(false);
   protected readonly useProject = signal(true);
   protected readonly previews = signal<Record<string, PatternPreview>>({});
-  protected readonly lastQuestion = signal<{ text: string; images?: InlineImage[]; img?: string; purpose?: PhotoPurpose } | null>(null);
+  protected readonly lastQuestion = signal<{ text: string; images?: InlineImage[]; img?: string; purpose?: PhotoPurpose; requestId?: string } | null>(null);
   private pendingAfterConsent: (() => void) | null = null;
   /** The question waiting behind the consent sheet (typed OR tapped from a suggestion chip). */
   private pendingQuestion: { text: string; hadImage: boolean } | null = null;
@@ -447,10 +475,9 @@ export class AssistantPage {
   /** One short line under the composer, from the real backend/provider state (never "offline" just because consent is missing). */
   protected readonly statusLine = computed(() => {
     const q = (ar: string, en: string) => this.i18n.q(ar, en);
-    const s = this.kh.status();
     switch (this.mode()) {
       case 'ai':
-        return s && s.enabled ? `${q('خيوطة متصلة', 'Khayoota is connected')} · ${q('الباقي النهارده', 'left today')} ${s.remaining.chat}` : q('خيوطة متصلة', 'Khayoota is connected');
+        return q('خيوطة متصلة', 'Khayoota is connected');
       case 'demo':
         return q('وضع تجريبي — ردود ثابتة', 'Demo mode — fixed replies');
       case 'consent':
@@ -497,30 +524,54 @@ export class AssistantPage {
     const images = shots.length ? shots.map((s) => s.image) : undefined;
     const urls = shots.map((s) => s.dataUrl);
     await this.push({ id: uuid(), role: 'user', text: clean, img: urls[0], ...(urls.length > 1 ? { imgs: urls } : {}) });
-    this.lastQuestion.set({ text: clean, images, img: urls[0], purpose });
-    await this.answer(clean, images, purpose);
+    // ONE key per user action: a retry of this same message reuses it, so the server charges the daily allowance once.
+    const requestId = uuid();
+    this.lastQuestion.set({ text: clean, images, img: urls[0], purpose, requestId });
+    await this.answer(clean, images, purpose, requestId);
   }
 
   /** Composer Send / Enter: the typed text plus every photo in the tray, as ONE message. */
   protected async sendDraft(): Promise<void> {
     const shots = this.tray();
     if (!this.input().trim() && !shots.length) return;
+    // Photos that do not fit today's allowance are refused HERE (draft and tray stay as they are): nothing is sent.
+    if (await this.blockedBeforeSend(shots.length)) return;
     this.tray.set([]);
     await this.send(this.input(), shots, this.trayPurpose());
   }
 
   protected async retry(): Promise<void> {
     const q = this.lastQuestion();
-    if (q && !this.typing()) await this.answer(q.text, q.images, q.purpose ?? 'diagnose');
+    if (q && !this.typing()) await this.answer(q.text, q.images, q.purpose ?? 'diagnose', q.requestId);
   }
 
-  private async answer(text: string, images: InlineImage[] | undefined, purpose: PhotoPurpose): Promise<void> {
+  /** True (after telling the user why) when a send of `photos` photos cannot fit today's allowance; nothing is sent in that case. */
+  private async blockedBeforeSend(photos: number): Promise<boolean> {
+    if (!photos || !this.kh.ready()) return false;
+    const q = this.quota();
+    const b = blockedBy(q, photos);
+    if (!b) return false;
+    const left = q?.image.remaining ?? 0;
+    const reset = resetLine(q, true);
+    const resetEn = resetLine(q, false);
+    if (b === 'chat') await this.ui.say(`خلّصتي رسائل النهارده، فمقدرش أبعت الصور دلوقتي. ${reset ?? ''}`.trim(), `You've used all of today's messages, so photos can't be sent now. ${resetEn ?? ''}`.trim());
+    else if (left < 1) await this.ui.say(`خلّصتي صور النهارده (${q?.image.limit ?? 0}). ${reset ?? ''}`.trim(), `You've used all ${q?.image.limit ?? 0} photos for today. ${resetEn ?? ''}`.trim());
+    else await this.ui.say(`اخترتي ${photos} صور بس الباقي النهارده ${left}. شيلي ${photos - left} صورة أو استني التجديد. ${reset ?? ''}`.trim(), `You selected ${photos} photos but only ${left} remain today. Remove ${photos - left} or wait for the allowance to renew. ${resetEn ?? ''}`.trim());
+    return true;
+  }
+
+  private async answer(text: string, images: InlineImage[] | undefined, purpose: PhotoPurpose, requestId?: string): Promise<void> {
+    // Messages used up: do not even call the server. The labelled offline helper answers text questions (it costs no allowance).
+    if (this.kh.ready() && blockedBy(this.quota(), images?.length ?? 0) === 'chat') {
+      await this.failed(new KhayootaFailure('ai_quota_exceeded', { scope: 'user', kind: 'chat' }), text, !!images?.length);
+      return;
+    }
     this.typing.set(true);
     this.busyText.set(images?.length && purpose === 'pattern' ? this.i18n.q('خيوطة بتقرا الصورة…', 'Khayoota is reading the photo…') : this.t().aiThinking);
     try {
       if (this.kh.ready() && (!images?.length || (purpose === 'pattern' ? this.kh.features().extract : this.kh.features().vision))) {
-        if (images?.length && purpose === 'pattern') await this.extractPattern(images, this.lastQuestion()?.img);
-        else await this.hostedChat(text, images);
+        if (images?.length && purpose === 'pattern') await this.extractPattern(images, this.lastQuestion()?.img, requestId);
+        else await this.hostedChat(text, images, requestId);
       } else {
         await this.offline(text, !!images?.length);
       }
@@ -529,7 +580,7 @@ export class AssistantPage {
     }
   }
 
-  private async hostedChat(text: string, images?: InlineImage[]): Promise<void> {
+  private async hostedChat(text: string, images?: InlineImage[], requestId?: string): Promise<void> {
     const p = this.useProject() ? this.activeProject() : null;
     const history = this.store
       .chat()
@@ -545,6 +596,7 @@ export class AssistantPage {
         ...(history.length ? { history } : {}),
         ...(p ? { context: buildKhayootaContext(this.store, p, text) } : {}),
         ...(calc.length ? { calc } : {}),
+        ...(requestId ? { clientRequestId: requestId } : {}),
       });
       const r = res.reply;
       await this.push({
@@ -563,9 +615,9 @@ export class AssistantPage {
     }
   }
 
-  private async extractPattern(images: InlineImage[], thumbUrl?: string): Promise<void> {
+  private async extractPattern(images: InlineImage[], thumbUrl?: string, requestId?: string): Promise<void> {
     try {
-      const res = await this.kh.extract({ images }, this.i18n.lang());
+      const res = await this.kh.extract({ images }, this.i18n.lang(), requestId);
       const found = previewFromTranscript(res.transcript, uuid());
       const pv = found ? { ...found, ...(thumbUrl ? { thumb: thumbUrl } : {}), images: images.length } : found;
       if (!pv) {
@@ -687,6 +739,12 @@ export class AssistantPage {
 
   protected photoTap(): void {
     if (this.kh.ready() && (this.kh.features().vision || this.kh.features().extract)) {
+      if (this.trayCap() < 1 && this.tray().length < 1) {
+        // No photo allowance left today: say so instead of letting the user pick photos that cannot be sent.
+        const q = this.quota();
+        void this.ui.say(`خلّصتي صور النهارده (${q?.image.limit ?? 0}). ${resetLine(q, true) ?? ''}`.trim(), `You've used all ${q?.image.limit ?? 0} photos for today. ${resetLine(q, false) ?? ''}`.trim());
+        return;
+      }
       this.sheet.set('photo');
       return;
     }
@@ -740,8 +798,15 @@ export class AssistantPage {
     el.value = '';
     if (!files.length) return;
     this.trayPurpose.set(this.photoPurpose);
-    const room = this.maxImages - this.tray().length;
-    if (files.length > room) await this.ui.say(`أقصى ${this.maxImages} صور في الرسالة — خدت أول ${Math.max(room, 0)}.`, `Up to ${this.maxImages} photos per message — I kept the first ${Math.max(room, 0)}.`);
+    const cap = this.trayCap();
+    const room = cap - this.tray().length;
+    if (files.length > room) {
+      const limited = cap < this.maxImages;
+      await this.ui.say(
+        limited ? `الباقي النهارده ${cap} صور بس — خدت أول ${Math.max(room, 0)}.` : `أقصى ${this.maxImages} صور في الرسالة — خدت أول ${Math.max(room, 0)}.`,
+        limited ? `Only ${cap} photos remain today — I kept the first ${Math.max(room, 0)}.` : `Up to ${this.maxImages} photos per message — I kept the first ${Math.max(room, 0)}.`,
+      );
+    }
     for (const f of files.slice(0, Math.max(room, 0))) {
       // Re-encoded through a canvas: EXIF/GPS metadata is dropped; size is bounded before sending.
       const edge = this.photoPurpose === 'pattern' ? 1568 : 1280;
@@ -821,12 +886,15 @@ export class AssistantPage {
     const q = (ar: string, en: string) => this.i18n.q(ar, en);
     const s = this.kh.status();
     switch (code as KhayootaErrorCode) {
+      case 'ai_duplicate_request':
+        return q('الرسالة دي اتحسبت قبل كده لكن الرد ماوصلش — ابعتيها تاني.', 'That message was already counted but its reply never arrived — send it again.');
+      case 'ai_request_in_progress':
+        return q('لسه بنعالج الرسالة دي — استني ثواني وجرّبي تاني.', 'That message is still being processed — wait a few seconds and try again.');
       case 'network':
         return q('مفيش نت دلوقتي — دي إجابة من الشرح بدون نت.', 'No connection right now — here is the offline helper instead.');
       case 'ai_quota_exceeded':
-        return s && s.enabled && !s.available
-          ? q('خيوطة واخدة راحة لحد بكرة — الضغط كان كبير النهارده.', 'Khayoota is resting until tomorrow — it was a busy day.')
-          : q('خلّصنا أسئلة النهارده 🌙 خيوطة هترجع بكرة. العدّاد والشرح بدون نت شغالين عادي.', 'That’s today’s questions 🌙 Khayoota is back tomorrow. The counter and offline helper still work.');
+        if (s && s.enabled && !s.available) return q('خيوطة واخدة راحة لحد بكرة — الضغط كان كبير النهارده.', 'Khayoota is resting until tomorrow — it was a busy day.');
+        return this.quotaExhaustedText();
       case 'ai_rate_limited':
         return q('أسئلة كتير ورا بعض — استني دقيقة وجرّبي تاني.', 'Lots of questions in a row — wait a minute and try again.');
       case 'ai_feature_disabled':
@@ -851,6 +919,18 @@ export class AssistantPage {
   }
 
   protected retryable(code: string): boolean {
-    return ['network', 'ai_busy', 'ai_timeout', 'ai_upstream_error', 'ai_bad_output', 'unknown'].includes(code);
+    return ['network', 'ai_busy', 'ai_timeout', 'ai_upstream_error', 'ai_bad_output', 'ai_request_in_progress', 'unknown'].includes(code);
+  }
+
+  /** Daily allowance used up: which one, how many, when it renews. The counter and the offline helper keep working. */
+  private quotaExhaustedText(): string {
+    const q = this.quota();
+    const ar = this.i18n.isAr();
+    const reset = resetLine(q, ar);
+    const chatOut = (q?.chat.remaining ?? 0) < 1;
+    const body = chatOut
+      ? this.i18n.q(`خلّصتي رسائل النهارده (${q?.chat.limit ?? 0}). الشرح بدون نت لسه شغال.`, `You've used all ${q?.chat.limit ?? 0} messages for today. The offline helper still works.`)
+      : this.i18n.q(`الصور اللي اخترتيها أكتر من الباقي النهارده (${q?.image.remaining ?? 0}).`, `The photos you chose are more than what remains today (${q?.image.remaining ?? 0}).`);
+    return reset ? `${body} ${reset}` : body;
   }
 }

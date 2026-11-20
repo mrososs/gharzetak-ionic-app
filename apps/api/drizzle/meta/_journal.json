@@ -43,6 +43,13 @@
       "when": 1795183515396,
       "tag": "0005_account_deletion_job",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795209343202,
+      "tag": "0006_ai_quota_ledger",
+      "breakpoints": true
     }
   ]
 }

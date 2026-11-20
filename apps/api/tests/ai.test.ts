@@ -111,7 +111,7 @@ describe('chat', () => {
     const body = (await r.json()) as { reply: { v: number; text: string; actions: unknown[]; degraded: boolean }; usage: { remaining: { chat: number } } };
     expect(body.reply).toMatchObject({ v: 1, degraded: false, actions: [] });
     expect(body.reply.text.length).toBeGreaterThan(0);
-    expect(body.usage.remaining.chat).toBe(19);
+    expect(body.usage.remaining.chat).toBe(9);
   });
 
   it('uses the device-computed calculator facts (the parser counts, the model explains)', async () => {
@@ -234,9 +234,9 @@ describe('usage protection', () => {
     await chat(a, { message: 'x' });
     await chat(a, { message: 'y' });
     const sb = (await (await send(b, 'GET', '/v1/ai/status')).json()) as { remaining: { chat: number } };
-    expect(sb.remaining.chat).toBe(20);
+    expect(sb.remaining.chat).toBe(10);
     const sa = (await (await send(a, 'GET', '/v1/ai/status')).json()) as { remaining: { chat: number } };
-    expect(sa.remaining.chat).toBe(18);
+    expect(sa.remaining.chat).toBe(8);
   });
 });
 
@@ -268,10 +268,10 @@ describe('staging readiness', () => {
   it('settling records usage ABOVE the reservation, so the budget is never under-counted', async () => {
     const day = '2001-01-01';
     expect(await reserveNeurons(env.DB, 1000, day, 10)).toBe(true);
-    await settle(env.DB, 'settle-user', day, 10, 25, 100, 50);
+    await settle(env.DB, 'settle-user', day, day, 10, 25, 100, 50);
     const g = await env.DB.prepare("SELECT neurons_reserved, neurons_used FROM ai_usage_daily WHERE scope = '__all__' AND day = ?").bind(day).first<{ neurons_reserved: number; neurons_used: number }>();
     expect(g).toEqual({ neurons_reserved: 25, neurons_used: 25 });
-    await settle(env.DB, 'settle-user', day, 0, null, 0, 0); // no usage reported for a zero reservation → nothing added
+    await settle(env.DB, 'settle-user', day, day, 0, null, 0, 0); // no usage reported for a zero reservation → nothing added
     expect(await reserveNeurons(env.DB, 30, day, 6)).toBe(false); // 25 + 6 > 30
   });
 

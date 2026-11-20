@@ -37,7 +37,8 @@ export interface AppEnv {
   /** Per-user daily caps and burst units per minute. */
   AI_USER_DAILY_CHAT?: string;
   AI_USER_DAILY_IMAGE?: string;
-  AI_USER_DAILY_EXTRACT?: string;
+  /** Max quota refunds per account per day for requests that produced no reply (default 3). */
+  AI_USER_DAILY_REFUNDS?: string;
   AI_BURST_UNITS_PER_MINUTE?: string;
   /** Version of the consent text users must accept before hosted AI is used. */
   AI_CONSENT_VERSION?: string;
@@ -45,6 +46,11 @@ export interface AppEnv {
   AI_ALLOWED_USER_IDS?: string;
   /** Tester e-mails (comma-separated). Set as a Worker SECRET on staging so the address is not in git. Verified e-mails only. */
   AI_ALLOWED_EMAILS?: string;
+  /**
+   * Accounts exempt from the per-account daily quotas (comma-separated e-mails). Worker SECRET on staging (not in git).
+   * Matched only against the VERIFIED e-mail stored in D1 for the session's user: never against anything the client sends.
+   */
+  AI_UNLIMITED_EMAILS?: string;
   /** Upstream deadline per model call (ms). */
   AI_TIMEOUT_MS?: string;
   AI_EXTRACT_TIMEOUT_MS?: string;

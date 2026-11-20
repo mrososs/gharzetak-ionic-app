@@ -28,8 +28,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Client test builds (debug-signed, staging) go 2 -> 3 (tour UAT) -> 4 (tour + account deletion). A Play upload uses its OWN increasing code
         // and the Play-signed bundle; it is not an update of these debug-signed test builds.
-        versionCode 4
-        versionName "1.3.0-test"
+        versionCode 5
+        versionName "1.4.0-test"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

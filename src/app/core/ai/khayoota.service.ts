@@ -3,13 +3,13 @@ import { environment } from '../../../environments/environment';
 import { ApiClient, ApiError } from '../api/api.client';
 import { AuthService } from '../auth/auth.service';
 import { NetworkService } from '../services/network.service';
-import type { AiStatusV1, ChatRequestV1, ChatResponseV1, ExtractResponseV1, InlineImage, KhayootaErrorCode, KhayootaLang } from './khayoota.types';
+import type { AiStatusV1, ChatRequestV1, ChatResponseV1, ExtractResponseV1, InlineImage, KhayootaErrorCode, KhayootaLang, UsageV1 } from './khayoota.types';
 
 /** A hosted request that did not produce a reply. `code` drives the UI state; nothing else is shown to the user. */
 export class KhayootaFailure extends Error {
   constructor(
     readonly code: KhayootaErrorCode,
-    readonly info: { scope?: 'user' | 'global'; kind?: string; resetAt?: string; retryAfterSec?: number; feature?: string } = {},
+    readonly info: { scope?: 'user' | 'global'; kind?: string; resetAt?: string; retryAfterSec?: number; feature?: string; remaining?: { chat: number; image: number; extract: number } } = {},
   ) {
     super(code);
   }
@@ -28,6 +28,8 @@ const KNOWN: readonly KhayootaErrorCode[] = [
   'ai_timeout',
   'ai_bad_output',
   'ai_upstream_error',
+  'ai_duplicate_request',
+  'ai_request_in_progress',
   'validation_error',
 ];
 
@@ -120,9 +122,9 @@ export class KhayootaService {
     }
   }
 
-  async extract(input: { images?: InlineImage[]; text?: string }, lang: KhayootaLang): Promise<ExtractResponseV1> {
+  async extract(input: { images?: InlineImage[]; text?: string }, lang: KhayootaLang, clientRequestId?: string): Promise<ExtractResponseV1> {
     try {
-      const res = await within(this.api.post<ExtractResponseV1>(`${this.endpoint}/extract`, { v: 1, lang, ...input }), EXTRACT_CLIENT_TIMEOUT_MS);
+      const res = await within(this.api.post<ExtractResponseV1>(`${this.endpoint}/extract`, { v: 1, lang, ...input, ...(clientRequestId ? { clientRequestId } : {}) }), EXTRACT_CLIENT_TIMEOUT_MS);
       this.applyUsage(res.usage);
       return res;
     } catch (e) {
@@ -130,9 +132,10 @@ export class KhayootaService {
     }
   }
 
-  private applyUsage(u: ChatResponseV1['usage']): void {
+  /** The server's numbers after a reply: the displayed allowance is never computed locally. */
+  private applyUsage(u: UsageV1): void {
     const s = this.status();
-    if (s && s.enabled) this.status.set({ ...s, remaining: u.remaining, resetAt: u.resetAt });
+    if (s && s.enabled) this.status.set({ ...s, remaining: u.remaining, resetAt: u.resetAt, ...(u.quota ? { quota: u.quota } : {}) });
   }
 
   private onFailure(f: KhayootaFailure): KhayootaFailure {
@@ -140,6 +143,9 @@ export class KhayootaService {
     if (s && s.enabled) {
       if (f.code === 'ai_consent_required') this.status.set({ ...s, consent: { ...s.consent, accepted: false } });
       if (f.code === 'ai_quota_exceeded' && f.info.scope === 'global') this.status.set({ ...s, available: false });
+      if (f.code === 'ai_quota_exceeded' && f.info.scope === 'user' && f.info.remaining) this.status.set({ ...s, remaining: f.info.remaining, ...(f.info.resetAt ? { resetAt: f.info.resetAt } : {}) });
+      // A failed request may have been refunded (or a retry found it already counted): re-read the authoritative numbers.
+      if (f.code !== 'network' && f.code !== 'unauthorized' && f.code !== 'ai_disabled' && f.code !== 'ai_access_restricted') void this.refreshStatus();
       if (f.code === 'ai_disabled') this.status.set({ v: 1, enabled: false });
       if (f.code === 'ai_access_restricted') this.status.set({ v: 1, enabled: false, access: 'restricted' });
     }
@@ -164,6 +170,11 @@ export function within<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+function isRemaining(v: unknown): v is { chat: number; image: number; extract: number } {
+  const r = v as { chat?: unknown; image?: unknown; extract?: unknown } | null;
+  return !!r && typeof r.chat === 'number' && typeof r.image === 'number' && typeof r.extract === 'number';
+}
+
 export function mapError(e: unknown): KhayootaFailure {
   if (e instanceof KhayootaFailure) return e;
   if (e instanceof ApiError) {
@@ -176,6 +187,7 @@ export function mapError(e: unknown): KhayootaFailure {
       resetAt: typeof x['resetAt'] === 'string' ? x['resetAt'] : undefined,
       retryAfterSec: typeof x['retryAfterSec'] === 'number' ? x['retryAfterSec'] : undefined,
       feature: typeof x['feature'] === 'string' ? x['feature'] : undefined,
+      remaining: isRemaining(x['remaining']) ? x['remaining'] : undefined,
     });
   }
   return new KhayootaFailure('unknown');
