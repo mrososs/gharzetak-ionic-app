@@ -186,6 +186,15 @@ describe('Delete account screen', () => {
     expect(deleteFn).not.toHaveBeenCalled();
   });
 
+  it.each(['ar', 'en'] as const)('(%s) tells people who cannot sign in to e-mail the official support address, without asking for credentials', async (lang) => {
+    const { q, el } = await open(lang);
+    const href = q<HTMLAnchorElement>('[data-testid="delete-mailto"]')!.getAttribute('href')!;
+    expect(href.startsWith('mailto:gharzetak.support@gmail.com?subject=')).toBe(true);
+    expect(el.textContent).toContain('gharzetak.support@gmail.com');
+    expect(q('[data-testid="delete-no-access"]')!.textContent).toContain(DELETE_ACCOUNT_COPY[lang].noAccess);
+    expect(DELETE_ACCOUNT_COPY[lang].noAccess).not.toMatch(/send your password|ابعتي كلمة المرور/i);
+  });
+
   it('cancel goes back to Settings without sending anything', async () => {
     const { el } = await open();
     const cancel = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes(DELETE_ACCOUNT_COPY.en.cancel))!;

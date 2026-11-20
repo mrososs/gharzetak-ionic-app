@@ -5,7 +5,6 @@ import { BiometricAvailability, BiometricService } from '../../core/auth/biometr
 import { AvatarId } from '../../core/data/avatars';
 import { LVL, LVL_IDS } from '../../core/data/catalog';
 import { I18nService } from '../../core/i18n/i18n.service';
-import { legalUrl } from '../../core/legal/legal-links';
 import { AchievementsService } from '../../core/joy/achievements.service';
 import { CelebrationMode, JoyPrefs, joyPrefsOf } from '../../core/joy/joy.models';
 import { HapticsService } from '../../core/services/haptics.service';
@@ -14,6 +13,7 @@ import { TimerService } from '../../core/services/timer.service';
 import { AppStore } from '../../core/state/app.store';
 import { SyncService } from '../../core/sync/sync.service';
 import { ToolsSheetBody } from '../../shared/ui/dialogs/common-sheets';
+import { PrivacyAccountSectionComponent } from './privacy-account-section.component';
 import { RemindersSettingsComponent } from './reminders-settings.component';
 import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
@@ -24,7 +24,7 @@ import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.co
 /** GZ-S25 settings · GZ-T07 tools sheet · GZ-T09 erase-data sheet. */
 @Component({
   selector: 'gz-settings',
-  imports: [IonHeader, IonContent, IconComponent, SheetComponent, ToolsSheetBody, AvatarPickerComponent, CrochetAvatarComponent, RemindersSettingsComponent],
+  imports: [IonHeader, IonContent, IconComponent, SheetComponent, ToolsSheetBody, AvatarPickerComponent, CrochetAvatarComponent, RemindersSettingsComponent, PrivacyAccountSectionComponent],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top">
@@ -131,22 +131,7 @@ import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.co
         <button type="button" class="gz-btn3 rose w mt-2" (click)="sheet.set('erase')"><svg gzIcon="trash" size="s" />{{ t().resetDemo }}</button>
         <button type="button" class="gz-btn2 mt-2" (click)="logout()">{{ t().logout }}</button>
 
-        <!-- Privacy & account: legal pages come from ONE configured base URL (never a hard-coded domain); deletion is in-app. -->
-        <div class="gz-sec"><h2 class="gz-h3 gz-hd">{{ i18n.q('الخصوصية والحساب', 'Privacy & account') }}</h2></div>
-        @for (l of legalRows(); track l.id) {
-          @if (l.url) {
-            <a class="gz-btn3 w mt-2" [href]="l.url" target="_blank" rel="noopener noreferrer" [attr.data-testid]="'legal-' + l.id"><svg gzIcon="info" size="s" />{{ l.label }}</a>
-          } @else {
-            <button type="button" class="gz-btn3 w mt-2" disabled aria-disabled="true" [attr.data-testid]="'legal-' + l.id">
-              {{ l.label }} <span class="gz-badge">{{ i18n.q('لسه مش منشورة', 'Not published yet') }}</span>
-            </button>
-          }
-        }
-        @if (auth.signedIn()) {
-          <button type="button" class="gz-btn3 rose w mt-2" data-testid="settings-delete-account" (click)="nav.navigateForward('/tabs/home/settings/delete-account')">
-            <svg gzIcon="trash" size="s" />{{ i18n.q('حذف الحساب', 'Delete account') }}
-          </button>
-        }
+        <gz-privacy-account />
 
         <div class="gz-sec"><h2 class="gz-h3 gz-hd">{{ t().aboutProto }}</h2></div>
         <div class="gz-card soft flex flex-col gap-2">
@@ -203,16 +188,6 @@ export class SettingsPage {
       default:
         return this.sync.pending() ? `${t.pending}: ${this.sync.pending()}` : t.synced;
     }
-  });
-
-  /** Privacy policy, terms and the web account-deletion page. `url` is null until GZ_LEGAL_BASE_URL is configured (see core/legal). */
-  protected readonly legalRows = computed(() => {
-    const lang = this.i18n.lang();
-    return [
-      { id: 'privacy', label: this.i18n.q('سياسة الخصوصية', 'Privacy Policy'), url: legalUrl('privacy', lang) },
-      { id: 'terms', label: this.i18n.q('الشروط والأحكام', 'Terms & Conditions'), url: legalUrl('terms', lang) },
-      { id: 'delete-account', label: this.i18n.q('معلومات حذف الحساب (على الويب)', 'Account deletion information (web)'), url: legalUrl('delete-account', lang) },
-    ];
   });
 
   protected readonly bio = inject(BiometricService);

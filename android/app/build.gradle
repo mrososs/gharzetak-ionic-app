@@ -1,14 +1,34 @@
 apply plugin: 'com.android.application'
 
+// Upload-key signing for Play. The keystore and its passwords live OUTSIDE git: create android/keystore.properties (git-ignored) with
+//   storeFile=<absolute path to the upload keystore>   storePassword=...   keyAlias=...   keyPassword=...
+// Without that file `bundleRelease` still builds, but the bundle is UNSIGNED (Play Console cannot accept it).
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
 android {
     namespace = "com.gharzetak.app"
     compileSdk = rootProject.ext.compileSdkVersion
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
     defaultConfig {
         applicationId "com.gharzetak.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.1.0-test"
+        // Play requires a strictly increasing versionCode per upload. 2 was the test APK; the first Play candidate is 3.
+        versionCode 3
+        versionName "1.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -18,6 +38,9 @@ android {
     }
     buildTypes {
         release {
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

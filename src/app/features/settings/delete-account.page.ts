@@ -4,6 +4,7 @@ import { AccountDeletionService, type DeletionOutcome } from '../../core/auth/ac
 import type { DeleteFailure } from '../../core/auth/auth.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { SUPPORT_EMAIL, supportMailto } from '../../core/legal/support';
 import { NetworkService } from '../../core/services/network.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { DELETE_ACCOUNT_COPY } from './delete-account.content';
@@ -106,6 +107,10 @@ type Methods = { readonly password: boolean; readonly google: boolean };
             }
           </button>
           <button type="button" class="gz-btn-text" [disabled]="svc.busy()" (click)="back()">{{ c().cancel }}</button>
+          <p class="gz-xs gz-mute" style="margin: 12px 2px 0" data-testid="delete-no-access">
+            {{ c().noAccess }}
+            <a [href]="mailto()" data-testid="delete-mailto">{{ c().noAccessLink }}</a> (<span dir="ltr">{{ email }}</span>)
+          </p>
         }
       </div>
     </ion-content>
@@ -121,6 +126,8 @@ export class DeleteAccountPage {
 
   protected readonly c = computed(() => DELETE_ACCOUNT_COPY[this.i18n.lang()]);
   protected readonly online = this.net.online;
+  protected readonly email = SUPPORT_EMAIL;
+  protected readonly mailto = computed(() => supportMailto('deletion', this.i18n.lang()));
   protected readonly confirmed = signal(false);
   protected readonly password = signal('');
   protected readonly error = signal<DeleteFailure | null>(null);

@@ -40,6 +40,8 @@ export interface DeleteAccountCopy {
   readonly guestTitle: string;
   readonly guestBody: string;
   readonly backToSettings: string;
+  readonly noAccess: string;
+  readonly noAccessLink: string;
 }
 
 const ar: DeleteAccountCopy = {
@@ -96,6 +98,8 @@ const ar: DeleteAccountCopy = {
   guestTitle: 'إنتي بتستخدمي وضع الضيفة',
   guestBody: 'مفيش حساب علشان يتحذف: كل بياناتك على الجهاز ده بس. تقدري تمسحيها من «مسح بيانات الجهاز» في الإعدادات.',
   backToSettings: 'رجوع للإعدادات',
+  noAccess: 'مش قادرة تدخلي على حسابك (نسيتي كلمة المرور مثلًا)؟ ابعتي طلب حذف على بريد الدعم الرسمي. هنتأكد إنك صاحبة الحساب بإرسال رسالة تحقق جديدة على البريد المسجّل بيه الحساب قبل أي حذف. ماتبعتيش كلمة مرور ولا رموز دخول ولا صور هوية في البريد.',
+  noAccessLink: 'ابعتي طلب حذف بالبريد',
 };
 
 const en: DeleteAccountCopy = {
@@ -152,6 +156,8 @@ const en: DeleteAccountCopy = {
   guestTitle: 'You are using guest mode',
   guestBody: 'There is no account to delete: everything is stored on this device only. You can erase it with "Erase data on this device" in Settings.',
   backToSettings: 'Back to Settings',
+  noAccess: 'Cannot sign in (a forgotten password, for example)? Send a deletion request to the official support e-mail. Before anything is deleted we confirm you own the account by sending a fresh verification message to the e-mail address the account is registered with. Never send passwords, sign-in codes or ID documents by e-mail.',
+  noAccessLink: 'E-mail a deletion request',
 };
 
 export const DELETE_ACCOUNT_COPY: Readonly<Record<Lang, DeleteAccountCopy>> = { ar, en };
