@@ -1,6 +1,6 @@
 # Gharzetak — Product Tour Discovery
 
-Discovery, feasibility analysis, UX design and implementation plan for an in-app product tour and interactive onboarding. **Nothing here is implemented.** No application code, backend, schema, Worker, feature flag or dependency was changed.
+Discovery, feasibility analysis, UX design and implementation plan for an in-app product tour and interactive onboarding. Documents 00–12 are the specification; **[13 — Implementation status](13-IMPLEMENTATION-STATUS.md)** records what was built, where it differs, and what was verified.
 
 - Date: 2026-11-20
 - Baseline: `origin/test` at `c3ca6a3` (tree identical to `origin/development` `1e12b03`)
@@ -31,6 +31,7 @@ Discovery, feasibility analysis, UX design and implementation plan for an in-app
 | 10 | [Test Strategy](10-TEST-STRATEGY.md) | Unit, integration, Playwright and real-device checklists; acceptance gates |
 | 11 | [Implementation Roadmap](11-IMPLEMENTATION-ROADMAP.md) | Seven phases with files, tasks, tests, acceptance, effort, risks, rollback |
 | 12 | [Final Blueprint](12-FINAL-PRODUCT-TOUR-BLUEPRINT.md) | All decisions and the 20 required answers |
+| 13 | [Implementation status](13-IMPLEMENTATION-STATUS.md) | What was built, deviations from the blueprint, verification results, open items |
 | — | [Phase 0 Results](phase-0-results.md) | Device spike on the HONOR phone: results, findings that change the design, what is still open; raw data in [`phase-0-raw/`](phase-0-raw/) |
 
 ## Concept previews
