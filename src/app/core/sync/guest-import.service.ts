@@ -134,10 +134,12 @@ export class GuestImportService {
     const gp = guestDocs.prefs;
     if (gp) {
       const cur = this.store.prefs();
-      const patch: { joy?: typeof gp.joy; share?: typeof gp.share } = {};
+      const patch: { joy?: typeof gp.joy; share?: typeof gp.share; tour?: typeof gp.tour } = {};
       if (!cur.joy && gp.joy) patch.joy = gp.joy;
       if (!cur.share && gp.share) patch.share = gp.share;
-      if (patch.joy || patch.share) await this.store.updatePrefs(patch);
+      // Product-tour progress follows the person too (never overwriting the account's own), so nothing is offered twice.
+      if (!cur.tour && gp.tour) patch.tour = gp.tour;
+      if (patch.joy || patch.share || patch.tour) await this.store.updatePrefs(patch);
     }
 
     report.incomplete = (report.joy?.failed ?? 0) > 0;

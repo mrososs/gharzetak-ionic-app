@@ -13,18 +13,23 @@ import { SheetComponent } from '../../shared/ui/dialogs/sheet.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { CrochetAvatarComponent } from '../../shared/ui/avatar/crochet-avatar.component';
 import { PhotoComponent } from '../../shared/ui/images/photo.component';
+import type { TargetId } from '../../core/tour/tour-ids';
+import { GettingStartedComponent } from '../../shared/ui/tour/getting-started.component';
+import { TourTargetDirective } from '../../shared/ui/tour/tour-target.directive';
 
 interface QuickTile {
   label: string;
   icon: IconName;
   tone: Tone;
   go: () => void;
+  /** Marks the tile as something the product tour can point at. */
+  tour?: TargetId;
 }
 
 /** GZ-S10 — Home dashboard. */
 @Component({
   selector: 'gz-home',
-  imports: [IonContent, IonRefresher, IonRefresherContent, IconComponent, CrochetAvatarComponent, PhotoComponent, SheetComponent, ToolsSheetBody, NotificationsSheetBody],
+  imports: [IonContent, IonRefresher, IonRefresherContent, IconComponent, CrochetAvatarComponent, PhotoComponent, SheetComponent, ToolsSheetBody, NotificationsSheetBody, GettingStartedComponent, TourTargetDirective],
   template: `
     <ion-content class="gz-scroll">
       @if (sync.active()) {
@@ -32,7 +37,7 @@ interface QuickTile {
       }
       <div class="gz-pad" style="padding-top: calc(16px + var(--gz-safe-top))">
         <div class="flex items-center gap-3">
-          <button type="button" class="gz-avatar-btn" (click)="nav.navigateForward('/tabs/home/settings')" [attr.aria-label]="t().settings"><gz-crochet-avatar [id]="store.avatar()" [size]="50" [decorative]="true" /></button>
+          <button type="button" class="gz-avatar-btn" [gzTour]="'home.avatar'" (click)="nav.navigateForward('/tabs/home/settings')" [attr.aria-label]="t().settings"><gz-crochet-avatar [id]="store.avatar()" [size]="50" [decorative]="true" /></button>
           <div class="min-w-0 flex-1">
             <div class="gz-hd" style="font-size: 16px">{{ t().greet }}</div>
             <div class="gz-sm gz-mute truncate">{{ name() }} · {{ store.levelName(store.profile().level) }}</div>
@@ -70,6 +75,8 @@ interface QuickTile {
           </div>
         }
 
+        <gz-getting-started />
+
         <button type="button" class="gz-card gz-reset mt-3.5 block w-full" style="padding: 14px 16px" (click)="sheet.set('tools')" [attr.aria-label]="t().myTools">
           <div class="mb-2.5 flex items-center gap-3">
             <div class="gz-tile t-lav" style="width: 44px; height: 44px"><svg gzIcon="hook" /></div>
@@ -86,7 +93,7 @@ interface QuickTile {
         <div class="gz-sec"><h2 class="gz-h2 gz-hd">{{ t().quick }}</h2></div>
         <div class="gz-grid-3">
           @for (q of quick(); track q.label) {
-            <button type="button" class="gz-qt" (click)="q.go()">
+            <button type="button" class="gz-qt" [gzTour]="q.tour" (click)="q.go()">
               <span class="qi t-{{ q.tone }}"><svg [gzIcon]="q.icon" /></span>{{ q.label }}
             </button>
           }
@@ -168,7 +175,7 @@ export class HomePage {
     return [
       { label: q('عدّاد الغرز', 'Stitch tracker'), icon: 'counter', tone: 'lav', go: () => this.nav.navigateRoot('/tabs/tracker') },
       { label: q('خيوطة', 'Khayoota'), icon: 'sparkles', tone: 'blush', go: () => this.nav.navigateRoot('/tabs/assistant') },
-      { label: q('قارئ الباترن', 'Pattern reader'), icon: 'file', tone: 'sage', go: () => this.nav.navigateForward('/tabs/home/patterns') },
+      { label: q('قارئ الباترن', 'Pattern reader'), icon: 'file', tone: 'sage', go: () => this.nav.navigateForward('/tabs/home/patterns'), tour: 'home.patterns-tile' },
       { label: q('محوّل المصطلحات', 'Terminology'), icon: 'convert', tone: 'peach', go: () => this.nav.navigateForward('/tabs/home/terms') },
       { label: q('فيديوهات تعليمية', 'Video tutorials'), icon: 'film', tone: 'lav', go: () => this.nav.navigateRoot('/tabs/learn') },
       { label: q('مشروع جديد', 'New project'), icon: 'plus', tone: 'blush', go: () => this.nav.navigateForward('/tabs/projects/new') },

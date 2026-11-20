@@ -5,7 +5,12 @@ import { IonTabBar, IonTabButton, IonTabs } from '@ionic/angular';
 import { filter, map } from 'rxjs';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
+import { TourTargetDirective } from '../../shared/ui/tour/tour-target.directive';
+import type { TargetId } from '../../core/tour/tour-ids';
 import { TABS, isBarHiddenFor, tabIdFromUrl } from './tabs.config';
+
+/** The tabs a product tour can point at (Home is where the tours start, so it has no target). */
+const TOUR_TARGETS: Readonly<Record<string, TargetId>> = { projects: 'tab.projects', tracker: 'tab.tracker', learn: 'tab.learn', assistant: 'tab.assistant' };
 
 /**
  * Main shell: Ionic tabs (one navigation stack per tab). The bar is compact; the regular tabs share one
@@ -14,7 +19,7 @@ import { TABS, isBarHiddenFor, tabIdFromUrl } from './tabs.config';
  */
 @Component({
   selector: 'gz-tabs-layout',
-  imports: [IonTabs, IonTabBar, IonTabButton, IconComponent],
+  imports: [IonTabs, IonTabBar, IonTabButton, IconComponent, TourTargetDirective],
   template: `
     <ion-tabs>
       <ion-tab-bar
@@ -27,7 +32,7 @@ import { TABS, isBarHiddenFor, tabIdFromUrl } from './tabs.config';
       >
         <span class="gz-tab-blob" [class.is-off]="!blobVisible()" aria-hidden="true"><span class="gz-tab-blob-body"></span></span>
         @for (tab of tabs; track tab.id) {
-          <ion-tab-button [tab]="tab.id" [class.gz-mid]="tab.mid" [class.gz-active]="tab.id === activeId()">
+          <ion-tab-button [tab]="tab.id" [gzTour]="tourTarget(tab.id)" [class.gz-mid]="tab.mid" [class.gz-active]="tab.id === activeId()">
             <span class="gz-nvi"><svg [gzIcon]="tab.icon" /></span>
             <span class="gz-nv-label">{{ i18n.isAr() ? tab.ar : tab.en }}</span>
           </ion-tab-button>
@@ -42,6 +47,9 @@ export class TabsLayout {
   private readonly router = inject(Router);
 
   protected readonly tabs = TABS;
+  protected tourTarget(id: string): TargetId | null {
+    return TOUR_TARGETS[id] ?? null;
+  }
 
   private readonly url = toSignal(
     this.router.events.pipe(
