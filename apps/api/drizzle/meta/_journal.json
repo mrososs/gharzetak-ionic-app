@@ -36,6 +36,13 @@
       "when": 1795032415307,
       "tag": "0004_ai_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1795183515396,
+      "tag": "0005_account_deletion_job",
+      "breakpoints": true
     }
   ]
 }

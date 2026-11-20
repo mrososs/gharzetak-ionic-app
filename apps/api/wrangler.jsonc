@@ -48,6 +48,9 @@
     "staging": {
       "name": "gharzetak-api-staging",
       "observability": { "enabled": true },
+      // Hourly: finishes interrupted account deletions and purges stale transient security rows (src/services/account-deletion.ts).
+      // Takes effect only on an approved staging deploy. Cron Triggers are part of the existing Workers plan (no new service).
+      "triggers": { "crons": ["17 * * * *"] },
       "d1_databases": [
         {
           "binding": "DB",

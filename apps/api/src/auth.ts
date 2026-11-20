@@ -1,8 +1,10 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { APIError } from 'better-auth/api';
 import { bearer } from 'better-auth/plugins';
 import { createDb, schema } from './db';
 import type { AppEnv } from './env';
+import { beginDeletion, finishDeletion, purgeVerification } from './services/account-deletion';
 import { sendMail } from './services/mailer';
 import { hashPassword, verifyPassword } from './services/password';
 
@@ -79,10 +81,34 @@ export function createAuth(env: AppEnv) {
         '/sign-in/social': { window: 60, max: 10 },
         '/request-password-reset': { window: 60, max: 3 },
         '/forget-password': { window: 60, max: 3 },
+        // Password guessing against a stolen bearer token: a handful of attempts per minute is plenty for a human.
+        '/delete-user': { window: 60, max: 5 },
       },
     },
     advanced: { ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] } },
     plugins: [bearer()],
+    user: {
+      // Account deletion (POST /api/auth/delete-user). No `sendDeleteAccountVerification`: there is no mail provider, so the
+      // e-mail-token flow stays OFF. The owner proves authority with the PASSWORD (credential accounts) or with a FRESH session
+      // (created < 1 day ago; Google accounts re-authenticate first). The cascade, R2 sweep and reconciliation live in
+      // services/account-deletion.ts; these hooks make every route into deletion go through them.
+      deleteUser: {
+        enabled: true,
+        beforeDelete: async (u) => {
+          try {
+            await beginDeletion(env.DB, u.id);
+            await purgeVerification(env.DB, u.id, u.email);
+          } catch {
+            // Nothing user-visible was touched yet: abort so the account stays intact and the owner can retry.
+            throw new APIError('SERVICE_UNAVAILABLE', { message: 'Account deletion could not start. Nothing was deleted. Please try again.' });
+          }
+        },
+        afterDelete: async (u) => {
+          // The user row (and every D1 row of the account) is gone. Never throws: a failed R2 sweep stays queued for reconcile().
+          await finishDeletion(env, u.id);
+        },
+      },
+    },
     databaseHooks: {
       // Data minimisation: the app only needs the Better Auth session. Provider ID / access / refresh tokens are never persisted.
       account: {
