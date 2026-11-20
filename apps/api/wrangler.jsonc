@@ -103,7 +103,7 @@
 
     // ---------------------------------------------------------------------------------------------
     // PRODUCTION (public Google Play release). NOT CREATED YET: every REPLACE_* value below is a placeholder, and the Worker REFUSES to
-    // serve while any is present. Nothing here touches Cloudflare until a person runs the steps in docs/release/play-release-runbook.md.
+    // serve while any is present. Nothing here touches Cloudflare until a person runs the steps in docs/play-release/play-release-runbook.md.
     //   * D1: a NEW, EMPTY database (`wrangler d1 create gharzetak-db-production`); migrations 0000-0005 are applied to it from scratch.
     //   * R2: the same private bucket, NO key prefix (staging keeps `staging/`). Never public.
     //   * Khayoota hosted AI: OFF for everyone (AI_ENABLED "false", no AI binding): public availability is unchanged by this release.
