@@ -584,3 +584,28 @@ export const aiRate = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.windowStart] })],
 );
+
+/* ------------------------------------------------------------------ */
+/* Account deletion: durable, non-personal reconciliation journal       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One row per account whose deletion has started. It exists because R2 is NOT covered by D1 transactions or foreign keys:
+ * deleting the user row (and, by cascade, every D1 row of the account) can succeed while the R2 sweep fails. The row records
+ * "this account's R2 prefix still has to be verified empty" so a retry (the request itself, the hourly cron, or the next
+ * deletion request) can finish the job after the user row is already gone.
+ *
+ * Deliberately NO foreign key to `user` (it must outlive the user row) and NO e-mail, name or content: only the opaque
+ * account id, a state, a counter and timestamps. `last_error` holds an error class, never user data. The row is deleted once
+ * the final verification sweep is clean.
+ *   pending → R2 sweep / loose-record purge not yet confirmed (or the user row delete has not happened yet)
+ *   swept   → confirmed clean once; kept for one more verification sweep that catches an upload racing the deletion
+ */
+export const accountDeletionJob = sqliteTable('account_deletion_job', {
+  userId: text('user_id').primaryKey(),
+  state: text('state', { enum: ['pending', 'swept'] }).notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  requestedAt: integer('requested_at').notNull().default(now),
+  updatedAt: integer('updated_at').notNull().default(now),
+  lastError: text('last_error'),
+});

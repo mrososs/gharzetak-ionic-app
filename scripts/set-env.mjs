@@ -39,6 +39,28 @@ for (const k of Object.keys(vars)) {
   }
 }
 
+// Public legal pages (privacy policy, terms, account deletion). Must be an https origin (or localhost for development); never a
+// path with credentials. Release builds (GZ_RELEASE=1) refuse to build without it: Google Play requires these links.
+const legalRaw = get('GZ_LEGAL_BASE_URL', '').trim().replace(/\/+$/, '');
+if (legalRaw) {
+  let lu;
+  try {
+    lu = new URL(legalRaw);
+  } catch {
+    console.error('\n[set-env] REFUSED: GZ_LEGAL_BASE_URL is not a valid URL: ' + legalRaw + '\n');
+    process.exit(1);
+  }
+  const localLegal = ['localhost', '127.0.0.1', '[::1]'].includes(lu.hostname);
+  if ((lu.protocol !== 'https:' && !localLegal) || lu.username || lu.password || lu.search || lu.hash) {
+    console.error('\n[set-env] REFUSED: GZ_LEGAL_BASE_URL must be an https URL without credentials, query or fragment (http only for localhost).\n');
+    process.exit(1);
+  }
+}
+if (!legalRaw && get('GZ_RELEASE', '') === '1') {
+  console.error('\n[set-env] REFUSED: GZ_RELEASE=1 needs GZ_LEGAL_BASE_URL (the public privacy / terms / account-deletion pages). Google Play requires them.\n');
+  process.exit(1);
+}
+
 // Public Google OAuth client ids (NOT secrets; the client secret lives only on the Worker). Malformed values are refused.
 const CLIENT_ID = /^[0-9]{6,}-[a-z0-9]+\.apps\.googleusercontent\.com$/;
 const googleWebClientId = get('GZ_GOOGLE_WEB_CLIENT_ID', '').trim();
@@ -60,6 +82,7 @@ const out = {
   passwordResetEnabled: get('GZ_PASSWORD_RESET', '') === '1',
   // Release kill switch for the whole product-tour system (card, pills, replays). On by default; GZ_TOURS=0 turns every tour surface off.
   toursEnabled: get('GZ_TOURS', '1') !== '0',
+  legalBaseUrl: legalRaw,
 };
 
 const target = resolve(root, 'src/environments/env.generated.ts');

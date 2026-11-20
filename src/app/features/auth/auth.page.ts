@@ -8,11 +8,12 @@ import { AppStore } from '../../core/state/app.store';
 import { TourCoordinator } from '../../core/tour/tour-coordinator.service';
 import { UiFeedback } from '../../shared/ui/feedback/toast.service';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
+import { LegalConsentLineComponent } from '../../shared/ui/legal/legal-consent-line.component';
 
 /** GZ-S05 Log in · GZ-S06 Sign up — real account auth via the Worker API (email + password), plus guest mode. */
 @Component({
   selector: 'gz-auth',
-  imports: [IonHeader, IonContent, IonInput, IonSpinner, ReactiveFormsModule, IconComponent],
+  imports: [IonHeader, IonContent, IonInput, IonSpinner, ReactiveFormsModule, IconComponent, LegalConsentLineComponent],
   template: `
     <ion-header class="gz-header ion-no-border">
       <div class="gz-top" style="justify-content: space-between">
@@ -83,6 +84,8 @@ import { IconComponent } from '../../shared/ui/icon/icon.component';
             {{ isSign() ? i18n.q('إنشاء الحساب', 'Create account') : t().signIn }}
           }
         </button>
+        <!-- Google sign-in also creates accounts, so the notice stays visible in both modes. -->
+        <gz-legal-consent-line />
 
         @if (auth.googleAvailable) {
           <div class="my-4 flex items-center gap-2.5" aria-hidden="true">

@@ -3,7 +3,8 @@ import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
 import { createAuth, parseOrigins } from './auth';
 import { createDb } from './db';
-import type { AppBindings } from './env';
+import type { AppBindings, AppEnv } from './env';
+import { reconcile, storageStatus } from './services/account-deletion';
 import { errorResponse } from './errors';
 import { requireUser } from './middleware/auth';
 import { entities } from './routes/entities';
@@ -49,6 +50,18 @@ app.get('/health', async (c) => {
   return c.json({ status: row?.ok === 1 ? 'ok' : 'degraded', service: 'gharzetak-api', time: Date.now(), r2Bound: !!c.env.MEDIA });
 });
 
+// Account deletion. Better Auth does the authentication (password or fresh session), the rate limit and the delete itself; the
+// hooks in auth.ts run the cleanup. This thin wrapper only adds what the caller may truthfully be told afterwards:
+// `storageCleanup` = "complete" (every stored file confirmed removed) or "pending" (account deleted, file sweep queued for retry).
+app.post('/api/auth/delete-user', async (c) => {
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  const res = await auth.handler(c.req.raw);
+  if (!res.ok || !session?.user?.id) return res;
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  return c.json({ ...body, storageCleanup: await storageStatus(c.env.DB, session.user.id) });
+});
+
 // Better Auth: /api/auth/sign-up/email, /sign-in/email, /sign-out, /get-session, /request-password-reset, /reset-password, /verify-email ...
 app.on(['GET', 'POST'], '/api/auth/*', (c) => createAuth(c.env).handler(c.req.raw));
 
@@ -62,4 +75,15 @@ app.route('/v1', v1);
 app.notFound((c) => c.json({ error: { code: 'not_found', message: 'Route not found' } }, 404));
 app.onError((err, c) => errorResponse(c, err));
 
-export default app;
+/**
+ * Cron (wrangler `triggers.crons`): finishes interrupted account deletions (R2 sweep retries + one verification sweep) and purges
+ * stale transient security rows. Safe to run at any time and any number of times.
+ */
+async function scheduled(_event: unknown, env: AppEnv): Promise<void> {
+  const bound = env.MEDIA_PREFIX ? { ...env, MEDIA: withPrefix(env.MEDIA, env.MEDIA_PREFIX) } : env;
+  const r = await reconcile(bound);
+  if (r.retried || r.abandoned || r.stillPending) console.log('[account-deletion] reconcile', JSON.stringify(r));
+}
+
+// `scheduled` rides on the Hono app object so tests (app.request) and the Workers runtime (default export handlers) share one export.
+export default Object.assign(app, { scheduled });

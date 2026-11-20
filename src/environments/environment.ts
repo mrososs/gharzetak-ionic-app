@@ -15,6 +15,11 @@ export interface AppEnvironment {
   readonly passwordResetEnabled: boolean;
   /** Build-time kill switch for the product tours (GZ_TOURS=0 disables every tour surface; routes and other features are unaffected). */
   readonly toursEnabled: boolean;
+  /**
+   * Base URL of the PUBLISHED legal pages (privacy policy, terms, account deletion), e.g. https://example.org . '' = not configured:
+   * Settings then shows the legal rows as unavailable instead of linking anywhere. Never defaulted to an unapproved domain.
+   */
+  readonly legalBaseUrl: string;
 }
 
 export const environment: AppEnvironment = GENERATED_ENV;

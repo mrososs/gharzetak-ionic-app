@@ -197,7 +197,7 @@ test.describe('Settings → Tours & help', () => {
     await expect.poll(milestone('tutorialOpened')).toBe(true);
     await page.goto('/tabs/home');
     await expect(card(page)).toHaveAttribute('data-gs', 'list');
-    expect(await done()).toBe(4); // four ticked by real actions, one left
+    await expect(page.locator('[data-task].done')).toHaveCount(4); // four ticked by real actions, one left (retries until the card has rendered)
     await expect(page.locator('[data-task="khayoota"]')).toBeEnabled();
 
     await page.goto('/tabs/assistant'); // 5 · ask Khayoota (a guest gets the local offline helper: nothing is sent anywhere)
